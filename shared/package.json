@@ -1,0 +1,20 @@
+{
+  "name": "@swims/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./types/index.ts",
+  "types": "./types/index.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.ts",
+      "default": "./types/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
