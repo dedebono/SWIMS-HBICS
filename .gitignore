@@ -1,9 +1,44 @@
+# Node.js & React/Next.js dependencies
 node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.pnpm-debug.log
+
+# Build outputs
 dist/
+build/
 .next/
+out/
+coverage/
+
+# Environment variables
 .env
 .env.local
-*.log
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 .DS_Store
-coverage/
+Thumbs.db
+
+# Monorepo/Turbo
 .turbo/
+
+# Miscellaneous
+*.log
+scratch/
+brain/
+.gemini/
