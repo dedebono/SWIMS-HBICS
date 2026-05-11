@@ -53,3 +53,14 @@ export const loginRateLimiter = rateLimit({
   maxAttempts: 5,
   keyPrefix: 'rl:login',
 });
+
+/**
+ * Global rate limiter for all API endpoints.
+ * Max 1000 requests per 15 minutes per IP.
+ */
+export const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  maxAttempts: 1000,
+  keyPrefix: 'rl:global',
+});
+

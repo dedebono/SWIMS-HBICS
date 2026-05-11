@@ -18,6 +18,22 @@ services:
       timeout: 5s
       retries: 5
 
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: swims_pgbouncer
+    environment:
+      - DATABASE_URL=postgres://swims:swims_dev_password@postgres:5432/swims
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=1000
+      - DEFAULT_POOL_SIZE=20
+      - ADMIN_USERS=postgres,swims
+      - AUTH_TYPE=any
+    ports:
+      - '6432:6432'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   redis:
     image: redis:7-alpine
     container_name: swims_redis
