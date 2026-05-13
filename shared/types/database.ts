@@ -49,6 +49,7 @@ export type Severity = (typeof Severity)[keyof typeof Severity];
 export const Role = {
   TEACHER: 'TEACHER',
   SUBSTITUTE_TEACHER: 'SUBSTITUTE_TEACHER',
+  HOMEROOM_TEACHER: 'HOMEROOM_TEACHER',
   COUNSELOR: 'COUNSELOR',
   SCHOOL_NURSE: 'SCHOOL_NURSE',
   SCHOOL_HEAD: 'SCHOOL_HEAD',
@@ -143,6 +144,7 @@ export interface CaseRow {
   closed_date: string | null;
   summary: string | null;
   metadata: Record<string, unknown>;
+  is_sensitive: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -164,6 +166,7 @@ export interface IncidentRow {
   witnesses: Array<{ user_id?: string; name: string; statement?: string }>;
   immediate_actions: string | null;
   language_flag: boolean;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -181,6 +184,7 @@ export interface InterventionRow {
   completed_at: string | null;
   outcome: string | null;
   effectiveness: number | null;
+  metadata: Record<string, unknown>;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -262,6 +266,7 @@ export interface PositiveObservationRow {
   category: string;
   description: string;
   observed_at: string;
+  metadata: Record<string, unknown>;
   created_at: string;
   deleted_at: string | null;
 }
@@ -275,6 +280,7 @@ export interface CaseCommunicationRow {
   channel: string;
   contact_name: string;
   contact_role: string;
+  metadata: Record<string, unknown>;
   created_at: string;
   deleted_at: string | null;
 }
@@ -299,4 +305,14 @@ export interface ReportRow {
   storage_key: string | null;
   created_at: string;
   completed_at: string | null;
+}
+
+export interface HomeroomAssignmentRow {
+  assignment_id: string;
+  tenant_id: string;
+  teacher_id: string;
+  class_name: string;
+  academic_year: string;
+  created_at: string;
+  updated_at: string;
 }

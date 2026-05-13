@@ -30,6 +30,7 @@ const createIncidentSchema = z.object({
   incident_at: z.string().datetime(),
   witnesses: z.array(witnessSchema).optional(),
   immediate_actions: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 const updateIncidentSchema = z.object({
@@ -42,6 +43,7 @@ const updateIncidentSchema = z.object({
   witnesses: z.array(witnessSchema).optional(),
   immediate_actions: z.string().optional(),
   language_flag: z.boolean().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 const listIncidentsSchema = z.object({

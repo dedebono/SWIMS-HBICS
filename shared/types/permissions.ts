@@ -63,6 +63,18 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: cru,
     students: readOnly,
   },
+  HOMEROOM_TEACHER: {
+    cases: cr,
+    incidents: cru,
+    interventions: cru,
+    media_assets: cr,
+    alerts: readOnly,
+    reports: readOnly,
+    consents: readOnly,
+    audit_logs: none,
+    positive_observations: cru,
+    students: readUpdate,
+  },
   COUNSELOR: {
     cases: crud,
     incidents: crud,

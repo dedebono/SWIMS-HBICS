@@ -16,6 +16,7 @@ const createCommunicationSchema = z.object({
   channel: z.enum(['PHONE', 'EMAIL', 'IN_PERSON', 'APP']).optional(),
   contact_name: z.string().min(1),
   contact_role: z.string().min(1),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 // ─── POST /api/cases/:caseId/communications ────────────────────────────────
