@@ -5,7 +5,8 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import { executeRightToBeForgotten } from '../services/rtbf.service.js';
-import { sendSuccess } from '../utils/response.js';
+import * as adminUsersService from '../services/admin-users.service.js';
+import { sendSuccess, sendCreated } from '../utils/response.js';
 
 const router = Router();
 
@@ -37,6 +38,57 @@ router.post(
 
     sendSuccess(res, result);
   }),
+);
+
+// ─── USER DIRECTORY MANAGEMENT ───────────────────────────────────────────────
+
+const userSchema = z.object({
+  full_name: z.string().min(2),
+  email: z.string().email(),
+  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'HOMEROOM_TEACHER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER']),
+  national_id: z.string().optional(),
+});
+
+const bulkUserSchema = z.object({
+  users: z.array(userSchema).min(1).max(1000)
+});
+
+router.get(
+  '/users',
+  asyncHandler(async (req, res) => {
+    if (req.userRole !== 'IT_ADMIN') {
+      res.status(403).json({ success: false, error: { message: "Only IT_ADMIN can view users" }});
+      return;
+    }
+    const result = await adminUsersService.getAllUsers(req.tenantId);
+    sendSuccess(res, result);
+  })
+);
+
+router.post(
+  '/users',
+  asyncHandler(async (req, res) => {
+    if (req.userRole !== 'IT_ADMIN') {
+      res.status(403).json({ success: false, error: { message: "Only IT_ADMIN can add users" }});
+      return;
+    }
+    const body = userSchema.parse(req.body);
+    const result = await adminUsersService.createUser(req.tenantId, body);
+    sendCreated(res, result);
+  })
+);
+
+router.post(
+  '/users/bulk',
+  asyncHandler(async (req, res) => {
+    if (req.userRole !== 'IT_ADMIN') {
+      res.status(403).json({ success: false, error: { message: "Only IT_ADMIN can bulk add users" }});
+      return;
+    }
+    const body = bulkUserSchema.parse(req.body);
+    const result = await adminUsersService.createUsersBulk(req.tenantId, body.users);
+    sendCreated(res, result);
+  })
 );
 
 export default router;

@@ -16,7 +16,7 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testingAi, setTestingAi] = useState(false);
-  
+
   const [aiSettings, setAiSettings] = useState({
     enabled: false,
     provider: "local",
@@ -42,7 +42,7 @@ export default function AdminSettingsPage() {
     try {
       setLoading(true);
       const res = await apiClient<any>("/admin/settings");
-      
+
       if (res.success && res.data) {
         if (res.data.ai) setAiSettings(prev => ({ ...prev, ...res.data.ai }));
         if (res.data.storage) setStorageSettings(prev => ({ ...prev, ...res.data.storage }));
@@ -57,9 +57,9 @@ export default function AdminSettingsPage() {
   const handleSaveSettings = async (category: "ai" | "storage") => {
     try {
       setSaving(true);
-      const payload = category === "ai" 
-        ? { ai: aiSettings } 
-        : { storage: storageSettings };
+      const payload = category === "ai"
+        ? { ai: aiSettings }
+        : { storage: { ...storageSettings, storageProvider: storageSettings.provider } };
 
       const res = await apiClient<any>("/admin/settings", {
         method: "PATCH",
@@ -85,7 +85,7 @@ export default function AdminSettingsPage() {
         method: "POST",
         body: aiSettings,
       });
-      
+
       if (res.success) {
         toast.success("Connection to AI successful! Model is responding.");
       } else {
@@ -109,7 +109,9 @@ export default function AdminSettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="ai" className="w-full">
+      <Tabs
+        style={{ display: 'block', overflow: 'auto' }}
+        defaultValue="ai" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="ai">AI Insights</TabsTrigger>
           <TabsTrigger value="storage">Storage Providers</TabsTrigger>
@@ -132,9 +134,9 @@ export default function AdminSettingsPage() {
                   <Label className="text-base">Enable AI Features</Label>
                   <p className="text-sm text-zinc-500">Allow Counselors to generate AI case summaries.</p>
                 </div>
-                <Switch 
+                <Switch
                   checked={!!aiSettings.enabled}
-                  onCheckedChange={(v) => setAiSettings({...aiSettings, enabled: v})}
+                  onCheckedChange={(v) => setAiSettings({ ...aiSettings, enabled: v })}
                 />
               </div>
 
@@ -143,9 +145,9 @@ export default function AdminSettingsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Provider Type</Label>
-                      <Select 
-                        value={aiSettings.provider} 
-                        onValueChange={(v) => setAiSettings({...aiSettings, provider: v ?? "local"})}
+                      <Select
+                        value={aiSettings.provider}
+                        onValueChange={(v) => setAiSettings({ ...aiSettings, provider: v ?? "local" })}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select provider" />
@@ -159,39 +161,39 @@ export default function AdminSettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Model Name</Label>
-                      <Input 
-                        placeholder="e.g. llama3 or gpt-4" 
+                      <Input
+                        placeholder="e.g. llama3 or gpt-4"
                         value={aiSettings.model || ""}
-                        onChange={(e) => setAiSettings({...aiSettings, model: e.target.value})}
+                        onChange={(e) => setAiSettings({ ...aiSettings, model: e.target.value })}
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label>API Base URL</Label>
-                    <Input 
-                      placeholder="http://localhost:11434/api/generate" 
+                    <Input
+                      placeholder="http://localhost:11434/api/generate"
                       value={aiSettings.apiUrl || ""}
-                      onChange={(e) => setAiSettings({...aiSettings, apiUrl: e.target.value})}
+                      onChange={(e) => setAiSettings({ ...aiSettings, apiUrl: e.target.value })}
                     />
                     <p className="text-xs text-zinc-500">For local models, use the absolute URL to the endpoint.</p>
                   </div>
 
                   <div className="space-y-2">
                     <Label>API Key (Optional for Local)</Label>
-                    <Input 
-                      type="password" 
-                      placeholder="sk-..." 
+                    <Input
+                      type="password"
+                      placeholder="sk-..."
                       value={aiSettings.apiKey || ""}
-                      onChange={(e) => setAiSettings({...aiSettings, apiKey: e.target.value})}
+                      onChange={(e) => setAiSettings({ ...aiSettings, apiKey: e.target.value })}
                     />
                   </div>
                 </div>
               )}
             </CardContent>
             <CardFooter className="flex justify-between border-t p-6">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={handleTestAiConnection}
                 disabled={!aiSettings.enabled || testingAi}
               >
@@ -218,9 +220,9 @@ export default function AdminSettingsPage() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label>Storage Provider</Label>
-                <Select 
-                  value={storageSettings.provider} 
-                  onValueChange={(v) => setStorageSettings({...storageSettings, provider: v ?? "s3"})}
+                <Select
+                  value={storageSettings.provider}
+                  onValueChange={(v) => setStorageSettings({ ...storageSettings, provider: v ?? "s3" })}
                 >
                   <SelectTrigger className="w-full sm:w-[300px]">
                     <SelectValue placeholder="Select provider" />
@@ -230,44 +232,56 @@ export default function AdminSettingsPage() {
                     <SelectItem value="r2">Cloudflare R2</SelectItem>
                     <SelectItem value="firebase">Firebase Storage</SelectItem>
                     <SelectItem value="gdrive">Google Drive API</SelectItem>
+                    <SelectItem value="local">Local Server Storage</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {storageSettings.provider === 'local' ? (
+                <div className="rounded-md bg-muted/50 p-4">
+                  <h4 className="text-sm font-semibold mb-2">Local Server Storage Active</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Files will be securely saved directly to the backend server's local file system (e.g. <code>backend/uploads/</code>). No additional configuration keys are required for this provider.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Bucket Name / Firebase Project ID</Label>
-                  <Input 
+                  <Input
                     value={storageSettings.bucket || ""}
-                    onChange={(e) => setStorageSettings({...storageSettings, bucket: e.target.value})}
+                    onChange={(e) => setStorageSettings({ ...storageSettings, bucket: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Region</Label>
-                  <Input 
+                  <Input
                     placeholder="us-east-1"
                     value={storageSettings.region || ""}
-                    onChange={(e) => setStorageSettings({...storageSettings, region: e.target.value})}
+                    onChange={(e) => setStorageSettings({ ...storageSettings, region: e.target.value })}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Access Key / Client Email</Label>
-                <Input 
+                <Input
                   value={storageSettings.accessKey || ""}
-                  onChange={(e) => setStorageSettings({...storageSettings, accessKey: e.target.value})}
+                  onChange={(e) => setStorageSettings({ ...storageSettings, accessKey: e.target.value })}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label>Secret Key / Private Key</Label>
-                <Input 
+                <Input
                   type="password"
                   value={storageSettings.secretKey || ""}
-                  onChange={(e) => setStorageSettings({...storageSettings, secretKey: e.target.value})}
+                  onChange={(e) => setStorageSettings({ ...storageSettings, secretKey: e.target.value })}
                 />
               </div>
+                </>
+              )}
             </CardContent>
             <CardFooter className="flex justify-end border-t p-6">
               <Button onClick={() => handleSaveSettings("storage")} disabled={saving}>

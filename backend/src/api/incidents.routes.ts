@@ -52,6 +52,35 @@ const listIncidentsSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(20),
 });
 
+// ─── GET /api/incidents/my-reports ───────────────────────────────────────────
+// Returns all incidents reported by the currently authenticated user,
+// including the student name/ID for each incident.
+
+router.get(
+  '/incidents/my-reports',
+  checkPermission('incidents', 'read'),
+  asyncHandler(async (req, res) => {
+    const query = listIncidentsSchema.parse(req.query);
+    const { incidents, total } = await incidentsService.listIncidents(req.tenantId, {
+      ...query,
+      reported_by: req.userId,   // ← scoped to this teacher's reports
+    });
+    sendPaginated(res, incidents, total, query.page, query.limit);
+  }),
+);
+
+// ─── GET /api/incidents/my-students ──────────────────────────────────────────
+// Returns distinct students from incidents reported by the logged-in user.
+
+router.get(
+  '/incidents/my-students',
+  checkPermission('incidents', 'read'),
+  asyncHandler(async (req, res) => {
+    const students = await incidentsService.getMyStudents(req.tenantId, req.userId);
+    sendSuccess(res, students);
+  }),
+);
+
 // ─── POST /api/cases/:caseId/incidents ───────────────────────────────────────
 
 router.post(

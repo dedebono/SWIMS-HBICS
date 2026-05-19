@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as timelineService from '../services/timeline.service.js';
+import * as studentsService from '../services/students.service.js';
 import { sendSuccess } from '../utils/response.js';
 
 const router = Router();
@@ -21,6 +22,37 @@ const timelineQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(50),
 });
+
+const searchQuerySchema = z.object({
+  q: z.string().min(2),
+  limit: z.coerce.number().min(1).max(20).default(10),
+});
+
+// ─── GET /api/students/search ────────────────────────────────────────────────
+
+router.get(
+  '/search',
+  checkPermission('students', 'read'),
+  asyncHandler(async (req, res) => {
+    const query = searchQuerySchema.parse(req.query);
+    const results = await studentsService.searchStudents(req.tenantId, query.q, query.limit);
+    sendSuccess(res, results);
+  }),
+);
+
+// ─── GET /api/students/:studentId ──────────────────────────────────────────────
+
+router.get(
+  '/:studentId',
+  checkPermission('students', 'read'),
+  asyncHandler(async (req, res) => {
+    const student = await studentsService.getStudentById(req.tenantId, String(req.params['studentId']));
+    if (!student) {
+      return res.status(404).json({ success: false, error: 'Student not found' });
+    }
+    sendSuccess(res, student);
+  }),
+);
 
 // ─── GET /api/students/:studentId/timeline ───────────────────────────────────
 

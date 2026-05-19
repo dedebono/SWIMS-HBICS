@@ -60,6 +60,61 @@ services:
     volumes:
       - miniodata:/data
 
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: swims_backend
+    # We mount the volumes to allow hot-reloading from host
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/frontend/node_modules
+      - /app/backend/node_modules
+      - /app/shared/node_modules
+    command: sh -c "npm run migrate && npm run dev:backend"
+    ports:
+      - '4000:4000'
+    environment:
+      - DATABASE_URL=postgresql://swims:swims_dev_password@pgbouncer:6432/swims
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=change-me-to-a-64-char-random-string
+      - JWT_REFRESH_SECRET=change-me-to-another-64-char-random-string
+      - JWT_ACCESS_EXPIRY=15m
+      - JWT_REFRESH_EXPIRY=7d
+      - ENCRYPTION_KEY=change-me-to-a-32-byte-hex-string-64-chars
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=swims_minio
+      - S3_SECRET_KEY=swims_minio_password
+      - S3_BUCKET=swims-media
+      - S3_REGION=us-east-1
+      - PORT=4000
+      - NODE_ENV=development
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      - pgbouncer
+      - redis
+      - minio
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: swims_frontend
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/frontend/node_modules
+      - /app/backend/node_modules
+      - /app/shared/node_modules
+    command: npm run dev:frontend
+    ports:
+      - '3000:3000'
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
   redisdata:

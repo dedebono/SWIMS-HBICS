@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error-handler.middleware.js';
-import { loginRateLimiter } from '../middleware/rate-limit.middleware.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import * as authService from '../services/auth.service.js';
 import { sendSuccess } from '../utils/response.js';
@@ -14,19 +13,31 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
   tenant_slug: z.string().min(1),
+  captcha_id: z.string().min(1),
+  captcha_answer: z.string().min(1),
 });
 
 const refreshSchema = z.object({
   refresh_token: z.string().min(1),
 });
 
+// ─── GET /api/auth/captcha ───────────────────────────────────────────────────
+
+router.get('/captcha', asyncHandler(async (req, res) => {
+  const captcha = await authService.generateCaptcha();
+  sendSuccess(res, captcha);
+}));
+
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 
 router.post(
   '/login',
-  loginRateLimiter,
   asyncHandler(async (req, res) => {
     const body = loginSchema.parse(req.body);
+    
+    // Verify captcha before attempting login
+    await authService.verifyCaptcha(body.captcha_id, body.captcha_answer);
+    
     const result = await authService.login(
       body.email,
       body.password,

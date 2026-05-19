@@ -18,6 +18,11 @@ interface TokenPair {
   refreshToken: string;
 }
 
+export interface CaptchaData {
+  id: string;
+  question: string;
+}
+
 interface LoginResult {
   tokens: TokenPair;
   user: {
@@ -139,6 +144,39 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
+/**
+ * Generate a simple math captcha.
+ */
+export async function generateCaptcha(): Promise<CaptchaData> {
+  const num1 = Math.floor(Math.random() * 10) + 1;
+  const num2 = Math.floor(Math.random() * 10) + 1;
+  const answer = (num1 + num2).toString();
+  const id = uuidv4();
+  
+  await redis.set(`captcha:${id}`, answer, 'EX', 300); // 5 minutes expiry
+  
+  return { id, question: `What is ${num1} + ${num2}?` };
+}
+
+/**
+ * Verify the provided captcha answer.
+ */
+export async function verifyCaptcha(id: string, answer: string): Promise<void> {
+  const key = `captcha:${id}`;
+  const stored = await redis.get(key);
+  
+  if (!stored) {
+    throw new UnauthorizedError('Captcha expired or invalid');
+  }
+  
+  // Clean up right away to prevent replay attacks
+  await redis.del(key);
+  
+  if (stored !== answer.trim()) {
+    throw new UnauthorizedError('Incorrect captcha answer');
+  }
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function generateTokenPair(
@@ -170,6 +208,8 @@ export default {
   refreshAccessToken,
   revokeAllTokens,
   hashPassword,
+  generateCaptcha,
+  verifyCaptcha,
 };
 
 export const authService = {
@@ -177,4 +217,6 @@ export const authService = {
   refreshAccessToken,
   revokeAllTokens,
   hashPassword,
+  generateCaptcha,
+  verifyCaptcha,
 };

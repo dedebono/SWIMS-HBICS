@@ -33,6 +33,7 @@ export interface ListCasesParams {
   page: number;
   limit: number;
   medicalOnly?: boolean;
+  teacher_id?: string;
 }
 
 // ─── Create Case ─────────────────────────────────────────────────────────────
@@ -126,6 +127,15 @@ export async function listCases(
   if (params.medicalOnly) {
     conditions.push(`c.case_type = 'MEDICAL'`);
   }
+  if (params.teacher_id) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM incidents i 
+      WHERE i.case_id = c.case_id 
+      AND i.reported_by = $${paramIdx++}
+      AND i.deleted_at IS NULL
+    )`);
+    values.push(params.teacher_id);
+  }
 
   const whereClause = conditions.join(' AND ');
   const offset = (params.page - 1) * params.limit;
@@ -138,9 +148,11 @@ export async function listCases(
   );
 
   // Fetch page
-  const dataResult = await queryWithTenant<CaseRow>(
+  const dataResult = await queryWithTenant<CaseRow & { student_name: string }>(
     tenantId,
-    `SELECT c.* FROM cases c
+    `SELECT c.*, s.full_name as student_name 
+     FROM cases c
+     JOIN students s ON s.student_id = c.student_id
      WHERE c.tenant_id = $1 AND ${whereClause}
      ORDER BY
        CASE c.risk_level WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,

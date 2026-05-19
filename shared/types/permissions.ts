@@ -43,7 +43,7 @@ export const PERMISSIONS: PermissionMatrix = {
     cases: cr,
     incidents: cru,
     interventions: readOnly,
-    media_assets: cr,
+    media_assets: cru,
     alerts: none,
     reports: readOnly,
     consents: readOnly,
@@ -55,7 +55,7 @@ export const PERMISSIONS: PermissionMatrix = {
     cases: cr,
     incidents: cru,
     interventions: readOnly,
-    media_assets: cr,
+    media_assets: cru,
     alerts: none,
     reports: readOnly,
     consents: readOnly,
@@ -67,7 +67,7 @@ export const PERMISSIONS: PermissionMatrix = {
     cases: cr,
     incidents: cru,
     interventions: cru,
-    media_assets: cr,
+    media_assets: cru,
     alerts: readOnly,
     reports: readOnly,
     consents: readOnly,
@@ -91,7 +91,7 @@ export const PERMISSIONS: PermissionMatrix = {
     cases: readOnly,        // medical-category only (enforced by ABAC)
     incidents: readOnly,    // medical-category only (enforced by ABAC)
     interventions: cru,     // medical interventions only
-    media_assets: readOnly,
+    media_assets: cru,
     alerts: none,
     reports: readOnly,
     consents: readOnly,
@@ -103,7 +103,7 @@ export const PERMISSIONS: PermissionMatrix = {
     cases: { create: true, read: true, update: true, delete: false }, // cannot delete
     incidents: readUpdate,
     interventions: readUpdate,
-    media_assets: readOnly,
+    media_assets: cru,
     alerts: readUpdate,
     reports: crud,
     consents: readOnly,

@@ -6,6 +6,13 @@ import { pool, getClientWithTenant } from '../../db/pool.js';
 import * as authService from '../../services/auth.service.js';
 import { UnauthorizedError, NotFoundError } from '../../utils/errors.js';
 
+vi.mock('../../services/auth.service.js', () => ({
+  login: vi.fn(),
+  refreshAccessToken: vi.fn(),
+  revokeAllTokens: vi.fn(),
+  verifyCaptcha: vi.fn(),
+}));
+
 vi.mock('bcryptjs', () => ({
   compare: vi.fn(),
   hash: vi.fn(),
@@ -86,7 +93,9 @@ describe('Auth Routes', () => {
         .send({
           email: 'teacher@test.com',
           password: 'CorrectPassword123!',
-          tenant_slug: 'test-academy'
+          tenant_slug: 'test-academy',
+          captcha_id: 'mock-captcha',
+          captcha_answer: 'mock-answer'
         });
 
       expect(res.status).toBe(200);
@@ -122,7 +131,9 @@ describe('Auth Routes', () => {
         .send({
           email: 'teacher@test.com',
           password: 'WrongPassword!!!',
-          tenant_slug: 'test-academy'
+          tenant_slug: 'test-academy',
+          captcha_id: 'mock-captcha',
+          captcha_answer: 'mock-answer'
         });
 
       expect(res.status).toBe(401);
@@ -144,7 +155,9 @@ describe('Auth Routes', () => {
         .send({
           email: 'teacher@test.com',
           password: 'Password123!',
-          tenant_slug: 'non-existent'
+          tenant_slug: 'non-existent',
+          captcha_id: 'mock-captcha',
+          captcha_answer: 'mock-answer'
         });
 
       expect(res.status).toBe(404);

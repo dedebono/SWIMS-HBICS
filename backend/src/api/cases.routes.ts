@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as casesService from '../services/cases.service.js';
+import * as mediaService from '../services/media.service.js';
 import { sendSuccess, sendCreated, sendPaginated } from '../utils/response.js';
 
 const router = Router();
@@ -68,9 +69,14 @@ router.get(
     const query = listCasesSchema.parse(req.query);
     const medicalOnly = (req as unknown as Record<string, unknown>)['abacMedicalOnly'] === true;
 
+    const teacherId = (req.userRole === 'TEACHER' || req.userRole === 'SUBSTITUTE_TEACHER') 
+      ? req.userId 
+      : undefined;
+
     const { cases, total } = await casesService.listCases(req.tenantId, {
       ...query,
       medicalOnly,
+      teacher_id: teacherId,
     });
 
     sendPaginated(res, cases, total, query.page, query.limit);
@@ -125,6 +131,20 @@ router.delete(
       req,
     );
     sendSuccess(res, { message: 'Case deleted successfully' });
+  }),
+);
+
+// ─── GET /api/cases/:caseId/media ────────────────────────────────────────────
+
+router.get(
+  '/:caseId/media',
+  checkPermission('media_assets', 'read'),
+  asyncHandler(async (req, res) => {
+    const assets = await mediaService.listAssetsForCase(
+      req.tenantId,
+      String(req.params['caseId']),
+    );
+    sendSuccess(res, assets);
   }),
 );
 

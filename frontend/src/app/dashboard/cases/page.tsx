@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,7 @@ interface CaseRow {
   opened_date: string;
   created_at: string;
   updated_at: string;
+  student_name?: string;
 }
 
 const riskColors: Record<string, string> = {
@@ -49,6 +51,7 @@ const typeIcons: Record<string, string> = {
 };
 
 export default function CasesPage() {
+  const { user } = useAuth();
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -89,6 +92,7 @@ export default function CasesPage() {
           <h2 className="text-2xl font-bold tracking-tight">Cases</h2>
           <p className="text-muted-foreground">
             {total} total case{total !== 1 ? 's' : ''} found
+            {user?.role === 'TEACHER' && ' (scoped to your reports)'}
           </p>
         </div>
         <Link href="/dashboard/incidents/new">
@@ -161,17 +165,20 @@ export default function CasesPage() {
                 <CardContent className="flex items-center gap-4 p-4">
                   <div className="text-2xl">{typeIcons[c.case_type] ?? '📋'}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">
-                        Case #{c.case_id.slice(0, 8)}
-                      </p>
+                    <p className="text-sm font-medium truncate">
+                      Case #{c.case_id.slice(0, 8)}
+                    </p>
+                    {c.student_name && (
+                      <p className="text-xs text-primary font-medium">👤 {c.student_name}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="outline" className={`text-[10px] ${statusColors[c.status] ?? ''}`}>
                         {c.status}
                       </Badge>
+                      <p className="text-[10px] text-muted-foreground">
+                        {c.case_type} • Opened {new Date(c.opened_date).toLocaleDateString()}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {c.case_type} • Opened {new Date(c.opened_date).toLocaleDateString()}
-                    </p>
                   </div>
                   <Badge variant="outline" className={`text-xs ${riskColors[c.risk_level] ?? ''}`}>
                     {c.risk_level}

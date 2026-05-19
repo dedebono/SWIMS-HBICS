@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+const API_BASE = '/api';
 
 interface FetchOptions {
   method?: string;
@@ -26,12 +26,18 @@ function getAccessToken(): string | null {
 export function setTokens(accessToken: string, refreshToken: string): void {
   localStorage.setItem('swims_access_token', accessToken);
   localStorage.setItem('swims_refresh_token', refreshToken);
+  if (typeof document !== 'undefined') {
+    document.cookie = `token=${accessToken}; path=/; max-age=86400; SameSite=Lax`;
+  }
 }
 
 export function clearTokens(): void {
   localStorage.removeItem('swims_access_token');
   localStorage.removeItem('swims_refresh_token');
   localStorage.removeItem('swims_user');
+  if (typeof document !== 'undefined') {
+    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
 }
 
 export function getStoredUser(): { user_id: string; full_name: string; email: string; role: string; tenant_id: string } | null {
@@ -85,11 +91,20 @@ export async function apiClient<T>(path: string, options: FetchOptions = {}): Pr
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  let res = await fetch(`${API_BASE}${path}`, {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  const url = `${API_BASE}${path}`;
+  console.log(`[apiClient] fetching: ${url}`);
+  
+  let res;
+  try {
+    res = await fetch(url, {
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    console.error(`[apiClient] Fetch failed completely for ${url}:`, error);
+    throw error;
+  }
 
   // If 401, try refreshing token
   if (res.status === 401 && token) {

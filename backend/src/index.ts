@@ -6,7 +6,6 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.middleware.js';
 import { closePool } from './db/pool.js';
 import { initCronJobs } from './jobs/cron.js';
-import { globalRateLimiter } from './middleware/rate-limit.middleware.js';
 
 // Route imports
 import authRoutes from './api/auth.routes.js';
@@ -33,7 +32,7 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: [env.FRONTEND_URL, 'https://swims.ytcb.org', 'http://swims.ytcb.org'],
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -49,9 +48,6 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
-
-// Apply global rate limiter to all API routes
-app.use('/api', globalRateLimiter);
 
 // Public Routes
 app.use('/api/auth', authRoutes);

@@ -15,9 +15,9 @@ const settingsSchema = z.object({
     aiEnabled: z.boolean(),
     aiApiUrl: z.string().optional(),
     aiApiKey: z.string().optional(),
-  }).optional(),
+  }).passthrough().optional(),
   storage: z.object({
-    storageProvider: z.enum(['s3', 'firebase', 'cloudflare_r2', 'google_drive']),
+    storageProvider: z.enum(['s3', 'firebase', 'cloudflare_r2', 'google_drive', 'local']),
     firebaseApiKey: z.string().optional(),
     firebaseProjectId: z.string().optional(),
     firebaseStorageBucket: z.string().optional(),
@@ -28,8 +28,9 @@ const settingsSchema = z.object({
     gdriveClientId: z.string().optional(),
     gdriveClientSecret: z.string().optional(),
     gdriveRefreshToken: z.string().optional(),
-    gdriveFolderId: z.string().optional()
-  }).optional()
+    gdriveFolderId: z.string().optional(),
+    provider: z.string().optional() // Allow the frontend's raw provider field
+  }).passthrough().optional()
 });
 
 const checkAiSchema = z.object({

@@ -14,7 +14,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string, tenantSlug: string) => Promise<User>;
+  login: (email: string, password: string, tenantSlug: string, captchaId: string, captchaAnswer: string) => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -32,14 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string, tenantSlug: string): Promise<User> => {
+  const login = async (email: string, password: string, tenantSlug: string, captchaId: string, captchaAnswer: string): Promise<User> => {
     const res = await apiClient<{
       access_token: string;
       refresh_token: string;
       user: User;
     }>('/auth/login', {
       method: 'POST',
-      body: { email, password, tenant_slug: tenantSlug },
+      body: { email, password, tenant_slug: tenantSlug, captcha_id: captchaId, captcha_answer: captchaAnswer },
     });
 
     if (!res.success || !res.data) {

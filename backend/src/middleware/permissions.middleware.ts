@@ -151,7 +151,7 @@ async function isStudentInTeacherClass(
 ): Promise<boolean> {
   const client = await pool.connect();
   try {
-    await client.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
+    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
     const { rows } = await client.query<{ count: string }>(
       `SELECT COUNT(*) as count
        FROM teacher_class_assignments tca
@@ -181,7 +181,7 @@ async function isStudentInSubstituteClass(
 ): Promise<boolean> {
   const client = await pool.connect();
   try {
-    await client.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
+    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
     const { rows } = await client.query<{ count: string }>(
       `SELECT COUNT(*) as count
        FROM substitution_schedule ss

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Bot, Sparkles } from 'lucide-react';
+import { Bot, Sparkles, User } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -50,11 +50,34 @@ interface CaseDetail {
 interface IncidentItem {
   incident_id: string;
   category: string;
+  sub_category: string | null;
   severity: string;
   description: string;
   location: string | null;
   incident_at: string;
+  immediate_actions: string | null;
   language_flag: boolean;
+  witnesses: Array<{ user_id?: string; name: string; statement?: string }>;
+  metadata: {
+    involved_students?: string[];
+    evidence?: {
+      cctv?: boolean;
+      photo?: boolean;
+      video?: boolean;
+      screenshot?: boolean;
+      witness?: boolean;
+      none?: boolean;
+    };
+    initial_assessment?: {
+      is_recurring?: boolean;
+      similar_cases?: boolean;
+      needs_escalation?: boolean;
+      needs_parent_comm?: boolean;
+    };
+  };
+  reported_by: string;
+  reporter_name?: string;
+  created_at: string;
 }
 
 const riskColors: Record<string, string> = {
@@ -75,6 +98,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
   const { user } = useAuth();
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
+  const [studentData, setStudentData] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [riskOverride, setRiskOverride] = useState('');
   const [justification, setJustification] = useState('');
@@ -89,7 +113,13 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
         apiClient<IncidentItem[]>(`/cases/${resolvedParams.caseId}/incidents`),
       ]);
 
-      if (caseRes.success && caseRes.data) setCaseData(caseRes.data);
+      if (caseRes.success && caseRes.data) {
+        setCaseData(caseRes.data);
+        const studentRes = await apiClient<any>(`/students/${caseRes.data.student_id}`);
+        if (studentRes.success && studentRes.data) {
+          setStudentData(studentRes.data);
+        }
+      }
       if (incRes.success && incRes.data) setIncidents(incRes.data);
       setIsLoading(false);
     };
@@ -121,7 +151,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
         `/insights/cases/${resolvedParams.caseId}/summarize`,
         { method: 'POST' }
       );
-      
+
       if (res.success && res.data) {
         setCaseData((prev) => prev ? { ...prev, summary: res.data!.summary } : null);
         toast.success('AI Insight generated successfully');
@@ -183,7 +213,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
           {isCounselor && (
             <Dialog>
               <DialogTrigger render={<Button variant="outline" size="sm" />}>
-                  Override Risk Level
+                Override Risk Level
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -232,7 +262,9 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs
+        style={{ display: 'block', overflow: 'auto' }}
+        defaultValue="overview" className="space-y-4">
         <TabsList className="bg-muted/50">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="incidents">
@@ -248,22 +280,25 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="glass border-border/50">
-              <CardHeader>
-                <CardTitle className="text-sm">Case Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <InfoRow label="Type" value={caseData.case_type} />
-                <InfoRow label="Status" value={caseData.status} />
-                <InfoRow label="Risk Level" value={`${caseData.risk_level} (${caseData.risk_level_source})`} />
-                <InfoRow label="School Phase" value={caseData.school_phase_ref ?? 'N/A'} />
-                <InfoRow label="Opened" value={new Date(caseData.opened_date).toLocaleDateString()} />
-                {caseData.closed_date && (
-                  <InfoRow label="Closed" value={new Date(caseData.closed_date).toLocaleDateString()} />
-                )}
-              </CardContent>
-            </Card>
+          <div className="space-y-4">
+            {/* Student Details Card */}
+            {studentData && (
+              <Card className="glass border-border/50">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <User className="w-4 h-4 text-primary" />
+                    Student Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <InfoRow label="Name" value={studentData.full_name} />
+                  <InfoRow label="Student ID" value={studentData.student_id.slice(0, 8)} />
+                  {studentData.metadata && Object.entries(studentData.metadata).map(([key, val]) => (
+                    <InfoRow key={key} label={key.charAt(0).toUpperCase() + key.slice(1)} value={String(val)} />
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="glass border-border/50">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -271,9 +306,9 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
                   <Sparkles className="w-4 h-4 text-indigo-500" />
                   AI Summary
                 </CardTitle>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={handleGenerateSummary}
                   disabled={isGeneratingSummary}
                   className="h-8 gap-1"
@@ -298,6 +333,22 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
                 )}
               </CardContent>
             </Card>
+
+            <Card className="glass border-border/50">
+              <CardHeader>
+                <CardTitle className="text-sm">Case Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <InfoRow label="Type" value={caseData.case_type} />
+                <InfoRow label="Status" value={caseData.status} />
+                <InfoRow label="Risk Level" value={`${caseData.risk_level} (${caseData.risk_level_source})`} />
+                <InfoRow label="School Phase" value={caseData.school_phase_ref ?? 'N/A'} />
+                <InfoRow label="Opened" value={new Date(caseData.opened_date).toLocaleDateString()} />
+                {caseData.closed_date && (
+                  <InfoRow label="Closed" value={new Date(caseData.closed_date).toLocaleDateString()} />
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -310,13 +361,29 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
               </CardContent>
             </Card>
           ) : (
-            incidents.map((inc) => (
-              <Card key={inc.incident_id} className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{inc.category}</p>
+            incidents.map((inc) => {
+              const evidence = inc.metadata?.evidence ?? {};
+              const assessment = inc.metadata?.initial_assessment ?? {};
+              const involvedStudents = inc.metadata?.involved_students ?? [];
+              const activeEvidence = Object.entries(evidence)
+                .filter(([, v]) => v === true)
+                .map(([k]) => k.toUpperCase());
+              const activeAssessment: string[] = [];
+              if (assessment.is_recurring) activeAssessment.push('Recurring');
+              if (assessment.similar_cases) activeAssessment.push('Similar Cases');
+              if (assessment.needs_escalation) activeAssessment.push('Escalation Needed');
+              if (assessment.needs_parent_comm) activeAssessment.push('Parent Comm Needed');
+
+              return (
+                <Card key={inc.incident_id} className="glass border-border/50">
+                  <CardContent className="p-4 space-y-3">
+                    {/* Header row */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold">{inc.category}</p>
+                        {inc.sub_category && (
+                          <span className="text-xs text-muted-foreground">/ {inc.sub_category}</span>
+                        )}
                         <Badge variant="outline" className={`text-[10px] ${riskColors[inc.severity] ?? ''}`}>
                           {inc.severity}
                         </Badge>
@@ -324,16 +391,66 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
                           <Badge variant="destructive" className="text-[10px]">⚠ Language Flag</Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">{inc.description}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground/70">
-                        <span>📅 {new Date(inc.incident_at).toLocaleString()}</span>
-                        {inc.location && <span>📍 {inc.location}</span>}
-                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+
+                    {/* Description */}
+                    <p className="text-sm text-foreground leading-relaxed">{inc.description}</p>
+
+                    {/* Immediate Actions */}
+                    {inc.immediate_actions && (
+                      <div className="rounded-md bg-muted/40 border border-border/50 p-3">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Immediate Actions Taken</p>
+                        <p className="text-sm">{inc.immediate_actions}</p>
+                      </div>
+                    )}
+
+                    {/* Meta row: date, location */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground/70">
+                      <span>📅 {new Date(inc.incident_at).toLocaleString()}</span>
+                      {inc.location && <span>📍 {inc.location}</span>}
+                      {inc.reporter_name && (
+                        <span className="flex items-center gap-1 text-primary/80 font-medium">
+                          <User className="w-3 h-3" />
+                          Reported by: {inc.reporter_name}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Involved Students */}
+                    {involvedStudents.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Involved / Victim(s)</p>
+                        <p className="text-sm">{involvedStudents.join(', ')}</p>
+                      </div>
+                    )}
+
+                    {/* Evidence & Assessment badges */}
+                    <div className="flex flex-wrap gap-4">
+                      {activeEvidence.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">Evidence</p>
+                          <div className="flex flex-wrap gap-1">
+                            {activeEvidence.map((e) => (
+                              <Badge key={e} variant="secondary" className="text-[10px]">{e}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {activeAssessment.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">Initial Assessment</p>
+                          <div className="flex flex-wrap gap-1">
+                            {activeAssessment.map((a) => (
+                              <Badge key={a} variant="outline" className="text-[10px] border-orange-400/40 text-orange-500">{a}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </TabsContent>
 

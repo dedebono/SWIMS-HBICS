@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +17,23 @@ export default function LoginPage() {
   const [tenantSlug, setTenantSlug] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [captchaData, setCaptchaData] = useState<{ id: string; question: string } | null>(null);
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+
+  const fetchCaptcha = async () => {
+    try {
+      const res = await apiClient<{ id: string; question: string }>('/auth/captcha');
+      if (res.success && res.data) {
+        setCaptchaData(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load captcha', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCaptcha();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +41,9 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const loggedInUser = await login(email, password, tenantSlug);
+      if (!captchaData) throw new Error('Captcha is still loading');
+      
+      const loggedInUser = await login(email, password, tenantSlug, captchaData.id, captchaAnswer);
       
       switch (loggedInUser.role) {
         case 'IT_ADMIN':
@@ -53,6 +73,8 @@ export default function LoginPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
+      setCaptchaAnswer('');
+      await fetchCaptcha(); // Refresh captcha on failure
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +150,26 @@ export default function LoginPage() {
                   required
                 />
               </div>
+
+              {captchaData && (
+                <div className="space-y-2 rounded-lg border bg-muted/50 p-3">
+                  <Label htmlFor="captcha">Security Verification</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="font-mono text-lg font-bold tracking-wider text-primary">
+                      {captchaData.question}
+                    </div>
+                    <Input
+                      id="captcha"
+                      type="text"
+                      placeholder="Answer"
+                      value={captchaAnswer}
+                      onChange={(e) => setCaptchaAnswer(e.target.value)}
+                      required
+                      className="flex-1 font-mono"
+                    />
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

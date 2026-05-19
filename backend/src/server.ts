@@ -21,8 +21,7 @@ if (process.env.NODE_ENV !== 'test') {
 // ─── Graceful Shutdown ──────────────────────────────────────────────────────
 
 async function shutdown(): Promise<void> {
-  console.log('
-🛑 Shutting down gracefully...');
+  console.log('\n🛑 Shutting down gracefully...');
   if (server) server.close();
   await closePool();
   process.exit(0);
