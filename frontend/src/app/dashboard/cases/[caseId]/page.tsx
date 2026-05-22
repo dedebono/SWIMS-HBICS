@@ -148,7 +148,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
     try {
       setIsGeneratingSummary(true);
       const res = await apiClient<{ summary: string; ai_confidence_score: number }>(
-        `/insights/cases/${resolvedParams.caseId}/summarize`,
+        `/cases/${resolvedParams.caseId}/insights/generate`,
         { method: 'POST' }
       );
 

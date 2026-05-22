@@ -12,9 +12,11 @@ router.use(authenticate, setTenantContext);
 
 const settingsSchema = z.object({
   ai: z.object({
-    aiEnabled: z.boolean(),
-    aiApiUrl: z.string().optional(),
-    aiApiKey: z.string().optional(),
+    enabled: z.boolean().optional(),
+    provider: z.string().optional(),
+    apiUrl: z.string().optional(),
+    apiKey: z.string().optional(),
+    model: z.string().optional(),
   }).passthrough().optional(),
   storage: z.object({
     storageProvider: z.enum(['s3', 'firebase', 'cloudflare_r2', 'google_drive', 'local']),
@@ -34,8 +36,8 @@ const settingsSchema = z.object({
 });
 
 const checkAiSchema = z.object({
-  aiApiUrl: z.string().url(),
-  aiApiKey: z.string()
+  apiUrl: z.string().url(),
+  apiKey: z.string().optional()
 });
 
 // Middleware to enforce IT_ADMIN
@@ -106,17 +108,16 @@ router.post(
 
     try {
       // Very basic connection ping. Works for OpenAI-compatible endpoints like LMStudio/Ollama
-      const pingResponse = await fetch(body.aiApiUrl, {
+      const pingResponse = await fetch(body.apiUrl, {
         method: 'GET', // Or a minimal POST request depending on the provider, but many expose a health or models endpoint
         headers: {
-          'Authorization': `Bearer ${body.aiApiKey}`,
+          'Authorization': `Bearer ${body.apiKey || ''}`,
           'Content-Type': 'application/json'
         }
       });
 
-      if (!pingResponse.ok) {
-        throw new Error(`Failed to connect: ${pingResponse.statusText}`);
-      }
+      // If fetch resolves (even with 404/405), the server is reachable.
+      // fetch only throws an error on network failures (e.g., ECONNREFUSED).
 
       sendSuccess(res, { connected: true, message: 'AI connection successful' });
     } catch (error: any) {

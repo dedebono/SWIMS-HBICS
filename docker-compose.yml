@@ -23,11 +23,12 @@ services:
     container_name: swims_pgbouncer
     environment:
       - DATABASE_URL=postgres://swims:swims_dev_password@postgres:5432/swims
+      - LISTEN_PORT=6432
       - POOL_MODE=transaction
       - MAX_CLIENT_CONN=1000
       - DEFAULT_POOL_SIZE=20
       - ADMIN_USERS=postgres,swims
-      - AUTH_TYPE=any
+      - AUTH_TYPE=scram-sha-256
     ports:
       - '6432:6432'
     depends_on:
@@ -82,7 +83,7 @@ services:
       - JWT_REFRESH_SECRET=change-me-to-another-64-char-random-string
       - JWT_ACCESS_EXPIRY=15m
       - JWT_REFRESH_EXPIRY=7d
-      - ENCRYPTION_KEY=change-me-to-a-32-byte-hex-string-64-chars
+      - ENCRYPTION_KEY=a3f9b8c4d2e1f0a9b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4
       - S3_ENDPOINT=http://minio:9000
       - S3_ACCESS_KEY=swims_minio
       - S3_SECRET_KEY=swims_minio_password
@@ -112,6 +113,7 @@ services:
       - '3000:3000'
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+      - BACKEND_INTERNAL_URL=http://backend:4000
     depends_on:
       - backend
 

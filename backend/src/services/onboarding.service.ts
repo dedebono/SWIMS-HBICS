@@ -29,9 +29,9 @@ export async function registerTenant(
     // 3. Insert tenant with default settings
     const defaultSettings = {
       ai: {
-        aiEnabled: false,
-        aiApiUrl: '',
-        aiApiKey: ''
+        enabled: false,
+        apiUrl: '',
+        apiKey: ''
       },
       storage: {
         storageProvider: 's3' // Can be firebase, cloudflare_r2, google_drive, s3

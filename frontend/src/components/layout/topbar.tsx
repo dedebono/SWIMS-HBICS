@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import { useTranslation, useLanguageStore } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -23,20 +24,22 @@ interface TopbarProps {
   };
 }
 
-const roleLabels: Record<string, string> = {
-  TEACHER: 'Teacher',
-  SUBSTITUTE_TEACHER: 'Substitute Teacher',
-  COUNSELOR: 'Counselor',
-  SCHOOL_NURSE: 'School Nurse',
-  SCHOOL_HEAD: 'School Head',
-  BOARD_MEMBER: 'Board Member',
-  CASE_REVIEWER: 'Case Reviewer',
-  IT_ADMIN: 'IT Admin',
+const roleTranslationKeys: Record<string, string> = {
+  TEACHER: 'role.teacher',
+  SUBSTITUTE_TEACHER: 'role.substitute_teacher',
+  COUNSELOR: 'role.counselor',
+  SCHOOL_NURSE: 'role.school_nurse',
+  SCHOOL_HEAD: 'role.school_head',
+  BOARD_MEMBER: 'role.board_member',
+  CASE_REVIEWER: 'role.case_reviewer',
+  IT_ADMIN: 'role.it_admin',
 };
 
 export function Topbar({ user }: TopbarProps) {
   const router = useRouter();
   const { logout } = useAuth();
+  const { t, language } = useTranslation();
+  const setLanguage = useLanguageStore((state) => state.setLanguage);
 
   const initials = user.full_name
     .split(' ')
@@ -53,12 +56,20 @@ export function Topbar({ user }: TopbarProps) {
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-card/50 px-6 backdrop-blur-sm">
       <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold text-foreground">Dashboard</h1>
+        <h1 className="text-lg font-semibold text-foreground">{t('dashboard.title')}</h1>
       </div>
 
       <div className="flex items-center gap-4">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => setLanguage(language === 'en' ? 'id' : 'en')}
+          className="text-xs h-7 px-2"
+        >
+          {language === 'en' ? 'ID' : 'EN'}
+        </Button>
         <Badge variant="outline" className="text-xs font-normal">
-          {roleLabels[user.role] ?? user.role}
+          {user.role in roleTranslationKeys ? t(roleTranslationKeys[user.role]) : user.role}
         </Badge>
 
         <DropdownMenu>
@@ -86,7 +97,7 @@ export function Topbar({ user }: TopbarProps) {
                   <polyline points="16 17 21 12 16 7" />
                   <line x1="21" y1="12" x2="9" y2="12" />
                 </svg>
-                Sign Out
+                {t('sign_out')}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

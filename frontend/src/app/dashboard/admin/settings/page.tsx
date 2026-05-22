@@ -20,7 +20,7 @@ export default function AdminSettingsPage() {
   const [aiSettings, setAiSettings] = useState({
     enabled: false,
     provider: "local",
-    apiUrl: "http://localhost:11434/api/generate",
+    apiUrl: "http://localhost:11434/v1/chat/completions",
     apiKey: "",
     model: "llama3",
   });
@@ -172,7 +172,7 @@ export default function AdminSettingsPage() {
                   <div className="space-y-2">
                     <Label>API Base URL</Label>
                     <Input
-                      placeholder="http://localhost:11434/api/generate"
+                      placeholder="http://localhost:11434/v1/chat/completions"
                       value={aiSettings.apiUrl || ""}
                       onChange={(e) => setAiSettings({ ...aiSettings, apiUrl: e.target.value })}
                     />

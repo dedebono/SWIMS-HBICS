@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/lib/i18n';
 
 interface SidebarProps {
   currentPath: string;
@@ -84,7 +85,20 @@ const navItems = [
 ];
 
 export function Sidebar({ currentPath, userRole }: SidebarProps) {
+  const { t } = useTranslation();
   const filteredItems = navItems.filter((item) => item.roles.includes(userRole));
+
+  const getLabel = (label: string) => {
+    const keys: Record<string, string> = {
+      'Dashboard': 'nav.dashboard',
+      'User Management': 'nav.user_management',
+      'Settings': 'nav.settings',
+      'Cases': 'nav.cases',
+      'New Incident': 'nav.new_incident',
+      'Audit Logs': 'nav.audit_logs',
+    };
+    return t(keys[label] || label);
+  };
 
   return (
     <aside className="flex w-64 flex-col border-r border-border bg-sidebar">
@@ -100,7 +114,7 @@ export function Sidebar({ currentPath, userRole }: SidebarProps) {
         </div>
         <div>
           <h2 className="text-sm font-bold tracking-wide">SWIMS</h2>
-          <p className="text-[10px] text-muted-foreground">Wellbeing Management</p>
+          <p className="text-[10px] text-muted-foreground">{t('sidebar.subtitle')}</p>
         </div>
       </div>
 
@@ -127,7 +141,7 @@ export function Sidebar({ currentPath, userRole }: SidebarProps) {
               )}>
                 {item.icon}
               </span>
-              {item.label}
+              {getLabel(item.label)}
               {isActive && (
                 <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
               )}

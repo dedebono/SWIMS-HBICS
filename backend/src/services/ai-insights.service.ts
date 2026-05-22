@@ -9,12 +9,12 @@ export async function generateCaseSummary(tenantId: string, caseId: string): Pro
     const settings = tenantRows[0]?.settings || {};
     const aiSettings = settings.ai || {};
 
-    if (!aiSettings.aiEnabled) {
+    if (!aiSettings.enabled) {
       throw new Error('AI capabilities are disabled for this tenant.');
     }
 
-    if (!aiSettings.aiApiUrl || !aiSettings.aiApiKey) {
-      throw new Error('AI configuration is incomplete. Please configure API URL and Key in IT Admin settings.');
+    if (!aiSettings.apiUrl) {
+      throw new Error('AI configuration is incomplete. Please configure API URL in IT Admin settings.');
     }
 
     // 2. Fetch Case History
@@ -34,25 +34,63 @@ export async function generateCaseSummary(tenantId: string, caseId: string): Pro
       ${historyText}
     `;
 
-    const response = await fetch(aiSettings.aiApiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${aiSettings.aiApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: "default", // Or could be configurable
+    let endpointUrl = aiSettings.apiUrl;
+    // Fallback if they just provided the base URL
+    if (!endpointUrl.includes('/api/') && !endpointUrl.includes('/v1/') && !endpointUrl.includes('/completions')) {
+      endpointUrl = endpointUrl.replace(/\/$/, '') + '/api/generate';
+    }
+
+    let payload;
+    if (endpointUrl.endsWith('/api/generate')) {
+      payload = {
+        model: aiSettings.model || "default",
+        prompt: prompt,
+        stream: false
+      };
+    } else if (endpointUrl.endsWith('/api/chat')) {
+      payload = {
+        model: aiSettings.model || "default",
+        messages: [{ role: "user", content: prompt }],
+        stream: false
+      };
+    } else {
+      payload = {
+        model: aiSettings.model || "default",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2
-      })
+      };
+    }
+
+    const response = await fetch(endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${aiSettings.apiKey || ''}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
-      throw new Error(`AI Service error: ${response.statusText}`);
+      let errorBody = '';
+      try {
+        const errJson = await response.json();
+        errorBody = errJson.error?.message || errJson.error || JSON.stringify(errJson);
+      } catch (e) {
+        errorBody = await response.text();
+      }
+      throw new Error(`AI Service error: ${response.statusText} - ${errorBody}`);
     }
 
     const data = await response.json();
-    const summary = (data as any).choices?.[0]?.message?.content || 'No summary generated.';
+    let summary = 'No summary generated.';
+
+    if (endpointUrl.endsWith('/api/generate')) {
+      summary = (data as any).response || summary;
+    } else if (endpointUrl.endsWith('/api/chat')) {
+      summary = (data as any).message?.content || summary;
+    } else {
+      summary = (data as any).choices?.[0]?.message?.content || summary;
+    }
 
     // Enforce explicitly labeling
     return `[AI-GENERATED SUMMARY]\n${summary.trim()}`;
