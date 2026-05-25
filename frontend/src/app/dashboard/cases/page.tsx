@@ -27,6 +27,7 @@ interface CaseRow {
   created_at: string;
   updated_at: string;
   student_name?: string;
+  reported_by_name?: string;
 }
 
 const riskColors: Record<string, string> = {
@@ -177,6 +178,7 @@ export default function CasesPage() {
                       </Badge>
                       <p className="text-[10px] text-muted-foreground">
                         {c.case_type} • Opened {new Date(c.opened_date).toLocaleDateString()}
+                        {c.reported_by_name && ` • Reported by ${c.reported_by_name}`}
                       </p>
                     </div>
                   </div>

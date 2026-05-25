@@ -23,7 +23,11 @@ async function getDashboardData() {
 
   if (!token) redirect("/login");
 
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/counselor/dashboard`, {
+  const baseUrl = process.env.BACKEND_INTERNAL_URL 
+    ? `${process.env.BACKEND_INTERNAL_URL}/api` 
+    : 'http://127.0.0.1:4000/api';
+
+  const res = await fetch(`${baseUrl}/counselor/dashboard`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

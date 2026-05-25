@@ -148,11 +148,12 @@ export async function listCases(
   );
 
   // Fetch page
-  const dataResult = await queryWithTenant<CaseRow & { student_name: string }>(
+  const dataResult = await queryWithTenant<CaseRow & { student_name: string, reported_by_name: string }>(
     tenantId,
-    `SELECT c.*, s.full_name as student_name 
+    `SELECT c.*, s.full_name as student_name, u.full_name as reported_by_name 
      FROM cases c
      JOIN students s ON s.student_id = c.student_id
+     LEFT JOIN users u ON c.created_by = u.user_id
      WHERE c.tenant_id = $1 AND ${whereClause}
      ORDER BY
        CASE c.risk_level WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
