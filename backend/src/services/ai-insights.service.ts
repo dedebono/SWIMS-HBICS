@@ -20,18 +20,80 @@ export async function generateCaseSummary(tenantId: string, caseId: string): Pro
     // 2. Fetch Case History
     const { rows: caseRows } = await client.query('SELECT summary FROM cases WHERE case_id = $1 AND tenant_id = $2', [caseId, tenantId]);
     if (caseRows.length === 0) throw new Error('Case not found');
-    
-    const { rows: incidents } = await client.query('SELECT severity, category, description, incident_at FROM incidents WHERE case_id = $1 AND deleted_at IS NULL ORDER BY incident_at ASC', [caseId]);
-    
-    const historyText = incidents.map((i: any) => `[${i.incident_at}] ${i.severity} (${i.category}): ${i.description}`).join('\n');
+
+    const { rows: incidents } = await client.query(
+      'SELECT severity, category, description, incident_at FROM incidents WHERE case_id = $1 AND deleted_at IS NULL ORDER BY incident_at ASC',
+      [caseId]
+    );
+
+    const { rows: interventions } = await client.query(
+      `SELECT type, description, scheduled_at, completed_at, outcome, effectiveness, metadata
+       FROM interventions WHERE case_id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+       ORDER BY COALESCE(scheduled_at, created_at) ASC`,
+      [caseId, tenantId]
+    );
+
+    // Build readable incident text
+    const incidentText = incidents.length > 0
+      ? incidents.map((i: any) =>
+          `- [${new Date(i.incident_at).toLocaleDateString()}] ${i.severity} severity, ${i.category}: ${i.description}`
+        ).join('\n')
+      : '(No incidents recorded)';
+
+    // Build readable intervention text
+    const INTERVENTION_LABELS: Record<string, string> = {
+      COUNSELING_SESSION: 'Counseling Session',
+      THERAPY_REFERRAL: 'Therapy Referral',
+      ADVISORY_MEETING: 'Advisory / Advice Given',
+      PARENT_MEETING: 'Parent / Guardian Meeting',
+      PARENT_CALL: 'Parent / Guardian Call',
+      DISCIPLINARY_ACTION: 'Disciplinary Action',
+      PEER_MEDIATION: 'Peer Mediation',
+      ACADEMIC_SUPPORT: 'Academic Support Plan',
+      WELLNESS_CHECK: 'Wellness Check',
+      EXTERNAL_REFERRAL: 'External Agency Referral',
+      OTHER: 'Other',
+    };
+
+    const interventionText = interventions.length > 0
+      ? interventions.map((iv: any) => {
+          const meta = iv.metadata || {};
+          const label = INTERVENTION_LABELS[iv.type] || iv.type;
+          const date = iv.scheduled_at ? new Date(iv.scheduled_at).toLocaleDateString() : 'unspecified date';
+          const handler = meta.handler_name
+            ? `${meta.handler_name}${meta.handled_by_role ? ` (${meta.handled_by_role})` : ''}`
+            : 'Staff';
+          const status = iv.completed_at ? 'completed' : 'pending';
+          const parentNote = meta.parent_notified
+            ? `Parent/guardian${meta.parent_contact_name ? ` (${meta.parent_contact_name})` : ''} was notified via ${meta.parent_contact_method || 'unspecified method'}.`
+            : '';
+          const outcomeNote = iv.outcome ? `Outcome: ${iv.outcome}` : '';
+          const effectivenessNote = iv.effectiveness ? `Effectiveness rated ${iv.effectiveness}/5.` : '';
+          const followUp = meta.follow_up_required
+            ? `Follow-up required${meta.follow_up_date ? ` by ${new Date(meta.follow_up_date).toLocaleDateString()}` : ''}.`
+            : '';
+          const parts = [
+            `- [${date}] ${label} by ${handler} (${status}): ${iv.description}`,
+            parentNote, outcomeNote, effectivenessNote, followUp,
+          ].filter(Boolean);
+          return parts.join(' ');
+        }).join('\n')
+      : '(No interventions recorded)';
 
     // 3. Call LLM (OpenAI Compatible)
     const prompt = `
-      You are an AI assistant. Summarize the following student case history factually.
-      DO NOT recommend actions. DO NOT classify the student. ONLY summarize what happened.
-      
-      Case History:
-      ${historyText}
+You are a school welfare assistant. Write a clear, simple summary of the following student case.
+Use plain, everyday language that a parent or non-specialist can easily understand.
+Structure your response in two short paragraphs:
+  1. "What happened" — briefly describe the incidents or concerns raised.
+  2. "How it was handled" — briefly describe the interventions taken by school staff.
+Do NOT include personal judgements, diagnoses, or recommendations. Only summarize the facts.
+
+--- INCIDENT HISTORY ---
+${incidentText}
+
+--- INTERVENTIONS / ACTIONS TAKEN ---
+${interventionText}
     `;
 
     let endpointUrl = aiSettings.apiUrl;

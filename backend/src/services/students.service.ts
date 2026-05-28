@@ -122,7 +122,7 @@ export async function getStudentById(tenantId: string, idOrUuid: string): Promis
     for (const s of allWithId) {
       try {
         const decrypted = decryptField(s.national_id);
-        if (decrypted === normalizedId) {
+        if (decrypted.toLowerCase() === normalizedId.toLowerCase()) {
           return {
             student_id: s.student_id,
             full_name: s.full_name,

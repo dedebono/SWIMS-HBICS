@@ -140,7 +140,7 @@ export default function NewIncidentPage() {
     setIsValidating(true);
     try {
       // 1. Verify student exists (resolves UUID or National ID)
-      const studentRes = await apiClient<any>(`/students/${idOrUuid}`);
+      const studentRes = await apiClient<any>(`/students/${encodeURIComponent(idOrUuid)}`);
       if (!studentRes.success || !studentRes.data) {
         toast.error('Student ID not found. Please check and try again.');
         setIsValidating(false);

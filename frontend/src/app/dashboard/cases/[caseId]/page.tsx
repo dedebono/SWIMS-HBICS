@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Bot, Sparkles, User } from 'lucide-react';
+import { Bot, Sparkles, User, AlertCircle, HeartHandshake } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -302,16 +302,21 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
 
             <Card className="glass border-border/50">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-500" />
-                  AI Summary
-                </CardTitle>
+                <div>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-500" />
+                    AI Summary
+                  </CardTitle>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Covers incidents &amp; interventions
+                  </p>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleGenerateSummary}
                   disabled={isGeneratingSummary}
-                  className="h-8 gap-1"
+                  className="h-8 gap-1 shrink-0"
                 >
                   <Bot className="w-3.5 h-3.5" />
                   {isGeneratingSummary ? 'Analyzing...' : 'Generate Insight'}
@@ -319,17 +324,14 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
               </CardHeader>
               <CardContent>
                 {caseData.summary ? (
-                  <div className="text-sm text-zinc-700 dark:text-zinc-300 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 rounded-md border border-indigo-100 dark:border-indigo-900/50">
-                    <p className="whitespace-pre-wrap">{caseData.summary}</p>
-                    <div className="mt-4 text-[10px] text-muted-foreground flex items-center gap-1">
-                      <Bot className="w-3 h-3" />
-                      AI-generated summary. Please review for accuracy.
-                    </div>
-                  </div>
+                  <AiSummaryDisplay summary={caseData.summary} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No summary available. Click "Generate Insight" to analyze case incidents and create an automated summary.
-                  </p>
+                  <div className="flex flex-col items-center py-8 gap-2 rounded-lg border border-dashed border-border/50">
+                    <Bot className="w-7 h-7 text-indigo-300" />
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">
+                      Click <span className="font-medium text-indigo-500">"Generate Insight"</span> to analyse incidents and intervention logs and produce a plain-language summary.
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -502,6 +504,47 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+function AiSummaryDisplay({ summary }: { summary: string }) {
+  const cleanSummary = summary.replace('[AI-GENERATED SUMMARY]', '').trim();
+  const paragraphs = cleanSummary.split('\n\n').filter((p) => p.trim() !== '');
+  
+  let whatHappened = cleanSummary;
+  let howHandled = '';
+
+  if (paragraphs.length >= 2) {
+    whatHappened = paragraphs[0];
+    howHandled = paragraphs.slice(1).join('\n\n');
+  }
+
+  // Basic cleanup of list numbers/headers if LLM included them
+  const cleanText = (text: string) => text.replace(/^(1\.|2\.|What happened:?|How it was handled:?|-|--)/i, '').trim();
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-md border border-rose-100 dark:border-rose-900/50">
+        <h4 className="text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-center gap-1.5 mb-1.5">
+          <AlertCircle className="w-3.5 h-3.5" /> What Happened
+        </h4>
+        <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">{cleanText(whatHappened)}</p>
+      </div>
+      
+      {howHandled && (
+        <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-md border border-emerald-100 dark:border-emerald-900/50">
+          <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-1.5">
+            <HeartHandshake className="w-3.5 h-3.5" /> How It Was Handled
+          </h4>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">{cleanText(howHandled)}</p>
+        </div>
+      )}
+      
+      <div className="pt-1 text-[10px] text-muted-foreground flex items-center gap-1">
+        <Bot className="w-3 h-3" />
+        AI-generated summary based on incidents and interventions. Please review for accuracy.
+      </div>
     </div>
   );
 }

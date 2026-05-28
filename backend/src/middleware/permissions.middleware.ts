@@ -63,7 +63,12 @@ async function enforceAbac(
 
   switch (role) {
     case 'TEACHER': {
-      // Teachers may only access records for students in their assigned class
+      // Teachers may generally only access records for students in their assigned class,
+      // EXCEPT when reporting an incident (creating cases/incidents) or looking up basic student info.
+      if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
+      if (resource === 'students' && _action === 'read' && !req.path.includes('/timeline')) break;
+      if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break; // allow listing cases (service filters by teacher_id)
+
       const studentId = extractStudentId(req);
       if (studentId) {
         const allowed = await isStudentInTeacherClass(tenantId, userId, studentId);
@@ -75,7 +80,11 @@ async function enforceAbac(
     }
 
     case 'SUBSTITUTE_TEACHER': {
-      // Same as teacher but only during active substitution period
+      // Same exceptions as teacher
+      if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
+      if (resource === 'students' && _action === 'read' && !req.path.includes('/timeline')) break;
+      if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break;
+
       const studentId = extractStudentId(req);
       if (studentId) {
         const allowed = await isStudentInSubstituteClass(tenantId, userId, studentId);
