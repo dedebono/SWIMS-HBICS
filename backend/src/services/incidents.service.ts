@@ -10,6 +10,7 @@ import type { Request } from 'express';
 export interface CreateIncidentInput {
   case_id: string;
   student_id: string;
+  involved_teacher?: string | null;
   category: string;
   sub_category?: string;
   severity: string;
@@ -22,6 +23,7 @@ export interface CreateIncidentInput {
 }
 
 export interface UpdateIncidentInput {
+  involved_teacher?: string | null;
   category?: string;
   sub_category?: string;
   severity?: string;
@@ -59,8 +61,8 @@ export async function createIncident(
     const { rows } = await client.query<IncidentRow>(
       `INSERT INTO incidents (
         tenant_id, case_id, student_id, category, sub_category, severity,
-        description, location, incident_at, reported_by, witnesses, immediate_actions, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        description, location, incident_at, reported_by, witnesses, immediate_actions, involved_teacher, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
       [
         tenantId,
@@ -75,6 +77,7 @@ export async function createIncident(
         reportedBy,
         JSON.stringify(input.witnesses ?? []),
         input.immediate_actions ?? null,
+        input.involved_teacher ?? null,
         JSON.stringify(input.metadata ?? {}),
       ],
     );
@@ -142,11 +145,12 @@ export async function listIncidents(
     values,
   );
 
-  const dataResult = await queryWithTenant<IncidentRow & { reporter_name: string }>(
+  const dataResult = await queryWithTenant<IncidentRow & { reporter_name: string; involved_teacher_name: string | null }>(
     tenantId,
-    `SELECT i.*, u.full_name AS reporter_name
+    `SELECT i.*, u.full_name AS reporter_name, ut.full_name AS involved_teacher_name
      FROM incidents i
      LEFT JOIN users u ON u.user_id = i.reported_by
+     LEFT JOIN users ut ON ut.user_id = i.involved_teacher
      WHERE i.tenant_id = $1 AND ${whereClause}
      ORDER BY i.incident_at DESC
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
@@ -264,6 +268,10 @@ export async function updateIncident(
   if (input.immediate_actions !== undefined) {
     setClauses.push(`immediate_actions = $${paramIdx++}`);
     values.push(input.immediate_actions);
+  }
+  if (input.involved_teacher !== undefined) {
+    setClauses.push(`involved_teacher = $${paramIdx++}`);
+    values.push(input.involved_teacher ?? null);
   }
   if (input.language_flag !== undefined) {
     setClauses.push(`language_flag = $${paramIdx++}`);

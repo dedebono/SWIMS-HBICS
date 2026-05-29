@@ -29,10 +29,13 @@ interface IncidentRow {
   incident_at: string;
   immediate_actions: string | null;
   reported_by: string;
+  involved_teacher?: string | null;
+  involved_teacher_name?: string | null;
   metadata: {
     involved_students?: string[];
     evidence?: Record<string, boolean>;
     initial_assessment?: Record<string, boolean>;
+    manual_involved_teacher?: string;
   };
 }
 
@@ -108,7 +111,8 @@ export default function IncidentsPage() {
       !search ||
       inc.category.toLowerCase().includes(search.toLowerCase()) ||
       inc.description.toLowerCase().includes(search.toLowerCase()) ||
-      (studentNames[inc.student_id] ?? '').toLowerCase().includes(search.toLowerCase());
+      (studentNames[inc.student_id] ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (inc.involved_teacher_name ?? inc.involved_teacher ?? '').toLowerCase().includes(search.toLowerCase());
     return matchesSeverity && matchesSearch;
   });
 
@@ -207,9 +211,14 @@ export default function IncidentsPage() {
                       </div>
                     </div>
 
-                    {/* Row 2: Student name */}
+                    {/* Row 2: Student name + involved teacher */}
                     {studentName && (
                       <p className="text-xs text-primary font-medium">👤 {studentName}</p>
+                    )}
+                    {(inc.metadata?.manual_involved_teacher || inc.involved_teacher_name || inc.involved_teacher) && (
+                      <p className="text-xs text-muted-foreground/90">
+                        👩‍🏫 Involved teacher: {inc.metadata?.manual_involved_teacher ?? inc.involved_teacher_name ?? inc.involved_teacher}
+                      </p>
                     )}
 
                     {/* Row 3: Description */}

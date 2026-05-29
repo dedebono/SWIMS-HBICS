@@ -163,6 +163,7 @@ export interface IncidentRow {
   location: string | null;
   incident_at: string;
   reported_by: string;
+  involved_teacher: string | null;
   witnesses: Array<{ user_id?: string; name: string; statement?: string }>;
   immediate_actions: string | null;
   language_flag: boolean;

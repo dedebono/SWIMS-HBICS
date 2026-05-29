@@ -32,6 +32,7 @@ interface FormData {
   incident_at: string;
   immediate_actions: string;
   involved_students_raw: string;
+  involved_teacher: string;
   evidence_cctv: boolean;
   evidence_photo: boolean;
   evidence_video: boolean;
@@ -74,6 +75,7 @@ export default function NewIncidentPage() {
     incident_at: new Date().toISOString().slice(0, 16),
     immediate_actions: '',
     involved_students_raw: '',
+    involved_teacher: '',
     evidence_cctv: false,
     evidence_photo: false,
     evidence_video: false,
@@ -221,6 +223,7 @@ export default function NewIncidentPage() {
         immediate_actions: formData.immediate_actions || undefined,
         metadata: {
           involved_students: formData.involved_students_raw.split(',').map(s => s.trim()).filter(Boolean),
+          manual_involved_teacher: formData.involved_teacher || undefined,
           evidence: {
             cctv: formData.evidence_cctv,
             photo: formData.evidence_photo,
@@ -571,6 +574,17 @@ export default function NewIncidentPage() {
                   value={formData.involved_students_raw}
                   onChange={(e) => updateField('involved_students_raw', e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="involved-teacher">Involved teacher (manual)</Label>
+                <Input
+                  id="involved-teacher"
+                  placeholder="Name of involved teacher (manual entry)"
+                  value={formData.involved_teacher}
+                  onChange={(e) => updateField('involved_teacher', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">This is a free-text field and is not linked to the user database.</p>
               </div>
 
               {/* Location */}

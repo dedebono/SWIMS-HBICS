@@ -23,7 +23,7 @@ const createCommunicationSchema = z.object({
 
 router.post(
   '/cases/:caseId/communications',
-  checkPermission('cases', 'update'), // Using cases update since it's part of the case
+  checkPermission('cases', 'create'), // Creating a new communication record
   asyncHandler(async (req, res) => {
     const body = createCommunicationSchema.parse(req.body);
     const created = await communicationsService.createCommunication(

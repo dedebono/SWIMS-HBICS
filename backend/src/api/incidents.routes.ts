@@ -22,6 +22,7 @@ const witnessSchema = z.object({
 
 const createIncidentSchema = z.object({
   student_id: z.string().uuid(),
+  involved_teacher: z.string().uuid().optional(),
   category: z.string().min(1),
   sub_category: z.string().optional(),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
@@ -34,6 +35,7 @@ const createIncidentSchema = z.object({
 });
 
 const updateIncidentSchema = z.object({
+  involved_teacher: z.string().uuid().optional(),
   category: z.string().min(1).optional(),
   sub_category: z.string().optional(),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),

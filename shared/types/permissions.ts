@@ -42,7 +42,7 @@ export const PERMISSIONS: PermissionMatrix = {
   TEACHER: {
     cases: cr,
     incidents: cru,
-    interventions: readOnly,
+    interventions: cru,
     media_assets: cru,
     alerts: none,
     reports: readOnly,
@@ -54,7 +54,7 @@ export const PERMISSIONS: PermissionMatrix = {
   SUBSTITUTE_TEACHER: {
     cases: cr,
     incidents: cru,
-    interventions: readOnly,
+    interventions: cru,
     media_assets: cru,
     alerts: none,
     reports: readOnly,

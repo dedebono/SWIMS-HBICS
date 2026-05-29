@@ -68,6 +68,7 @@ interface IncidentItem {
       witness?: boolean;
       none?: boolean;
     };
+    manual_involved_teacher?: string;
     initial_assessment?: {
       is_recurring?: boolean;
       similar_cases?: boolean;
@@ -77,6 +78,8 @@ interface IncidentItem {
   };
   reported_by: string;
   reporter_name?: string;
+  involved_teacher?: string | null;
+  involved_teacher_name?: string | null;
   created_at: string;
 }
 
@@ -414,6 +417,12 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
                         <span className="flex items-center gap-1 text-primary/80 font-medium">
                           <User className="w-3 h-3" />
                           Reported by: {inc.reporter_name}
+                        </span>
+                      )}
+                      {(inc.involved_teacher_name || inc.involved_teacher) && (
+                        <span className="flex items-center gap-1 text-muted-foreground/80 font-medium">
+                          <User className="w-3 h-3" />
+                          Involved teacher: {inc.metadata?.manual_involved_teacher ?? inc.involved_teacher_name ?? inc.involved_teacher}
                         </span>
                       )}
                     </div>
