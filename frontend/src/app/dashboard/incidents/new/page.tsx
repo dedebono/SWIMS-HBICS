@@ -48,6 +48,7 @@ interface FormData {
 interface StudentSearchResult {
   student_id: string;
   full_name: string;
+  display_id?: string;
   metadata: any;
 }
 
@@ -479,7 +480,7 @@ export default function NewIncidentPage() {
               {/* Case Selection */}
               <div className="space-y-2">
                 <Label htmlFor="case-id">Case Assignment *</Label>
-                <Select value={formData.case_id} onValueChange={(v) => updateField('case_id', v)}>
+                <Select value={formData.case_id} onValueChange={(v) => updateField('case_id', v ?? '')}>
                   <SelectTrigger id="case-id">
                     <SelectValue placeholder="Select case assignment" />
                   </SelectTrigger>

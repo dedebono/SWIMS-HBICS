@@ -357,7 +357,7 @@ export default function AdminUsersPage() {
               />
             </div>
             <div className="w-full md:w-48">
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value ?? 'ALL')}>
                 <SelectTrigger>
                   <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                   <SelectValue placeholder="Filter by Role" />

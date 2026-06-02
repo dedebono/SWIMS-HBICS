@@ -48,7 +48,7 @@ export function StudentProfileDialog({
       apiClient(`/students/${studentId}/profile`)
         .then((res) => {
           if (res.success) {
-            setProfile(res.data);
+            setProfile((res.data ?? null) as StudentProfile | null);
           }
         })
         .finally(() => setLoading(false));
