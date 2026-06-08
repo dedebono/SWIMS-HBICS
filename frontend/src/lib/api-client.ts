@@ -123,5 +123,17 @@ export async function apiClient<T>(path: string, options: FetchOptions = {}): Pr
     }
   }
 
+  // Handle non-JSON responses (e.g., plain text errors)
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+    // Return structured error for non-JSON responses
+    return {
+      success: false,
+      data: null,
+      error: text.slice(0, 500) || `HTTP ${res.status}: ${res.statusText}`,
+    } as ApiResponse<T>;
+  }
+
   return res.json() as Promise<ApiResponse<T>>;
 }

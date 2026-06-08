@@ -12,42 +12,61 @@ async function seed(): Promise<void> {
   try {
     await client.query('BEGIN');
 
-    // ── Tenant ────────────────────────────────────────────────────────────
-    const { rows: tenants } = await client.query<{ tenant_id: string }>(`
-      INSERT INTO tenants (name, slug, settings)
-      VALUES ('Springfield International School', 'springfield', '{"language_blocklist_enabled": true}')
-      ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-      RETURNING tenant_id
-    `);
-    const tenantId = tenants[0]!.tenant_id;
-
-    console.log(`  ✓ Tenant: ${tenantId} (springfield)`);
-
-    // ── Users ─────────────────────────────────────────────────────────────
-    const passwordHash = await bcrypt.hash('password123', 12);
-
-    const users = [
-      { full_name: 'Dr. Sarah Chen', email: 'sarah.chen@springfield.edu', role: 'COUNSELOR' },
-      { full_name: 'James Wilson', email: 'james.wilson@springfield.edu', role: 'TEACHER' },
-      { full_name: 'Maria Garcia', email: 'maria.garcia@springfield.edu', role: 'SCHOOL_HEAD' },
-      { full_name: 'Nurse Pat', email: 'pat@springfield.edu', role: 'SCHOOL_NURSE' },
-      { full_name: 'Admin User', email: 'admin@springfield.edu', role: 'IT_ADMIN' },
-      { full_name: 'Board Member', email: 'board@springfield.edu', role: 'BOARD_MEMBER' },
+    // ── Tenants ───────────────────────────────────────────────────────────
+    const tenantsToSeed = [
+      { name: 'Springfield International School', slug: 'springfield', settings: '{"language_blocklist_enabled": true}' },
+      { name: 'Harapan Bangsa International Christian School', slug: 'hbics', settings: '{}' },
     ];
 
-    const userIds: string[] = [];
-    for (const u of users) {
+    const tenantIds: Record<string, string> = {};
+
+    for (const t of tenantsToSeed) {
+      const { rows } = await client.query<{ tenant_id: string }>(`
+        INSERT INTO tenants (name, slug, settings)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name, settings = EXCLUDED.settings
+        RETURNING tenant_id
+      `, [t.name, t.slug, t.settings]);
+      tenantIds[t.slug] = rows[0]!.tenant_id;
+      console.log(`  ✓ Tenant: ${rows[0]!.tenant_id} (${t.slug})`);
+    }
+
+    const springfieldTenantId = tenantIds.springfield;
+    const hbicsTenantId = tenantIds.hbics;
+
+    // ── Users ─────────────────────────────────────────────────────────────
+    const defaultPasswordHash = await bcrypt.hash('password123', 12);
+    const hbicsAdminPasswordHash = await bcrypt.hash('HarapanBangsa99G', 12);
+
+    const usersToSeed = [
+      // Springfield Users
+      { tenant_id: springfieldTenantId, full_name: 'Dr. Sarah Chen', email: 'sarah.chen@springfield.edu', password_hash: defaultPasswordHash, role: 'COUNSELOR' },
+      { tenant_id: springfieldTenantId, full_name: 'James Wilson', email: 'james.wilson@springfield.edu', password_hash: defaultPasswordHash, role: 'TEACHER' },
+      { tenant_id: springfieldTenantId, full_name: 'Maria Garcia', email: 'maria.garcia@springfield.edu', password_hash: defaultPasswordHash, role: 'SCHOOL_HEAD' },
+      { tenant_id: springfieldTenantId, full_name: 'Nurse Pat', email: 'pat@springfield.edu', password_hash: defaultPasswordHash, role: 'SCHOOL_NURSE' },
+      { tenant_id: springfieldTenantId, full_name: 'Admin User', email: 'admin@springfield.edu', password_hash: defaultPasswordHash, role: 'IT_ADMIN' },
+      { tenant_id: springfieldTenantId, full_name: 'Board Member', email: 'board@springfield.edu', password_hash: defaultPasswordHash, role: 'BOARD_MEMBER' },
+      // HBICS Users
+      { tenant_id: hbicsTenantId, full_name: 'HBICS IT Admin', email: 'admin_it@hbics.sch.id', password_hash: hbicsAdminPasswordHash, role: 'IT_ADMIN' },
+    ];
+
+    const seededUserIds: Record<string, string> = {}; // Map email to user_id
+
+    for (const u of usersToSeed) {
       const { rows } = await client.query<{ user_id: string }>(`
         INSERT INTO users (tenant_id, full_name, email, password_hash, role)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (tenant_id, email) DO UPDATE SET full_name = EXCLUDED.full_name
+        ON CONFLICT (tenant_id, email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash, role = EXCLUDED.role
         RETURNING user_id
-      `, [tenantId, u.full_name, u.email, passwordHash, u.role]);
-      userIds.push(rows[0]!.user_id);
+      `, [u.tenant_id, u.full_name, u.email, u.password_hash, u.role]);
+      seededUserIds[u.email] = rows[0]!.user_id;
       console.log(`  ✓ User: ${u.full_name} (${u.role}) — ${rows[0]!.user_id}`);
     }
 
-    const [counselorId, teacherId] = userIds as [string, string, ...string[]];
+    // Assign specific user IDs for further seeding
+    const counselorId = seededUserIds['sarah.chen@springfield.edu'];
+    const teacherId = seededUserIds['james.wilson@springfield.edu'];
+    const tenantId = springfieldTenantId; // Default to springfield for existing student/case seeding
 
     // ── Students ──────────────────────────────────────────────────────────
     const students = [
@@ -125,8 +144,10 @@ async function seed(): Promise<void> {
     await client.query('COMMIT');
     console.log('\n✅ Seed data created successfully.');
     console.log('\n📋 Login credentials:');
-    console.log('   Tenant slug: springfield');
-    console.log('   Any user email with password: password123');
+    console.log('   [Springfield] Tenant slug: springfield');
+    console.log('   [Springfield] Any user email with password: password123');
+    console.log('   [HBICS] Tenant slug: hbics');
+    console.log('   [HBICS] Email: admin_it@hbics.sch.id | Password: HarapanBangsa99G');
 
   } catch (err) {
     await client.query('ROLLBACK');

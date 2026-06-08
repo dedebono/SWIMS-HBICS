@@ -128,7 +128,8 @@ ${interventionText}
       payload = {
         model: aiSettings.model || "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.2
+        temperature: 0.2,
+        stream: false
       };
     }
 
@@ -144,12 +145,29 @@ ${interventionText}
 
     // Read body once as text, then try to parse JSON
     const rawText = await response.text();
+
+    // Handle SSE format (lines starting with "data: ")
+    let cleanedText = rawText;
+    if (rawText.trimStart().startsWith('data: ')) {
+      // SSE format: extract JSON from first "data: " line, ignore "data: [DONE]"
+      const lines = rawText.split('\n').filter(line => line.trim().startsWith('data: '));
+      const jsonLines = lines.filter(line => !line.includes('[DONE]'));
+      if (jsonLines.length > 0) {
+        // Take first valid data line and strip "data: " prefix
+        cleanedText = jsonLines[0].replace(/^data:\s*/, '');
+      }
+    } else {
+      // Non-SSE: trim to last '}' to handle trailing content
+      const lastBrace = rawText.lastIndexOf('}');
+      cleanedText = lastBrace >= 0 ? rawText.slice(0, lastBrace + 1) : rawText;
+    }
+
     let data: unknown;
     try {
-      data = JSON.parse(rawText);
+      data = JSON.parse(cleanedText);
     } catch {
-      console.error(`[AI] Non-JSON response (${response.status}): ${rawText.slice(0, 500)}`);
-      throw new Error(`AI Service returned non-JSON response. Check your API URL (${endpointUrl}). Response: ${rawText.slice(0, 200)}`);
+      console.error(`[AI] Non-JSON response (${response.status}): ${cleanedText.slice(0, 500)}`);
+      throw new Error(`AI Service returned non-JSON response. Check your API URL (${endpointUrl}). Response: ${cleanedText.slice(0, 200)}`);
     }
 
     if (!response.ok) {
