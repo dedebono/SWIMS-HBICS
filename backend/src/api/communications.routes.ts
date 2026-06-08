@@ -13,7 +13,7 @@ router.use(authenticate, setTenantContext);
 
 const createCommunicationSchema = z.object({
   message: z.string().min(1),
-  channel: z.enum(['PHONE', 'EMAIL', 'IN_PERSON', 'APP']).optional(),
+  channel: z.enum(['PHONE', 'EMAIL', 'IN_PERSON', 'APP', 'INTERNAL']).optional(),
   contact_name: z.string().min(1),
   contact_role: z.string().min(1),
   metadata: z.record(z.unknown()).optional(),

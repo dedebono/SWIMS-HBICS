@@ -128,13 +128,21 @@ export async function listCases(
     conditions.push(`c.case_type = 'MEDICAL'`);
   }
   if (params.teacher_id) {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM incidents i 
-      WHERE i.case_id = c.case_id 
-      AND i.reported_by = $${paramIdx++}
+    const teacherParam = `$${paramIdx++}`;
+    const tenantParam = `$${paramIdx++}`;
+    conditions.push(`(EXISTS (
+      SELECT 1 FROM incidents i
+      WHERE i.case_id = c.case_id
+      AND i.reported_by = ${teacherParam}
       AND i.deleted_at IS NULL
-    )`);
+    ) OR EXISTS (
+      SELECT 1 FROM case_shares cs
+      WHERE cs.case_id = c.case_id
+      AND cs.shared_with = ${teacherParam}
+      AND cs.tenant_id = ${tenantParam}
+    ))`);
     values.push(params.teacher_id);
+    values.push(tenantId);
   }
 
   const whereClause = conditions.join(' AND ');

@@ -3,6 +3,38 @@ import { PERMISSIONS, type Resource, type Action } from '@swims/shared';
 import type { Role } from '@swims/shared';
 import { ForbiddenError } from '../utils/errors.js';
 import { pool } from '../db/pool.js';
+import { hasSharedAccess } from '../services/case-shares.service.js';
+
+// ─── ABAC result cache (TTL: 60s) ───────────────────────────────────────────────
+// Prevents pool exhaustion when many teachers access cases simultaneously.
+// Short TTL is acceptable since class assignments don't change every minute.
+interface CacheEntry { value: boolean; expiresAt: number; }
+const abacCache = new Map<string, CacheEntry>();
+const ABAC_CACHE_TTL_MS = 60_000;
+
+function getCached(key: string): boolean | undefined {
+  const entry = abacCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) {
+    abacCache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function setCached(key: string, value: boolean): void {
+  // Prune stale entries lazily (every 50 writes)
+  if (abacCache.size > 1000) {
+    const now = Date.now();
+    for (const [k, v] of abacCache) {
+      if (now > v.expiresAt) abacCache.delete(k);
+    }
+  }
+  abacCache.set(key, { value, expiresAt: Date.now() + ABAC_CACHE_TTL_MS });
+}
+
+const cacheKey = (tenantId: string, teacherId: string, studentId: string) =>
+  `${tenantId}:${teacherId}:${studentId}`;
 
 /**
  * Middleware factory: checkPermission(resource, action)
@@ -68,6 +100,12 @@ async function enforceAbac(
       if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
       if (resource === 'students' && _action === 'read' && !req.path.includes('/timeline')) break;
       if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break; // allow listing cases (service filters by teacher_id)
+
+      // Allow access if teacher has been shared this case
+      if (resource === 'cases' && _action === 'read' && req.params['caseId']) {
+        const allowed = await hasSharedAccess(tenantId, String(req.params['caseId']), userId);
+        if (allowed) break; // teacher has shared access — allow
+      }
 
       const studentId = extractStudentId(req);
       if (studentId) {
@@ -158,6 +196,10 @@ async function isStudentInTeacherClass(
   teacherUserId: string,
   studentId: string,
 ): Promise<boolean> {
+  const key = `teacher:${cacheKey(tenantId, teacherUserId, studentId)}`;
+  const cached = getCached(key);
+  if (cached !== undefined) return cached;
+
   const client = await pool.connect();
   try {
     await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
@@ -174,7 +216,9 @@ async function isStudentInTeacherClass(
          AND seh.graduated_at IS NULL`,
       [tenantId, teacherUserId, studentId],
     );
-    return Number(rows[0]?.count ?? 0) > 0;
+    const allowed = Number(rows[0]?.count ?? 0) > 0;
+    setCached(key, allowed);
+    return allowed;
   } finally {
     client.release();
   }
@@ -188,6 +232,10 @@ async function isStudentInSubstituteClass(
   substituteUserId: string,
   studentId: string,
 ): Promise<boolean> {
+  const key = `sub:${cacheKey(tenantId, substituteUserId, studentId)}`;
+  const cached = getCached(key);
+  if (cached !== undefined) return cached;
+
   const client = await pool.connect();
   try {
     await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
@@ -204,7 +252,9 @@ async function isStudentInSubstituteClass(
          AND seh.graduated_at IS NULL`,
       [tenantId, substituteUserId, studentId],
     );
-    return Number(rows[0]?.count ?? 0) > 0;
+    const allowed = Number(rows[0]?.count ?? 0) > 0;
+    setCached(key, allowed);
+    return allowed;
   } finally {
     client.release();
   }

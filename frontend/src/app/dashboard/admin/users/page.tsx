@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, UploadCloud, RefreshCw, Search, Filter, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Users, UploadCloud, RefreshCw, Search, Filter, ArrowUpDown, ChevronUp, ChevronDown, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 import Papa from "papaparse";
@@ -31,6 +32,7 @@ export default function AdminUsersPage() {
     email: "",
     role: "STUDENT" as Role,
     national_id: "",
+    password: "",
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +47,17 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>("ALL");
   const [sortField, setSortField] = useState<'full_name' | 'role'>('full_name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Edit dialog state
+  const [editUser, setEditUser] = useState<UserData | null>(null);
+  const [editForm, setEditForm] = useState({
+    full_name: "",
+    email: "",
+    role: "" as string,
+    is_active: true,
+    password: "",
+  });
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
   const fetchUsers = async (showToast = false) => {
     setIsLoadingUsers(true);
@@ -103,14 +116,22 @@ export default function AdminUsersPage() {
 
     setIsSubmitting(true);
     try {
+      const body: any = {
+        full_name: formData.full_name,
+        email: formData.email,
+        role: formData.role,
+        national_id: formData.national_id || undefined,
+      };
+      if (formData.password) body.password = formData.password;
+
       const res = await apiClient("/admin/users", {
         method: "POST",
-        body: formData,
+        body,
       });
 
       if (res.success) {
         toast.success(`User ${formData.full_name} has been added successfully!`);
-        setFormData({ full_name: "", email: "", role: "STUDENT", national_id: "" });
+        setFormData({ full_name: "", email: "", role: "STUDENT", national_id: "", password: "" });
         fetchUsers();
       } else {
         toast.error(res.error || "Failed to add user.");
@@ -119,6 +140,62 @@ export default function AdminUsersPage() {
       toast.error("An unexpected error occurred.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const openEditDialog = (user: UserData) => {
+    setEditUser(user);
+    setEditForm({
+      full_name: user.full_name,
+      email: user.email || "",
+      role: user.role,
+      is_active: user.is_active,
+      password: "",
+    });
+    setIsEditSubmitting(false);
+  };
+
+  const closeEditDialog = () => {
+    setEditUser(null);
+    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "" });
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editUser) return;
+    if (!editForm.full_name) {
+      toast.error("Full name is required.");
+      return;
+    }
+
+    setIsEditSubmitting(true);
+    try {
+      const body: Record<string, unknown> = {
+        full_name: editForm.full_name,
+      };
+      // Only send email for non-STUDENT types
+      if (editUser.type !== 'STUDENT') {
+        if (editForm.email) body.email = editForm.email;
+        body.role = editForm.role;
+        body.is_active = editForm.is_active;
+      }
+      if (editForm.password) body.password = editForm.password;
+
+      const res = await apiClient(`/admin/users/${editUser.id}`, {
+        method: "PUT",
+        body,
+      });
+
+      if (res.success) {
+        toast.success(`User ${editForm.full_name} updated successfully.`);
+        closeEditDialog();
+        fetchUsers();
+      } else {
+        toast.error(res.error || "Failed to update user.");
+      }
+    } catch (err) {
+      toast.error("An unexpected error occurred.");
+    } finally {
+      setIsEditSubmitting(false);
     }
   };
 
@@ -254,10 +331,19 @@ export default function AdminUsersPage() {
               </div>
               <div className="space-y-2">
                 <Label>National ID / Student ID (Optional)</Label>
-                <Input 
-                  placeholder="e.g. 123456789" 
+                <Input
+                  placeholder="e.g. 123456789"
                   value={formData.national_id}
                   onChange={e => setFormData({ ...formData, national_id: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Password (Optional — defaults to Welcome123!)</Label>
+                <Input
+                  type="password"
+                  placeholder="Leave blank for default password"
+                  value={formData.password}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
             </CardContent>
@@ -415,6 +501,7 @@ export default function AdminUsersPage() {
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 rounded-tr-md text-right">Joined</th>
+                    <th className="px-4 py-3 rounded-tr-md text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -452,6 +539,16 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-4 text-right text-muted-foreground tabular-nums text-[11px]">
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
+                      <td className="px-4 py-4 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditDialog(user)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -460,6 +557,88 @@ export default function AdminUsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* EDIT USER DIALOG */}
+      <Dialog open={!!editUser} onOpenChange={(open) => !open && closeEditDialog()}>
+        <DialogContent className="overflow-y-auto" style={{ width: '384px', maxWidth: '384px', aspectRatio: '1 / 1' }}>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update details for {editUser?.full_name}. Leave password blank to keep current.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Full Name *</Label>
+              <Input
+                value={editForm.full_name}
+                onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                placeholder="Full name"
+              />
+            </div>
+            {editUser?.type !== 'STUDENT' ? (
+              <>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={editForm.email}
+                    onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="email@example.edu"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={editForm.role} onValueChange={v => setEditForm({ ...editForm, role: v ?? '' })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TEACHER">Teacher</SelectItem>
+                      <SelectItem value="COUNSELOR">Counselor</SelectItem>
+                      <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
+                      <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
+                      <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_active"
+                    checked={editForm.is_active}
+                    onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="is_active" className="text-sm font-normal cursor-pointer">Active account</Label>
+                </div>
+                <div className="space-y-2">
+                  <Label>New Password (optional)</Label>
+                  <Input
+                    type="password"
+                    value={editForm.password}
+                    onChange={e => setEditForm({ ...editForm, password: e.target.value })}
+                    placeholder="Leave blank to keep current password"
+                  />
+                  <p className="text-xs text-muted-foreground">Min 8 characters</p>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Student profile editing is managed separately in the student directory.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSubmit} disabled={isEditSubmitting}>
+              {isEditSubmitting ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

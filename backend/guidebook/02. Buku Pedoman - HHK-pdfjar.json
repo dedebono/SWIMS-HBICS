@@ -1,0 +1,64 @@
+{
+  "PedomanDisiplinSekolah": {
+    "Sekolah": "KB & TK Happy Holy Kids, SDK–SMPK–SMAK Harapan Bangsa Balikpapan",
+    "LatarBelakang": "Sekolah membentuk karakter, moral, dan tanggung jawab. Pelanggaran tata tertib mengganggu keamanan dan kenyamanan.",
+    "DasarHukum": [
+      "UU Sistem Pendidikan Nasional 2003",
+      "UU Perlindungan Anak 2014",
+      "UU Sistem Peradilan Pidana Anak 2012",
+      "Permendikdasmen No. 6 Tahun 2026",
+      "Kebijakan internal sekolah"
+    ],
+    "Istilah": {
+      "DisiplinSiswa": "Kepatuhan terhadap aturan & nilai sekolah",
+      "PelanggaranSiswa": "Tindakan melanggar tata tertib, merugikan orang lain, atau melanggar norma/hukum",
+      "Kategori": ["Ringan", "Sedang", "Berat", "Sangat Berat"],
+      "Konsekuensi": "Pembinaan, konseling, restitusi, sanksi administratif"
+    },
+    "Tujuan": [
+      "Menjamin konsistensi penegakan aturan",
+      "Menciptakan lingkungan aman dan tertib",
+      "Membentuk karakter dan tanggung jawab siswa",
+      "Menangani pelanggaran secara adil",
+      "Melindungi korban dan membina pelaku",
+      "Memberikan panduan operasional bagi guru dan staf"
+    ],
+    "RuangLingkup": {
+      "Subjek": "Siswa, guru, staf, pimpinan",
+      "Aktivitas": "Kelas, kegiatan sekolah, ekstrakurikuler, interaksi digital",
+      "JenisPelanggaran": [
+        "Kedisiplinan",
+        "Etika",
+        "Keamanan",
+        "Kekerasan",
+        "Kejujuran akademik",
+        "Penggunaan fasilitas & teknologi"
+      ],
+      "Penanganan": [
+        "Guru/Wali kelas",
+        "Tim disiplin",
+        "Konselor",
+        "Orang tua",
+        "Pihak eksternal bila perlu"
+      ]
+    },
+    "KategoriPelanggaran": {
+      "Ringan": {
+        "Contoh": ["Berbicara keras saat belajar", "Tidak merapikan alat"],
+        "Penanganan": ["Teguran lisan", "Pembinaan sederhana", "Pemulihan langsung"]
+      },
+      "Sedang": {
+        "Contoh": ["Ejekan", "Merusak fasilitas kecil", "Menolak arahan guru"],
+        "Penanganan": ["Teguran tegas", "Komunikasi dengan orang tua", "Surat peringatan I"]
+      },
+      "Berat": {
+        "Contoh": ["Kekerasan fisik", "Intimidasi", "Perusakan besar"],
+        "Penanganan": ["Pembinaan intensif", "Pengawasan khusus", "Surat peringatan II", "Pertemuan resmi dengan orang tua"]
+      },
+      "SangatBerat": {
+        "Contoh": ["Kekerasan serius", "Tindakan kriminal", "Pelecehan", "Penyalahgunaan zat"],
+        "Penanganan": ["Dihentikan segera", "Melibatkan pimpinan sekolah", "Orang tua", "Aparat hukum bila perlu"]
+      }
+    }
+  }
+}

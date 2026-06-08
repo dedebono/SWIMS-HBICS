@@ -1,4 +1,5 @@
 const API_BASE = '/api';
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 interface FetchOptions {
   method?: string;
@@ -23,11 +24,10 @@ function getAccessToken(): string | null {
   return localStorage.getItem('swims_access_token');
 }
 
-export function setTokens(accessToken: string, refreshToken: string): void {
+export function setTokens(accessToken: string, refreshToken?: string): void {
   localStorage.setItem('swims_access_token', accessToken);
-  localStorage.setItem('swims_refresh_token', refreshToken);
-  if (typeof document !== 'undefined') {
-    document.cookie = `token=${accessToken}; path=/; max-age=86400; SameSite=Lax`;
+  if (refreshToken) {
+    localStorage.setItem('swims_refresh_token', refreshToken); // Deprecated but kept for compatibility
   }
 }
 
@@ -35,9 +35,6 @@ export function clearTokens(): void {
   localStorage.removeItem('swims_access_token');
   localStorage.removeItem('swims_refresh_token');
   localStorage.removeItem('swims_user');
-  if (typeof document !== 'undefined') {
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  }
 }
 
 export function getStoredUser(): { user_id: string; full_name: string; email: string; role: string; tenant_id: string } | null {
@@ -56,19 +53,17 @@ export function setStoredUser(user: { user_id: string; full_name: string; email:
 }
 
 async function refreshTokens(): Promise<boolean> {
-  const refreshToken = localStorage.getItem('swims_refresh_token');
-  if (!refreshToken) return false;
-
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      // Send credentials (httpOnly cookie) to allow backend to refresh
+      credentials: 'include',
     });
 
     if (!res.ok) return false;
 
-    const data = await res.json() as ApiResponse<{ access_token: string; refresh_token: string }>;
+    const data = await res.json() as ApiResponse<{ access_token: string; refresh_token?: string }>;
     if (data.success && data.data) {
       setTokens(data.data.access_token, data.data.refresh_token);
       return true;
@@ -92,14 +87,17 @@ export async function apiClient<T>(path: string, options: FetchOptions = {}): Pr
   }
 
   const url = `${API_BASE}${path}`;
-  console.log(`[apiClient] fetching: ${url}`);
-  
+  if (IS_DEV) {
+    console.log(`[apiClient] fetching: ${url}`);
+  }
+
   let res;
   try {
     res = await fetch(url, {
       method: options.method ?? 'GET',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: 'include', // Ensure cookies are sent
     });
   } catch (error) {
     console.error(`[apiClient] Fetch failed completely for ${url}:`, error);

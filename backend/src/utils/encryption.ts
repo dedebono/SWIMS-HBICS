@@ -56,3 +56,15 @@ export function decryptField(encryptedValue: string): string {
 export function redactField(_value: string): string {
   return '***REDACTED***';
 }
+
+/**
+ * Deterministic hash of a national_id for duplicate checking.
+ * Uses SHA-256 on the plaintext + a pepper prefix from ENCRYPTION_KEY.
+ * This is one-way and NOT a decryption risk — it's only used for fast lookups.
+ */
+export function hashNationalId(nationalId: string): string {
+  const pepper = env.ENCRYPTION_KEY.slice(0, 32);
+  const hmac = crypto.createHmac('sha256', pepper);
+  hmac.update(nationalId.normalize('NFKC').toLowerCase().replace(/\s+/g, ''));
+  return hmac.digest('hex');
+}

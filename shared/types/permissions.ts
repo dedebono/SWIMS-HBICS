@@ -21,7 +21,8 @@ export type Resource =
   | 'consents'
   | 'audit_logs'
   | 'positive_observations'
-  | 'students';
+  | 'students'
+  | 'admin';
 
 export type Action = 'create' | 'read' | 'update' | 'delete';
 
@@ -50,6 +51,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: cru,
     students: readOnly,
+    admin: none,
   },
   SUBSTITUTE_TEACHER: {
     cases: cr,
@@ -62,6 +64,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: cru,
     students: readOnly,
+    admin: none,
   },
   HOMEROOM_TEACHER: {
     cases: cr,
@@ -74,6 +77,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: cru,
     students: readUpdate,
+    admin: none,
   },
   COUNSELOR: {
     cases: crud,
@@ -86,6 +90,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: readOnly,
     positive_observations: crud,
     students: readUpdate,
+    admin: none,
   },
   SCHOOL_NURSE: {
     cases: readOnly,        // medical-category only (enforced by ABAC)
@@ -98,6 +103,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: readOnly,
     students: readOnly,
+    admin: none,
   },
   SCHOOL_HEAD: {
     cases: { create: true, read: true, update: true, delete: false }, // cannot delete
@@ -110,6 +116,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: readOnly,
     positive_observations: readOnly,
     students: readOnly,
+    admin: none,
   },
   BOARD_MEMBER: {
     cases: readOnly,        // anonymized only (enforced by ABAC)
@@ -122,6 +129,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: readOnly,
     students: none,         // no PII access
+    admin: none,
   },
   CASE_REVIEWER: {
     cases: readOnly,        // assigned cases only (enforced by ABAC)
@@ -134,6 +142,7 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: readOnly,
     students: readOnly,
+    admin: none,
   },
   IT_ADMIN: {
     cases: readOnly,        // no descriptions (enforced by ABAC — data minimization)
@@ -146,5 +155,6 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: readOnly,
     positive_observations: readOnly,
     students: crud,
+    admin: crud,
   },
 };

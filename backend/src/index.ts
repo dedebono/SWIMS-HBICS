@@ -18,6 +18,8 @@ import alertsRoutes from './api/alerts.routes.js';
 import interventionsRoutes from './api/interventions.routes.js';
 import consentsRoutes from './api/consents.routes.js';
 import communicationsRoutes from './api/communications.routes.js';
+import caseSharesRoutes, { teacherRouter } from './api/case-shares.routes.js';
+import guidebookRoutes from './api/guidebook.routes.js';
 import counselorRoutes from './api/counselor.routes.js';
 import adminRoutes from './api/admin.routes.js';
 import analyticsRoutes from './api/analytics.routes.js';
@@ -32,7 +34,7 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({
-  origin: [env.FRONTEND_URL, 'https://swims.ytcb.org', 'http://swims.ytcb.org'],
+  origin: env.ALLOWED_ORIGINS.split(',').map(o => o.trim()),
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -55,6 +57,7 @@ app.use('/api/onboarding', onboardingRoutes);
 
 // Protected Routes
 app.use('/api/cases', casesRoutes);
+app.use('/api/cases', caseSharesRoutes);
 app.use('/api/students', studentsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
 app.use('/api/media', mediaRoutes);
@@ -64,6 +67,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/admin', adminSettingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/guidebook', guidebookRoutes);
 
 // Protected Root-Level Routers
 app.use('/api', incidentsRoutes);
@@ -72,6 +76,7 @@ app.use('/api', consentsRoutes);
 app.use('/api', communicationsRoutes);
 app.use('/api', observationsRoutes);
 app.use('/api', insightsRoutes);
+app.use('/api', teacherRouter);
 
 // ─── Error Handler (must be last) ───────────────────────────────────────────
 

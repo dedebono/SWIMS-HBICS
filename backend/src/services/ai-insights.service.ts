@@ -96,11 +96,19 @@ ${incidentText}
 ${interventionText}
     `;
 
-    let endpointUrl = aiSettings.apiUrl;
-    // Fallback if they just provided the base URL
-    if (!endpointUrl.includes('/api/') && !endpointUrl.includes('/v1/') && !endpointUrl.includes('/completions')) {
-      endpointUrl = endpointUrl.replace(/\/$/, '') + '/api/generate';
+    let endpointUrl = (aiSettings.apiUrl || '').trim().replace(/\/+$/, '');
+    console.log(`[AI-DEBUG] raw apiUrl: "${endpointUrl}"`);
+
+    // Only preserve URL as-is if it ends with a known complete endpoint path
+    if (!endpointUrl.endsWith('/v1/chat/completions') &&
+        !endpointUrl.endsWith('/api/generate') &&
+        !endpointUrl.endsWith('/api/chat')) {
+      // Strip incomplete /v1 suffix, then append full path
+      endpointUrl = endpointUrl.replace(/\/v1$/i, '') + '/v1/chat/completions';
     }
+    console.log(`[AI-DEBUG] final endpointUrl: "${endpointUrl}"`);
+
+    const isOllamaFormat = endpointUrl.endsWith('/api/generate') || endpointUrl.endsWith('/api/chat');
 
     let payload;
     if (endpointUrl.endsWith('/api/generate')) {
@@ -116,13 +124,15 @@ ${interventionText}
         stream: false
       };
     } else {
+      // OpenAI-compatible (default)
       payload = {
-        model: aiSettings.model || "default",
+        model: aiSettings.model || "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2
       };
     }
 
+    console.log(`[AI] Calling ${endpointUrl} (model: ${payload.model})`);
     const response = await fetch(endpointUrl, {
       method: 'POST',
       headers: {
@@ -132,18 +142,20 @@ ${interventionText}
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      let errorBody = '';
-      try {
-        const errJson = await response.json();
-        errorBody = errJson.error?.message || errJson.error || JSON.stringify(errJson);
-      } catch (e) {
-        errorBody = await response.text();
-      }
-      throw new Error(`AI Service error: ${response.statusText} - ${errorBody}`);
+    // Read body once as text, then try to parse JSON
+    const rawText = await response.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.error(`[AI] Non-JSON response (${response.status}): ${rawText.slice(0, 500)}`);
+      throw new Error(`AI Service returned non-JSON response. Check your API URL (${endpointUrl}). Response: ${rawText.slice(0, 200)}`);
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      const errorBody = (data as any)?.error?.message || (data as any)?.error || JSON.stringify(data);
+      throw new Error(`AI Service error: ${response.statusText} - ${errorBody}`);
+    }
     let summary = 'No summary generated.';
 
     if (endpointUrl.endsWith('/api/generate')) {

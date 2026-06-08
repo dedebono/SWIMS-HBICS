@@ -33,6 +33,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
+
+  // CORS
+  ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -60,6 +63,7 @@ function loadEnv(): Env {
         PORT: 4000,
         NODE_ENV: 'test',
         FRONTEND_URL: 'http://localhost:3000',
+        ALLOWED_ORIGINS: 'http://localhost:3000',
       } as Env;
     }
     console.error('❌ Invalid environment variables:');

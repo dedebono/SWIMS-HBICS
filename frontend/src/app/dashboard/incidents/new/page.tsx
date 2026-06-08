@@ -17,8 +17,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, UploadCloud, FileIcon, X } from 'lucide-react';
+import { Search, Loader2, UploadCloud, FileIcon, X, Book } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
+import { GuidebookPanel } from '@/components/incidents/guidebook-panel';
 import { toast } from 'sonner';
 
 interface FormData {
@@ -776,6 +777,9 @@ export default function NewIncidentPage() {
           </div>
         </form>
       )}
+
+      {/* Guidebook Panel */}
+      <GuidebookPanel />
     </div>
   );
 }

@@ -203,6 +203,45 @@ async function generateTokenPair(
   return { accessToken, refreshToken };
 }
 
+// ─── Cookie helpers for httpOnly refresh token storage ──────────────────────────
+
+/**
+ * Build Set-Cookie header value for refresh token.
+ * httpOnly: cannot be read by client-side JS (XSS protection)
+ * secure: HTTPS only in production
+ * sameSite: strict to prevent CSRF
+ */
+export function buildRefreshCookie(token: string): string {
+  const secure = env.NODE_ENV === 'production';
+  const maxAge = 7 * 24 * 60 * 60; // 7 days in seconds
+  return [
+    `refresh_token=${encodeURIComponent(token)}`,
+    'Path=/api/auth',
+    `Max-Age=${maxAge}`,
+    'HttpOnly',
+    secure ? 'Secure' : '',
+    'SameSite=Strict',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
+
+/**
+ * Build Set-Cookie header to clear the refresh token (logout).
+ */
+export function buildClearRefreshCookie(): string {
+  return [
+    'refresh_token=',
+    'Path=/api/auth',
+    'Max-Age=0',
+    'HttpOnly',
+    env.NODE_ENV === 'production' ? 'Secure' : '',
+    'SameSite=Strict',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
+
 export default {
   login,
   refreshAccessToken,
@@ -210,6 +249,8 @@ export default {
   hashPassword,
   generateCaptcha,
   verifyCaptcha,
+  buildRefreshCookie,
+  buildClearRefreshCookie,
 };
 
 export const authService = {
@@ -219,4 +260,6 @@ export const authService = {
   hashPassword,
   generateCaptcha,
   verifyCaptcha,
+  buildRefreshCookie,
+  buildClearRefreshCookie,
 };

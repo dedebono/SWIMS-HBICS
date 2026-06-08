@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -15,6 +16,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Users,
+  Share2,
+  X,
+  Check,
+  Loader2,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 interface CaseRow {
   case_id: string;
@@ -28,6 +46,20 @@ interface CaseRow {
   updated_at: string;
   student_name?: string;
   reported_by_name?: string;
+}
+
+interface TeacherItem {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: string;
+}
+
+interface CaseShare {
+  share_id: string;
+  shared_with: string;
+  shared_with_name: string;
+  shared_with_role: string;
 }
 
 const riskColors: Record<string, string> = {
@@ -61,6 +93,14 @@ export default function CasesPage() {
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
+  // Share state
+  const [shareDialogCase, setShareDialogCase] = useState<string | null>(null);
+  const [teachers, setTeachers] = useState<TeacherItem[]>([]);
+  const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
+  const [sharesMap, setSharesMap] = useState<Record<string, CaseShare[]>>({});
+  const [isSharing, setIsSharing] = useState(false);
+  const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
+
   const fetchCases = useCallback(async () => {
     setIsLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: '20' });
@@ -79,6 +119,60 @@ export default function CasesPage() {
     fetchCases();
   }, [fetchCases]);
 
+  useEffect(() => {
+    // Fetch shares for all visible cases
+    if (cases.length === 0) return;
+    const caseIds = cases.map(c => c.case_id);
+    Promise.all(
+      caseIds.map(caseId =>
+        apiClient<CaseShare[]>(`/cases/${caseId}/shares`)
+          .then(res => ({ caseId, shares: res.success && res.data ? res.data : [] }))
+      )
+    ).then(results => {
+      const map: Record<string, CaseShare[]> = {};
+      for (const r of results) map[r.caseId] = r.shares;
+      setSharesMap(map);
+    });
+  }, [cases]);
+
+  const openShareDialog = async (caseId: string) => {
+    setShareDialogCase(caseId);
+    setSelectedTeachers([]);
+    if (teachers.length === 0) {
+      setIsLoadingTeachers(true);
+      const res = await apiClient<{ rows: TeacherItem[]; total: number; page: number; hasMore: boolean }>('/users/teachers');
+      if (res.success && res.data) setTeachers(res.data.rows);
+      setIsLoadingTeachers(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!shareDialogCase || selectedTeachers.length === 0) return;
+    setIsSharing(true);
+    const res = await apiClient(`/cases/${shareDialogCase}/share`, {
+      method: 'POST',
+      body: { shared_with: selectedTeachers, permission: 'CONTRIBUTE' },
+    });
+    if (res.success) {
+      toast.success('Case shared successfully');
+      setShareDialogCase(null);
+      // Refresh shares
+      const sharesRes = await apiClient<CaseShare[]>(`/cases/${shareDialogCase}/shares`);
+      if (sharesRes.success && sharesRes.data) {
+        setSharesMap(prev => ({ ...prev, [shareDialogCase]: sharesRes.data! }));
+      }
+    } else {
+      toast.error(res.error || 'Failed to share case');
+    }
+    setIsSharing(false);
+  };
+
+  const toggleTeacher = (userId: string) => {
+    setSelectedTeachers(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
   const filteredCases = search
     ? cases.filter((c) =>
         c.case_id.toLowerCase().includes(search.toLowerCase()) ||
@@ -93,7 +187,7 @@ export default function CasesPage() {
           <h2 className="text-2xl font-bold tracking-tight">Cases</h2>
           <p className="text-muted-foreground">
             {total} total case{total !== 1 ? 's' : ''} found
-            {user?.role === 'TEACHER' && ' (scoped to your reports)'}
+            {user?.role === 'TEACHER' && ' (scoped to your reports & shared)'}
           </p>
         </div>
         <Link href="/dashboard/incidents/new">
@@ -160,38 +254,57 @@ export default function CasesPage() {
         </Card>
       ) : (
         <div className="grid gap-3">
-          {filteredCases.map((c) => (
-            <Link key={c.case_id} href={`/dashboard/cases/${c.case_id}`}>
-              <Card className="glass border-border/50 cursor-pointer transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+          {filteredCases.map((c) => {
+            const shares = sharesMap[c.case_id] || [];
+            return (
+              <Card key={c.case_id} className="glass border-border/50 transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
                 <CardContent className="flex items-center gap-4 p-4">
-                  <div className="text-2xl">{typeIcons[c.case_type] ?? '📋'}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      Case #{c.case_id.slice(0, 8)}
-                    </p>
-                    {c.student_name && (
-                      <p className="text-xs text-primary font-medium">👤 {c.student_name}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge variant="outline" className={`text-[10px] ${statusColors[c.status] ?? ''}`}>
-                        {c.status}
-                      </Badge>
-                      <p className="text-[10px] text-muted-foreground">
-                        {c.case_type} • Opened {new Date(c.opened_date).toLocaleDateString()}
-                        {c.reported_by_name && ` • Reported by ${c.reported_by_name}`}
+                  <Link href={`/dashboard/cases/${c.case_id}`} className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="text-2xl shrink-0">{typeIcons[c.case_type] ?? '📋'}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        Case #{c.case_id.slice(0, 8)}
                       </p>
+                      {c.student_name && (
+                        <p className="text-xs text-primary font-medium">👤 {c.student_name}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline" className={`text-[10px] ${statusColors[c.status] ?? ''}`}>
+                          {c.status}
+                        </Badge>
+                        <p className="text-[10px] text-muted-foreground">
+                          {c.case_type} • Opened {new Date(c.opened_date).toLocaleDateString()}
+                          {c.reported_by_name && ` • Reported by ${c.reported_by_name}`}
+                        </p>
+                      </div>
+                      {shares.length > 0 && (
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <Users className="w-3 h-3 text-blue-500" />
+                          <span className="text-[10px] text-blue-500 font-medium">
+                            Shared with {shares.map(s => s.shared_with_name).join(', ')}
+                          </span>
+                        </div>
+                      )}
                     </div>
+                  </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="outline" className={`text-xs ${riskColors[c.risk_level] ?? ''}`}>
+                      {c.risk_level}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => openShareDialog(c.case_id)}
+                      title="Share this case"
+                    >
+                      <Share2 className="w-4 h-4 text-muted-foreground" />
+                    </Button>
                   </div>
-                  <Badge variant="outline" className={`text-xs ${riskColors[c.risk_level] ?? ''}`}>
-                    {c.risk_level}
-                  </Badge>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/30">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
                 </CardContent>
               </Card>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -207,6 +320,64 @@ export default function CasesPage() {
           </Button>
         </div>
       )}
+
+      {/* Share Dialog */}
+      <Dialog open={!!shareDialogCase} onOpenChange={(open) => !open && setShareDialogCase(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-primary" />
+              Share Case
+            </DialogTitle>
+            <DialogDescription>
+              Select teachers to share this case with. Shared teachers can view details and log interventions.
+            </DialogDescription>
+          </DialogHeader>
+          {isLoadingTeachers ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : teachers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No teachers found.</p>
+          ) : (
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {teachers.map(t => {
+                const isSelected = selectedTeachers.includes(t.user_id);
+                return (
+                  <button
+                    key={t.user_id}
+                    type="button"
+                    onClick={() => toggleTeacher(t.user_id)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                      isSelected
+                        ? 'bg-primary/10 border border-primary/30'
+                        : 'hover:bg-muted/50 border border-transparent'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                      isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/40'
+                    }`}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{t.full_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{t.email} • {t.role.replace('_', ' ')}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareDialogCase(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleShare} disabled={selectedTeachers.length === 0 || isSharing}>
+              {isSharing ? 'Sharing...' : `Share with ${selectedTeachers.length} teacher${selectedTeachers.length !== 1 ? 's' : ''}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

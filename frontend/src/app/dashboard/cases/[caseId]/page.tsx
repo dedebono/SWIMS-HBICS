@@ -3,13 +3,14 @@
 import { useEffect, useState, use } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
+import { ErrorBoundary } from '@/components/layout/error-boundary';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Bot, Sparkles, User, AlertCircle, HeartHandshake } from 'lucide-react';
+import { Bot, Sparkles, User, AlertCircle, HeartHandshake, Share2, Users, X, Check, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -30,6 +31,7 @@ import {
 import { InterventionsTab } from '@/components/cases/interventions-tab';
 import { MediaTab } from '@/components/cases/media-tab';
 import { CommunicationsTab } from '@/components/cases/communications-tab';
+import { RISK_COLORS, STATUS_COLORS } from '@/lib/constants';
 interface CaseDetail {
   case_id: string;
   student_id: string;
@@ -83,20 +85,15 @@ interface IncidentItem {
   created_at: string;
 }
 
-const riskColors: Record<string, string> = {
-  LOW: 'bg-severity-low/15 text-severity-low border-severity-low/30',
-  MEDIUM: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
-  HIGH: 'bg-severity-high/15 text-severity-high border-severity-high/30',
-  CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30 animate-pulse',
-};
+export default function CaseDetailPageWrapper(props: { params: Promise<{ caseId: string }> }) {
+  return (
+    <ErrorBoundary>
+      <CaseDetailPage {...props} />
+    </ErrorBoundary>
+  );
+}
 
-const statusColors: Record<string, string> = {
-  OPEN: 'bg-primary/15 text-primary border-primary/30',
-  MONITORING: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
-  CLOSED: 'bg-muted text-muted-foreground border-border',
-};
-
-export default function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
+function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const resolvedParams = use(params);
   const { user } = useAuth();
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
@@ -107,6 +104,17 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
   const [justification, setJustification] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
+  // Share state
+  const [shares, setShares] = useState<Array<{ share_id: string; shared_with: string; shared_with_name: string; shared_with_role: string }>>([]);
+  const [teachers, setTeachers] = useState<Array<{ user_id: string; full_name: string; email: string; role: string }>>([]);
+  const [teacherPage, setTeacherPage] = useState(1);
+  const [hasMoreTeachers, setHasMoreTeachers] = useState(false);
+  const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [isLoadingShares, setIsLoadingShares] = useState(false);
+  const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -122,6 +130,9 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
         if (studentRes.success && studentRes.data) {
           setStudentData(studentRes.data);
         }
+        // Fetch shares
+        const sharesRes = await apiClient<Array<{ share_id: string; shared_with: string; shared_with_name: string; shared_with_role: string }>>(`/cases/${resolvedParams.caseId}/shares`);
+        if (sharesRes.success && sharesRes.data) setShares(sharesRes.data);
       }
       if (incRes.success && incRes.data) setIncidents(incRes.data);
       setIsLoading(false);
@@ -168,6 +179,74 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
     }
   };
 
+  // ─── Share handlers ─────────────────────────────────────────────────
+
+  const loadTeachers = async (page: number) => {
+    setIsLoadingTeachers(true);
+    const res = await apiClient<{ rows: Array<{ user_id: string; full_name: string; email: string; role: string }>; total: number; page: number; hasMore: boolean }>(`/users/teachers?page=${page}`);
+    if (res.success && res.data) {
+      setTeachers(prev => page === 1 ? res.data!.rows : [...prev, ...res.data!.rows]);
+      setHasMoreTeachers(res.data.hasMore);
+      setTeacherPage(page);
+    }
+    setIsLoadingTeachers(false);
+  };
+
+  const openShareDialog = async () => {
+    setSelectedTeachers(shares.map(s => s.shared_with));
+    setShareDialogOpen(true);
+    if (teachers.length === 0) {
+      await loadTeachers(1);
+    }
+  };
+
+  const toggleTeacher = (userId: string) => {
+    setSelectedTeachers(prev =>
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleShareSave = async () => {
+    if (!caseData) return;
+    setIsSharing(true);
+    // Remove shares that were deselected
+    const existingIds = shares.map(s => s.shared_with);
+    const toRemove = existingIds.filter(id => !selectedTeachers.includes(id));
+    for (const userId of toRemove) {
+      await apiClient(`/cases/${caseData.case_id}/share/${userId}`, { method: 'DELETE' });
+    }
+    // Add new shares
+    const toAdd = selectedTeachers.filter(id => !existingIds.includes(id));
+    if (toAdd.length > 0) {
+      const res = await apiClient(`/cases/${caseData.case_id}/share`, {
+        method: 'POST',
+        body: { shared_with: toAdd, permission: 'CONTRIBUTE' },
+      });
+      if (!res.success) {
+        toast.error(res.error || 'Failed to share case');
+        setIsSharing(false);
+        return;
+      }
+    }
+    toast.success('Shares updated');
+    setShareDialogOpen(false);
+    // Refresh shares
+    const sharesRes = await apiClient<Array<{ share_id: string; shared_with: string; shared_with_name: string; shared_with_role: string }>>(`/cases/${caseData.case_id}/shares`);
+    if (sharesRes.success && sharesRes.data) setShares(sharesRes.data);
+    setIsSharing(false);
+  };
+
+  const removeShare = async (userId: string) => {
+    if (!caseData) return;
+    const res = await apiClient(`/cases/${caseData.case_id}/share/${userId}`, { method: 'DELETE' });
+    if (res.success) {
+      setShares(prev => prev.filter(s => s.shared_with !== userId));
+      toast.success('Share removed');
+    } else {
+      toast.error('Failed to remove share');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -195,10 +274,10 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
             <h2 className="text-2xl font-bold tracking-tight">
               Case #{caseData.case_id.slice(0, 8)}
             </h2>
-            <Badge variant="outline" className={statusColors[caseData.status] ?? ''}>
+            <Badge variant="outline" className={STATUS_COLORS[caseData.status] ?? ''}>
               {caseData.status}
             </Badge>
-            <Badge variant="outline" className={riskColors[caseData.risk_level] ?? ''}>
+            <Badge variant="outline" className={RISK_COLORS[caseData.risk_level] ?? ''}>
               {caseData.risk_level} Risk
             </Badge>
             {caseData.risk_level_source === 'AUTO' && (
@@ -354,6 +433,47 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
                 )}
               </CardContent>
             </Card>
+
+            {/* Shared With Card */}
+            <Card className="glass border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Share2 className="w-4 h-4 text-blue-500" />
+                    Shared With
+                  </CardTitle>
+                </div>
+                <Button variant="outline" size="sm" className="h-8 gap-1" onClick={openShareDialog}>
+                  <Share2 className="w-3.5 h-3.5" />
+                  Manage
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {shares.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Not shared with any teachers.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {shares.map(s => (
+                      <div key={s.share_id} className="flex items-center justify-between p-2 rounded-md bg-muted/40 border border-border/50">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="text-sm font-medium">{s.shared_with_name}</span>
+                          <span className="text-[10px] text-muted-foreground">{s.shared_with_role?.replace('_', ' ')}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeShare(s.shared_with)}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 
@@ -389,7 +509,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
                         {inc.sub_category && (
                           <span className="text-xs text-muted-foreground">/ {inc.sub_category}</span>
                         )}
-                        <Badge variant="outline" className={`text-[10px] ${riskColors[inc.severity] ?? ''}`}>
+                        <Badge variant="outline" className={`text-[10px] ${RISK_COLORS[inc.severity] ?? ''}`}>
                           {inc.severity}
                         </Badge>
                         {inc.language_flag && (
@@ -504,6 +624,71 @@ export default function CaseDetailPage({ params }: { params: Promise<{ caseId: s
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Share Dialog */}
+      <Dialog open={shareDialogOpen} onOpenChange={(open) => { if (!open) setSelectedTeachers([]); setShareDialogOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-primary" />
+              Manage Shared Teachers
+            </DialogTitle>
+            <DialogDescription>
+              Select teachers who can view this case and log interventions.
+            </DialogDescription>
+          </DialogHeader>
+          {isLoadingTeachers ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : teachers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No teachers found.</p>
+          ) : (
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {teachers.map(t => {
+                const isSelected = selectedTeachers.includes(t.user_id);
+                return (
+                  <button
+                    key={t.user_id}
+                    type="button"
+                    onClick={() => toggleTeacher(t.user_id)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                      isSelected
+                        ? 'bg-primary/10 border border-primary/30'
+                        : 'hover:bg-muted/50 border border-transparent'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                      isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/40'
+                    }`}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{t.full_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{t.email} • {t.role.replace('_', ' ')}</p>
+                    </div>
+                  </button>
+                );
+              })}
+              {hasMoreTeachers && (
+                <button
+                  type="button"
+                  onClick={() => loadTeachers(teacherPage + 1)}
+                  className="w-full text-xs text-primary hover:underline py-2"
+                >
+                  Load more teachers
+                </button>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleShareSave} disabled={isSharing}>
+              {isSharing ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
