@@ -138,7 +138,7 @@ function FilterBar({
         />
       </div>
 
-      <Select value={filters.entity_type} onValueChange={(v) => onChange('entity_type', v === 'all' ? '' : v)}>
+      <Select value={filters.entity_type} onValueChange={(v) => onChange('entity_type', v ? (v === 'all' ? '' : v) : '')}>
         <SelectTrigger className="h-9 w-[160px]">
           <SelectValue placeholder="Entity type" />
         </SelectTrigger>

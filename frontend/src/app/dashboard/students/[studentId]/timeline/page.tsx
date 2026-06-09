@@ -38,7 +38,7 @@ const eventColors: Record<string, { dot: string; line: string; bg: string; label
     dot: 'bg-event-observation',
     line: 'border-event-observation/30',
     bg: 'bg-event-observation/5 border-event-observation/20',
-    label: 'Positive',
+    label: 'Achievement',
   },
   INTERVENTION: {
     dot: 'bg-event-intervention',
@@ -50,7 +50,7 @@ const eventColors: Record<string, { dot: string; line: string; bg: string; label
     dot: 'bg-event-case-change',
     line: 'border-event-case-change/30',
     bg: 'bg-event-case-change/5 border-event-case-change/20',
-    label: 'Case Update',
+    label: 'Case',
   },
 };
 
@@ -117,7 +117,8 @@ export default function StudentTimelinePage({
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Student Timeline</h2>
         <p className="text-muted-foreground">
-          Chronological view of all events for student{' '}
+          Chronological view of the student’s <span className="font-medium">cases</span> and <span className="font-medium">achievements</span>{' '}
+          (plus incidents and interventions) for student{' '}
           <span className="font-mono text-xs">{resolvedParams.studentId.slice(0, 8)}...</span>
         </p>
       </div>
@@ -138,7 +139,7 @@ export default function StudentTimelinePage({
               </SelectItem>
               <SelectItem value="OBSERVATION">
                 <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-event-observation" /> Positive
+                  <span className="h-2 w-2 rounded-full bg-event-observation" /> Achievements
                 </span>
               </SelectItem>
               <SelectItem value="INTERVENTION">
@@ -148,7 +149,7 @@ export default function StudentTimelinePage({
               </SelectItem>
               <SelectItem value="CASE_STATUS_CHANGE">
                 <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-event-case-change" /> Case Updates
+                  <span className="h-2 w-2 rounded-full bg-event-case-change" /> Cases
                 </span>
               </SelectItem>
             </SelectContent>

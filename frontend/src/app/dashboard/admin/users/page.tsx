@@ -403,13 +403,12 @@ export default function AdminUsersPage() {
             </div>
           </CardContent>
           <CardFooter className="border-t p-6">
-            <Button 
-              className="w-full" 
-              variant="secondary" 
+            <Button
+              className="w-full"
               disabled={!bulkFile || isBulkSubmitting}
               onClick={handleBulkUpload}
             >
-              {isBulkSubmitting ? "Uploading..." : "Sync to Directory"}
+              {isBulkSubmitting ? "Uploading..." : "Create Bulk Users"}
             </Button>
           </CardFooter>
         </Card>

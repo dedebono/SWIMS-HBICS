@@ -18,7 +18,6 @@ const router = Router();
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── PUT /api/media/upload/local ─────────────────────────────────────────────
-// The frontend calls this URL exactly like an S3 presigned PUT URL.
 
 router.put(
   '/upload/local',

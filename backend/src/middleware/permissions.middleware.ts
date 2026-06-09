@@ -49,32 +49,41 @@ export function checkPermission(resource: Resource, action: Action) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
       const role = req.userRole as Role;
+      console.log(`[Permission Check] Starting for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
       // ── Step 1: RBAC check ──────────────────────────────────────────────
       const rolePerms = PERMISSIONS[role];
       if (!rolePerms) {
+        console.error(`[RBAC Error] Unknown role: ${role}`);
         return next(new ForbiddenError(`Unknown role: ${role}`));
       }
 
       const resourcePerms = rolePerms[resource];
+      console.log(`[Permission Check] rolePerms[${resource}]: `, resourcePerms);
       if (!resourcePerms) {
+        console.error(`[RBAC Error] No permissions defined for resource: ${resource} for role: ${role}`);
         return next(new ForbiddenError(`No permissions defined for resource: ${resource}`));
       }
 
       if (!resourcePerms[action]) {
+        console.error(`[RBAC Error] Role '${role}' is not allowed to '${action}' on '${resource}'`);
         return next(new ForbiddenError(
           `Role '${role}' is not allowed to '${action}' on '${resource}'`,
         ));
       }
+      console.log(`[Permission Check] RBAC passed for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
       // ── Step 2: ABAC contextual checks ──────────────────────────────────
       await enforceAbac(req, role, resource, action);
+      console.log(`[Permission Check] ABAC passed for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
       next();
     } catch (err) {
       if (err instanceof ForbiddenError) {
+        console.error(`[Permission Error] Forbidden: ${err.message}. Role: ${req.userRole}, Resource: ${resource}, Action: ${action}`);
         return next(err);
       }
+      console.error(`[Permission Error] Unexpected error: ${err}. Role: ${req.userRole}, Resource: ${resource}, Action: ${action}`);
       next(err);
     }
   };
@@ -168,10 +177,8 @@ async function enforceAbac(
     }
 
     case 'IT_ADMIN': {
-      // Blocked from reading case descriptions and incident narratives
-      if (resource === 'cases' || resource === 'incidents') {
-        (req as unknown as Record<string, unknown>)['abacRedactNarratives'] = true;
-      }
+      // No specific ABAC rules for IT_ADMIN for /admin/* routes.
+      // RBAC matrix already defines their access.
       break;
     }
   }

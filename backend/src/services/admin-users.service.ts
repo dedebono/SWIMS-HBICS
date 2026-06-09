@@ -92,77 +92,25 @@ export async function createUser(tenantId: string, data: CreateUserData): Promis
 export async function createUsersBulk(tenantId: string, users: CreateUserData[]): Promise<{ created: number, duplicates: number }> {
   if (!users.length) return { created: 0, duplicates: 0 };
 
-  const client = await getClientWithTenant(tenantId);
-  try {
-    await client.query('BEGIN');
-    
-    // Pre-fetch existing emails and national IDs to prevent duplicates efficiently
-    const existingEmails = new Set<string>();
-    const existingNationalIds = new Set<string>();
+  let createdCount = 0;
+  let duplicateCount = 0;
 
-    const { rows: staffEmails } = await client.query('SELECT email FROM users WHERE tenant_id = $1', [tenantId]);
-    for (const r of staffEmails) existingEmails.add(r.email);
-
-    const { rows: studentData } = await client.query('SELECT metadata->>\'email\' as email, national_id FROM students WHERE tenant_id = $1', [tenantId]);
-    for (const r of studentData) {
-      if (r.email) existingEmails.add(r.email);
-      if (r.national_id) {
-        try {
-          existingNationalIds.add(decryptField(r.national_id));
-        } catch (e) {
-          // ignore invalid decryption
-        }
-      }
-    }
-
-    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
-    let createdCount = 0;
-    let duplicateCount = 0;
-
-    for (const user of users) {
-      const emailLower = user.email.toLowerCase();
-      
-      // Check for duplicates
-      if (existingEmails.has(emailLower)) {
+  for (const user of users) {
+    try {
+      // Reuse the single user creation logic for consistency and validation
+      await createUser(tenantId, user);
+      createdCount++;
+    } catch (error: any) {
+      if (error.name === 'ValidationError' && (error.message.includes('already exists') || error.message.includes('duplicate'))) {
         duplicateCount++;
-        continue;
-      }
-      
-      if (user.role === 'STUDENT' && user.national_id && existingNationalIds.has(user.national_id)) {
-        duplicateCount++;
-        continue;
-      }
-
-      if (user.role === 'STUDENT') {
-        const encryptedNationalId = user.national_id ? encryptField(user.national_id) : null;
-        
-        await client.query(
-          `INSERT INTO students (tenant_id, full_name, national_id, metadata)
-           VALUES ($1, $2, $3, $4)`,
-          [tenantId, user.full_name, encryptedNationalId, JSON.stringify({ email: emailLower })]
-        );
-        createdCount++;
-        existingEmails.add(emailLower);
-        if (user.national_id) existingNationalIds.add(user.national_id);
       } else {
-        await client.query(
-          `INSERT INTO users (tenant_id, full_name, email, password_hash, role)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [tenantId, user.full_name, emailLower, passwordHash, user.role]
-        );
-        createdCount++;
-        existingEmails.add(emailLower);
+        // Re-throw other errors to stop the bulk operation
+        throw error;
       }
     }
-
-    await client.query('COMMIT');
-    return { created: createdCount, duplicates: duplicateCount };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
   }
+
+  return { created: createdCount, duplicates: duplicateCount };
 }
 
 /**

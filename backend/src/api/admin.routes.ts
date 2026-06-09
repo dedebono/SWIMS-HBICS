@@ -51,6 +51,7 @@ router.get(
   '/users',
   checkPermission('admin', 'read'),
   asyncHandler(async (req, res) => {
+    console.log(`[Admin Users] GET /users — tenantId: ${req.tenantId}, role: ${req.userRole}`);
     const result = await adminUsersService.getAllUsers(req.tenantId);
     sendSuccess(res, result);
   }),

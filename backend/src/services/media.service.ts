@@ -48,15 +48,15 @@ export async function createPresignedUpload(
   );
   
   const settings = tenantRows[0]?.settings || {};
-  const isLocal = settings.storage?.storageProvider === 'local';
+  const isLocal = settings.storage?.storageProvider === 'local' || !settings.storage?.storageProvider;
 
   let uploadUrl = '';
   let storageKey = '';
 
   if (isLocal) {
     storageKey = `uploads/${tenantId}/${assetId}.${fileExtension}`;
-    const baseUrl = '';
-    uploadUrl = `${baseUrl}/api/media/upload/local?assetId=${assetId}&tenantId=${tenantId}`;
+    // Use relative URL so the browser uploads to the same origin as the API (no hardcoded localhost).
+    uploadUrl = `/api/media/upload/local?assetId=${assetId}&tenantId=${tenantId}`;
   } else {
     storageKey = `${tenantId}/${assetId}.${fileExtension}`;
     const command = new PutObjectCommand({
@@ -212,8 +212,8 @@ export async function getAssetDownloadUrl(
 
     let url = '';
     if (objectKey.startsWith('uploads/')) {
-      const baseUrl = '';
-      url = `${baseUrl}/api/media/download/local?assetId=${assetId}&tenantId=${tenantId}`;
+      // Use relative URL so the browser downloads from the same origin as the API.
+      url = `/api/media/download/local?assetId=${assetId}&tenantId=${tenantId}`;
     } else {
       const command = new GetObjectCommand({
         Bucket: env.S3_BUCKET,
