@@ -26,7 +26,8 @@ router.put(
     const tenantId = req.query['tenantId'] as string;
 
     if (!assetId || !tenantId) {
-      return res.status(400).json({ error: 'Missing assetId or tenantId' });
+      res.status(400).json({ error: 'Missing assetId or tenantId' });
+      return;
     }
 
     const client = await getClientWithTenant(tenantId);
@@ -101,7 +102,8 @@ router.get(
     const downloadPath = path.resolve(process.cwd(), storageKey);
 
     if (!fs.existsSync(downloadPath)) {
-      return res.status(404).json({ error: 'File not found on local disk' });
+      res.status(404).json({ error: 'File not found on local disk' });
+      return;
     }
 
     res.setHeader('Content-Type', mimeType);

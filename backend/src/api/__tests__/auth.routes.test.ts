@@ -11,6 +11,10 @@ vi.mock('../../services/auth.service.js', () => ({
   refreshAccessToken: vi.fn(),
   revokeAllTokens: vi.fn(),
   verifyCaptcha: vi.fn(),
+
+  // Used by auth.routes.ts to set cookies
+  buildRefreshCookie: vi.fn(() => 'refresh-cookie'),
+  buildClearRefreshCookie: vi.fn(() => 'clear-refresh-cookie'),
 }));
 
 vi.mock('bcryptjs', () => ({
@@ -101,7 +105,6 @@ describe('Auth Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveProperty('access_token');
-      expect(res.body.data).toHaveProperty('refresh_token');
     });
 
     it('should return 401 for incorrect password', async () => {
@@ -181,7 +184,6 @@ describe('Auth Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveProperty('access_token');
-      expect(res.body.data).toHaveProperty('refresh_token');
     });
 
     it('should return 401 for invalid refresh token', async () => {

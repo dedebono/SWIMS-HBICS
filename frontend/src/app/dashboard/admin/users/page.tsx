@@ -337,7 +337,9 @@ export default function AdminUsersPage() {
                   onChange={e => setFormData({ ...formData, national_id: e.target.value })}
                 />
               </div>
-              <div className="space-y-2">
+              <div 
+              style={{marginBottom :'10px'}}
+              className="space-y-2">
                 <Label>Password (Optional — defaults to Welcome123!)</Label>
                 <Input
                   type="password"

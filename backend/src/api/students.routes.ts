@@ -46,9 +46,16 @@ router.get(
   '/:studentId',
   checkPermission('students', 'read'),
   asyncHandler(async (req, res) => {
-    const student = await studentsService.getStudentById(req.tenantId, String(req.params['studentId']));
+    const studentIdParam = req.params['studentId'];
+    if (!studentIdParam) {
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
+    }
+
+    const student = await studentsService.getStudentById(req.tenantId, String(studentIdParam));
     if (!student) {
-      return res.status(404).json({ success: false, error: 'Student not found' });
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
     }
     sendSuccess(res, student);
   }),
@@ -60,12 +67,18 @@ router.get(
   '/:studentId/timeline',
   checkPermission('students', 'read'),
   asyncHandler(async (req, res) => {
+    const studentIdParam = req.params['studentId'];
+    if (!studentIdParam) {
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
+    }
+
     const query = timelineQuerySchema.parse(req.query);
     const anonymize = (req as unknown as Record<string, unknown>)['abacAnonymize'] === true;
 
     const { events, total } = await timelineService.getStudentTimeline(
       req.tenantId,
-      String(req.params['studentId']),
+      String(studentIdParam),
       { ...query, anonymize },
     );
 

@@ -107,7 +107,16 @@ async function enforceAbac(
       // Teachers may generally only access records for students in their assigned class,
       // EXCEPT when reporting an incident (creating cases/incidents) or looking up basic student info.
       if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
-      if (resource === 'students' && _action === 'read' && !req.path.includes('/timeline')) break;
+
+      // NOTE: req.path may not reliably include '/timeline' depending on how the route is mounted.
+      // Use originalUrl as a safer check so teacher access to the timeline endpoint doesn't 403.
+      const isStudentTimelineRoute =
+        (req.originalUrl ?? req.path ?? '').includes('/timeline');
+
+      // Allow general student reads, but require ABAC for timelines as well.
+      // (If this breaks again, we can refine by checking exact pattern `/students/:id/timeline`.)
+      if (resource === 'students' && _action === 'read' && !isStudentTimelineRoute) break;
+
       if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break; // allow listing cases (service filters by teacher_id)
 
       // Allow access if teacher has been shared this case
@@ -129,7 +138,11 @@ async function enforceAbac(
     case 'SUBSTITUTE_TEACHER': {
       // Same exceptions as teacher
       if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
-      if (resource === 'students' && _action === 'read' && !req.path.includes('/timeline')) break;
+
+      const isStudentTimelineRoute =
+        (req.originalUrl ?? req.path ?? '').includes('/timeline');
+
+      if (resource === 'students' && _action === 'read' && !isStudentTimelineRoute) break;
       if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break;
 
       const studentId = extractStudentId(req);

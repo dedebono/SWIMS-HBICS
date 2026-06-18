@@ -4,9 +4,17 @@ import { generateTestToken } from '../../test/utils/auth-mock.js';
 import { getClientWithTenant } from '../../db/pool.js';
 import { getStudentTimeline } from '../../services/timeline.service.js';
 
-// Mock the timeline service before imports are used
+/**
+ * Mock services before imports are used
+ * (Routes import both timeline.service and students.service)
+ */
 vi.mock('../../services/timeline.service.js', () => ({
   getStudentTimeline: vi.fn(),
+}));
+
+vi.mock('../../services/students.service.js', () => ({
+  getStudentById: vi.fn(),
+  searchStudents: vi.fn(),
 }));
 
 // Import the app after mocks are set up
