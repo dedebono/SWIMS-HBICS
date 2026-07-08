@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import { UnauthorizedError } from '../utils/errors.js';
+import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 import type { JwtPayload } from '@swims/shared';
 
 /**
@@ -35,4 +35,18 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     }
     next(err);
   }
+}
+
+/**
+ * Middleware factory: require user to have one of the allowed roles.
+ * Must be used AFTER authenticate().
+ */
+export function requireRole(...allowedRoles: string[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const role = (req as any).userRole;
+    if (!role || !allowedRoles.includes(role)) {
+      return next(new ForbiddenError(`Access denied. Required role: ${allowedRoles.join(' or ')}`));
+    }
+    next();
+  };
 }

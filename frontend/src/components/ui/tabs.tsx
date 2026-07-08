@@ -7,20 +7,9 @@ import { cn } from "@/lib/utils"
 
 function Tabs({
   className,
-  orientation = "horizontal",
   ...props
 }: TabsPrimitive.Root.Props) {
-  return (
-    <TabsPrimitive.Root
-      data-slot="tabs"
-      data-orientation={orientation}
-      className={cn(
-        "group/tabs flex gap-2 data-horizontal:flex-col",
-        className
-      )}
-      {...props}
-    />
-  )
+  return <TabsPrimitive.Root data-slot="tabs" className={cn("flex flex-col gap-3", className)} {...props} />;
 }
 
 const tabsListVariants = cva(

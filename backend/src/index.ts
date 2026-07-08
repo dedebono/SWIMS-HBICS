@@ -28,6 +28,7 @@ import reportsRoutes from './api/reports.routes.js';
 import onboardingRoutes from './api/onboarding.routes.js';
 import adminSettingsRoutes from './api/admin-settings.routes.js';
 import insightsRoutes from './api/insights.routes.js';
+import disciplineHandbookRoutes from './api/discipline-handbook.routes.js';
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ app.use('/api/admin', adminSettingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/guidebook', guidebookRoutes);
+app.use('/api/discipline-handbook', disciplineHandbookRoutes);
 
 // Protected Root-Level Routers
 app.use('/api', incidentsRoutes);
