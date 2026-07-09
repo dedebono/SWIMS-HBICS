@@ -89,6 +89,14 @@ router.post('/levels',
   })
 );
 
+router.put('/levels/:id',
+  requireRole('IT_ADMIN'),
+  asyncHandler(async (req: Request, res) => {
+    const tenantId = (req as any).tenantId;
+    sendSuccess(res, await service.updateEducationLevel(tenantId, Number(req.params.id), req.body));
+  })
+);
+
 router.delete('/levels/:id',
   requireRole('IT_ADMIN'),
   asyncHandler(async (req: Request, res) => {
@@ -183,6 +191,14 @@ router.post('/guidelines',
   })
 );
 
+router.put('/guidelines/:id',
+  requireRole('IT_ADMIN', 'COUNSELOR'),
+  asyncHandler(async (req: Request, res) => {
+    const tenantId = (req as any).tenantId;
+    sendSuccess(res, await service.updateHandlingGuideline(tenantId, Number(req.params.id), req.body));
+  })
+);
+
 router.delete('/guidelines/:id',
   requireRole('IT_ADMIN', 'COUNSELOR'),
   asyncHandler(async (req: Request, res) => {
@@ -211,6 +227,14 @@ router.post('/consequences',
   })
 );
 
+router.put('/consequences/:id',
+  requireRole('IT_ADMIN', 'COUNSELOR'),
+  asyncHandler(async (req: Request, res) => {
+    const tenantId = (req as any).tenantId;
+    sendSuccess(res, await service.updateConsequenceGuideline(tenantId, Number(req.params.id), req.body));
+  })
+);
+
 router.delete('/consequences/:id',
   requireRole('IT_ADMIN', 'COUNSELOR'),
   asyncHandler(async (req: Request, res) => {
@@ -236,6 +260,14 @@ router.post('/documents',
   asyncHandler(async (req: Request, res) => {
     const tenantId = (req as any).tenantId;
     sendSuccess(res, await service.createRequiredDocument(tenantId, req.body), 201);
+  })
+);
+
+router.put('/documents/:id',
+  requireRole('IT_ADMIN', 'COUNSELOR'),
+  asyncHandler(async (req: Request, res) => {
+    const tenantId = (req as any).tenantId;
+    sendSuccess(res, await service.updateRequiredDocument(tenantId, Number(req.params.id), req.body));
   })
 );
 

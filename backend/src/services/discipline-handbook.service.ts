@@ -157,6 +157,24 @@ export async function createEducationLevel(
   return rows[0]!;
 }
 
+export async function updateEducationLevel(
+  tenantId: string,
+  id: number,
+  input: Partial<Omit<DisciplineEducationLevel, 'id'>>
+): Promise<DisciplineEducationLevel> {
+  const { rows } = await queryWithTenant<DisciplineEducationLevel>(
+    tenantId,
+    `UPDATE discipline_education_levels
+     SET code = COALESCE($1, code),
+         name = COALESCE($2, name),
+         sort_order = COALESCE($3, sort_order)
+     WHERE id = $4 RETURNING *`,
+    [input.code, input.name, input.sort_order, id],
+  );
+  if (!rows[0]) throw new NotFoundError('DisciplineEducationLevel', String(id));
+  return rows[0]!;
+}
+
 export async function deleteEducationLevel(tenantId: string, id: number): Promise<void> {
   const { rowCount } = await queryWithTenant(
     tenantId,
@@ -319,6 +337,26 @@ export async function createHandlingGuideline(
   return rows[0]!;
 }
 
+export async function updateHandlingGuideline(
+  tenantId: string,
+  id: number,
+  input: Partial<Omit<DisciplineHandlingGuideline, 'id'>>
+): Promise<DisciplineHandlingGuideline> {
+  const { rows } = await queryWithTenant<DisciplineHandlingGuideline>(
+    tenantId,
+    `UPDATE discipline_handling_guidelines
+     SET category_id = COALESCE($1, category_id),
+         level_id = COALESCE($2, level_id),
+         target_type = COALESCE($3, target_type),
+         step_number = COALESCE($4, step_number),
+         guideline_text = COALESCE($5, guideline_text)
+     WHERE id = $6 RETURNING *`,
+    [input.category_id, input.level_id, input.target_type, input.step_number, input.guideline_text, id],
+  );
+  if (!rows[0]) throw new NotFoundError('DisciplineHandlingGuideline', String(id));
+  return rows[0]!;
+}
+
 export async function deleteHandlingGuideline(tenantId: string, id: number): Promise<void> {
   const { rowCount } = await queryWithTenant(
     tenantId,
@@ -370,6 +408,25 @@ export async function createConsequenceGuideline(
   return rows[0]!;
 }
 
+export async function updateConsequenceGuideline(
+  tenantId: string,
+  id: number,
+  input: Partial<Omit<DisciplineConsequenceGuideline, 'id'>>
+): Promise<DisciplineConsequenceGuideline> {
+  const { rows } = await queryWithTenant<DisciplineConsequenceGuideline>(
+    tenantId,
+    `UPDATE discipline_consequence_guidelines
+     SET category_id = COALESCE($1, category_id),
+         level_id = COALESCE($2, level_id),
+         consequence_type = COALESCE($3, consequence_type),
+         consequence_text = COALESCE($4, consequence_text)
+     WHERE id = $5 RETURNING *`,
+    [input.category_id, input.level_id, input.consequence_type, input.consequence_text, id],
+  );
+  if (!rows[0]) throw new NotFoundError('DisciplineConsequenceGuideline', String(id));
+  return rows[0]!;
+}
+
 export async function deleteConsequenceGuideline(tenantId: string, id: number): Promise<void> {
   const { rowCount } = await queryWithTenant(
     tenantId,
@@ -418,6 +475,26 @@ export async function createRequiredDocument(
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
     [input.category_id, input.level_id, input.document_name, input.template_url, input.description],
   );
+  return rows[0]!;
+}
+
+export async function updateRequiredDocument(
+  tenantId: string,
+  id: number,
+  input: Partial<Omit<DisciplineRequiredDocument, 'id'>>
+): Promise<DisciplineRequiredDocument> {
+  const { rows } = await queryWithTenant<DisciplineRequiredDocument>(
+    tenantId,
+    `UPDATE discipline_required_documents
+     SET category_id = COALESCE($1, category_id),
+         level_id = COALESCE($2, level_id),
+         document_name = COALESCE($3, document_name),
+         template_url = COALESCE($4, template_url),
+         description = COALESCE($5, description)
+     WHERE id = $6 RETURNING *`,
+    [input.category_id, input.level_id, input.document_name, input.template_url, input.description, id],
+  );
+  if (!rows[0]) throw new NotFoundError('DisciplineRequiredDocument', String(id));
   return rows[0]!;
 }
 

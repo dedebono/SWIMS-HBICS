@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge";
 import {
   BookOpen, Plus, Pencil, Trash2, RefreshCw, Save, ChevronDown, ChevronRight,
-  FileText, Scale, GraduationCap, Layers, AlertTriangle
+  Layers, Scale, GraduationCap, FileText, AlertTriangle, FolderOpen, Users,
+  ExternalLink, X
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -31,38 +32,53 @@ interface HandlingGuideline { id: number; category_id: number; level_id: number;
 interface ConsequenceGuideline { id: number; category_id: number; level_id: number; consequence_type: string; consequence_text: string; }
 interface RequiredDocument { id: number; category_id: number; level_id: number; document_name: string; template_url: string | null; description: string | null; }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-function CategoryCard({ cat, groupCount, onEdit, onDelete }: { cat: Category; groupCount: number; onEdit: (c: Category) => void; onDelete: (c: Category) => void }) {
-  const colorMap: Record<number, string> = { 1: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", 2: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", 3: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200", 4: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" };
+const CAT_COLORS: Record<number, { border: string; bg: string; text: string; dot: string; badge: string; desc: string }> = {
+  1: { border: "border-l-green-500", bg: "bg-green-100 dark:bg-green-950 border border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-200", dot: "bg-green-500", badge: "bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200", desc: "text-green-700/70 dark:text-green-300/70" },
+  2: { border: "border-l-yellow-500", bg: "bg-yellow-100 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800", text: "text-yellow-800 dark:text-yellow-200", dot: "bg-yellow-500", badge: "bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", desc: "text-yellow-700/70 dark:text-yellow-300/70" },
+  3: { border: "border-l-orange-500", bg: "bg-orange-100 dark:bg-orange-950 border border-orange-200 dark:border-orange-800", text: "text-orange-800 dark:text-orange-200", dot: "bg-orange-500", badge: "bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-200", desc: "text-orange-700/70 dark:text-orange-300/70" },
+  4: { border: "border-l-red-500", bg: "bg-red-100 dark:bg-red-950 border border-red-200 dark:border-red-800", text: "text-red-800 dark:text-red-200", dot: "bg-red-500", badge: "bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200", desc: "text-red-700/70 dark:text-red-300/70" },
+};
+
+const CONSEQUENCE_BADGE: Record<string, string> = {
+  "Tugas Reflektif": "bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100",
+  "Perbaikan Langsung": "bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100",
+  "Pembatasan Sementara": "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100",
+  "Konferensi Keluarga": "bg-violet-200 text-violet-900 dark:bg-violet-900 dark:text-violet-100",
+  "Skorsing": "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100",
+  "Skorsing Ringan": "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100",
+  "Skorsing Berat": "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100",
+  "Ganti Rugi": "bg-teal-200 text-teal-900 dark:bg-teal-900 dark:text-teal-100",
+  "Tugas Karakter": "bg-indigo-200 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-100",
+  "Pelanggaran Surat Pernyataan": "bg-pink-200 text-pink-900 dark:bg-pink-900 dark:text-pink-100",
+  "Koordinasi Pihak Luar": "bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-200",
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function LevelBadge({ levels }: { levels: Level[] }) {
+  return <div className="flex gap-1 flex-wrap">{levels.map(l => <Badge key={l.id} variant="outline" className="text-xs font-mono px-1.5">{l.code}</Badge>)}</div>;
+}
+
+function SectionHeader({ icon: Icon, title, count, action }: { icon: any; title: string; count: number; action?: React.ReactNode }) {
   return (
-    <div className="border rounded-lg p-4 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Scale className="h-4 w-4 text-muted-foreground" />
-          <span className="font-semibold">{cat.name}</span>
-          <Badge className={colorMap[cat.id] ?? "bg-gray-100"}>{cat.id}</Badge>
-          {groupCount > 0 && <Badge variant="secondary" className="text-[10px]">{groupCount} kelompok</Badge>}
-        </div>
-        <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => onEdit(cat)}><Pencil className="h-3 w-3" /></Button>
-          <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => onDelete(cat)}><Trash2 className="h-3 w-3" /></Button>
-        </div>
+    <div className="flex items-center justify-between py-2 px-1 border-b">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <span className="font-semibold text-sm">{title}</span>
+        <Badge variant="secondary" className="text-xs">{count}</Badge>
       </div>
-      {cat.general_description && <p className="text-xs text-muted-foreground">{cat.general_description}</p>}
+      {action}
     </div>
   );
 }
 
-function LevelBadge({ levels }: { levels: Level[] }) {
-  return <div className="flex gap-1 flex-wrap">{levels.map(l => <Badge key={l.id} variant="outline" className="text-[10px]">{l.code}</Badge>)}</div>;
-}
-
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminDisciplineHandbookPage() {
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("tree");
+  const [activeTab, setActiveTab] = useState("structure");
 
   // Data
   const [tree, setTree] = useState<HandbookTreeNode[]>([]);
@@ -74,7 +90,6 @@ export default function AdminDisciplineHandbookPage() {
 
   // Dialog states
   const [dlg, setDlg] = useState<{ open: string; data?: any }>({ open: "" });
-
   const openDlg = (name: string, data?: any) => setDlg({ open: name, data });
   const closeDlg = () => setDlg({ open: "" });
 
@@ -95,37 +110,30 @@ export default function AdminDisciplineHandbookPage() {
       if (g.success) setGuidelines(g.data ?? []);
       if (cs.success) setConsequences(cs.data ?? []);
       if (d.success) setDocuments(d.data ?? []);
-    } catch {
-      toast.error("Gagal memuat data buku pedoman");
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error("Gagal memuat data buku pedoman"); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── POST helper
   async function doPost(endpoint: string, body: any, onSuccess?: () => void) {
     try {
       const res = await apiClient(endpoint, { method: "POST", body });
-      if (res.success) {
-        toast.success("Berhasil disimpan");
-        closeDlg();
-        fetchAll();
-        onSuccess?.();
-      } else toast.error(res.error || "Gagal menyimpan");
+      if (res.success) { toast.success("Berhasil disimpan"); closeDlg(); fetchAll(); onSuccess?.(); }
+      else toast.error(res.error || "Gagal menyimpan");
     } catch { toast.error("Terjadi kesalahan"); }
   }
 
-  // ── PUT helper
-  async function doPut(endpoint: string, body: any) {
+  async function doPut(endpoint: string, body: any, onSuccess?: () => void) {
     try {
       const res = await apiClient(endpoint, { method: "PUT", body });
-      if (!res.success) toast.error(res.error || "Gagal mengupdate");
+      if (res.success) { toast.success("Berhasil diupdate"); closeDlg(); fetchAll(); onSuccess?.(); }
+      else toast.error(res.error || "Gagal mengupdate");
     } catch { toast.error("Terjadi kesalahan saat update"); }
   }
 
-  async function doDelete(endpoint: string, id: number) {
+  async function doDelete(endpoint: string, id: number, label: string) {
+    if (!confirm(`Hapus "${label}"?`)) return;
     try {
       const res = await apiClient(`${endpoint}/${id}`, { method: "DELETE" });
       if (res.success) { toast.success("Berhasil dihapus"); fetchAll(); }
@@ -133,36 +141,12 @@ export default function AdminDisciplineHandbookPage() {
     } catch { toast.error("Terjadi kesalahan"); }
   }
 
-  const doDeleteCategory = (cat: Category) => {
-    const node = tree.find(n => n.category.id === cat.id);
-    const groupCount = node?.groups.length ?? 0;
-    const msg = groupCount > 0
-      ? `Kategori "${cat.name}" memiliki ${groupCount} kelompok perilaku dan SOP/sanksi terkait. Semua data tersebut akan ikut terhapus. Lanjutkan?`
-      : `Hapus kategori "${cat.name}"?`;
-    if (confirm(msg)) doDelete("/discipline-handbook/categories", cat.id);
-  };
-
-  const doDeleteLevel = (lvl: EducationLevel) => {
-    const gCount = guidelines.filter(g => g.level_id === lvl.id).length;
-    const cCount = consequences.filter(c => c.level_id === lvl.id).length;
-    const dCount = documents.filter(d => d.level_id === lvl.id).length;
-    const bCount = tree.flatMap(n => n.groups.flatMap(g => g.behaviors)).filter(b => b.levels.some(l => l.id === lvl.id)).length;
-    const total = gCount + cCount + dCount + bCount;
-    const msg = total > 0
-      ? `Jenjang "${lvl.name}" digunakan di ${total} data (SOP: ${gCount}, Sanksi: ${cCount}, Dokumen: ${dCount}, Perilaku: ${bCount}). Semua akan ikut terhapus. Lanjutkan?`
-      : `Hapus jenjang "${lvl.name}"?`;
-    if (confirm(msg)) doDelete("/discipline-handbook/levels", lvl.id);
-  };
-
-  const catName = (id: number) => categories.find(c => c.id === id)?.name ?? `Kategori ${id}`;
+  const catName = (id: number) => categories.find(c => c.id === id)?.name ?? `Kat. ${id}`;
   const levelName = (id: number) => levels.find(l => l.id === id)?.name ?? `Jenjang ${id}`;
   const levelCode = (id: number) => levels.find(l => l.id === id)?.code ?? `?`;
 
-  // ── Expanded state for tree accordion
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["1-group-1", "2-group-3", "3-group-5", "4-group-7"]));
-  const toggle = (key: string) => {
-    setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  };
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -171,257 +155,453 @@ export default function AdminDisciplineHandbookPage() {
   );
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 p-6">
-      {/* Header */}
+    <div className="max-w-7xl mx-auto space-y-5 p-6">
+
+      {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <BookOpen className="h-7 w-7" /> Buku Pedoman Disiplin
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <BookOpen className="h-6 w-6 text-primary" />
+            Buku Pedoman Disiplin
           </h1>
-          <p className="text-muted-foreground mt-1">Kelola semua isi buku pedoman — kategori, perilaku, SOP, sanksi, dan dokumen.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Kelola kategori, jenjang, SOP penanganan, sanksi, dan dokumen.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchAll}><RefreshCw className="h-4 w-4 mr-1" /> Refresh</Button>
+        <Button variant="outline" size="sm" onClick={fetchAll}><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Refresh</Button>
       </div>
 
-      {/* ── TAB NAVIGATION (horizontal top bar) ── */}
-      <TabsPrimitive.Root value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-3">
-        <TabsPrimitive.List className="grid grid-cols-6 min-w-0 w-fit">
-          <TabsPrimitive.Tab value="tree" className="text-xs"><Layers className="h-3 w-3 mr-1 shrink-0" />Struktur</TabsPrimitive.Tab>
-          <TabsPrimitive.Tab value="categories" className="text-xs"><Scale className="h-3 w-3 mr-1 shrink-0" />Kategori</TabsPrimitive.Tab>
-          <TabsPrimitive.Tab value="levels" className="text-xs"><GraduationCap className="h-3 w-3 mr-1 shrink-0" />Jenjang</TabsPrimitive.Tab>
-          <TabsPrimitive.Tab value="guidelines" className="text-xs"><FileText className="h-3 w-3 mr-1 shrink-0" />SOP</TabsPrimitive.Tab>
-          <TabsPrimitive.Tab value="consequences" className="text-xs"><AlertTriangle className="h-3 w-3 mr-1 shrink-0" />Sanksi</TabsPrimitive.Tab>
-          <TabsPrimitive.Tab value="documents" className="text-xs"><FileText className="h-3 w-3 mr-1 shrink-0" />Dokumen</TabsPrimitive.Tab>
-        </TabsPrimitive.List>
+      {/* ── Tab Navigation ── */}
+      <div className="rounded-lg border bg-card">
+        <TabsPrimitive.Root value={activeTab} onValueChange={setActiveTab}>
+          <TabsPrimitive.List className="grid grid-cols-6 w-full rounded-t-lg overflow-hidden border-b bg-card/60">
+            {[
+              { value: "structure", icon: Layers, label: "Struktur" },
+              { value: "categories", icon: Scale, label: "Kategori" },
+              { value: "levels", icon: GraduationCap, label: "Jenjang" },
+              { value: "guidelines", icon: FileText, label: "SOP" },
+              { value: "consequences", icon: AlertTriangle, label: "Sanksi" },
+              { value: "documents", icon: FolderOpen, label: "Dokumen" },
+            ].map(({ value, icon: Icon, label }) => (
+              <TabsPrimitive.Tab
+                key={value}
+                value={value}
+                className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all outline-none cursor-pointer border-b-2 border-transparent data-selected:text-primary data-selected:border-primary data-selected:bg-primary/5"
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+              </TabsPrimitive.Tab>
+            ))}
+          </TabsPrimitive.List>
 
-        {/* ── STRUKTUR ── */}
-        <TabsPrimitive.Panel value="tree" className="space-y-4">
-          {/* Quick-add buttons */}
-          <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="outline" onClick={() => openDlg("add-group")}><Plus className="h-3 w-3 mr-1" />Tambah Kelompok</Button>
-            <Button size="sm" variant="outline" onClick={() => openDlg("add-behavior")}><Plus className="h-3 w-3 mr-1" />Tambah Perilaku</Button>
-            <Button size="sm" variant="outline" onClick={() => openDlg("add-consequence")}><Plus className="h-3 w-3 mr-1" />Tambah Sanksi</Button>
-          </div>
+          {/* ══════════════ STRUKTUR ══════════════ */}
+          <TabsPrimitive.Panel value="structure" className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Hierarki kategori → kelompok → butir perilaku</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => openDlg("add-group")}><Plus className="h-3 w-3 mr-1" />Kelompok</Button>
+                <Button size="sm" variant="outline" onClick={() => openDlg("add-behavior")}><Plus className="h-3 w-3 mr-1" />Perilaku</Button>
+              </div>
+            </div>
 
-          {/* Tree */}
-          <div className="space-y-3">
-            {tree.map((node, i) => {
-              const colorMap: Record<number, string> = { 1: "border-l-green-500", 2: "border-l-yellow-500", 3: "border-l-orange-500", 4: "border-l-red-500" };
+            {tree.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Layers className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada struktur. Tambahkan kategori dan jenjang terlebih dahulu.</p>
+              </div>
+            )}
+
+            {tree.map(node => {
+              const colors = CAT_COLORS[node.category.id] ?? { border: "border-l-gray-400", bg: "bg-muted border border-border", text: "text-foreground", dot: "bg-gray-400", badge: "bg-muted text-muted-foreground", desc: "text-muted-foreground" };
+              const totalBehaviors = node.groups.reduce((s, g) => s + g.behaviors.length, 0);
               return (
-                <Card key={`tree-${i}-${node.category.id}`} className={`border-l-4 ${colorMap[node.category.id] ?? "border-l-gray-400"}`}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{node.category.name}</CardTitle>
-                      <Button size="sm" variant="ghost" onClick={() => openDlg("edit-category", node.category)}><Pencil className="h-3 w-3" /></Button>
+                <div key={node.category.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg}`}>
+                  {/* Category header */}
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
+                      <div>
+                        <span className={`font-semibold text-sm ${colors.text}`}>{node.category.name}</span>
+                        {node.category.general_description && (
+                          <p className={`text-xs mt-0.5 ${colors.desc}`}>{node.category.general_description}</p>
+                        )}
+                      </div>
                     </div>
-                    {node.category.general_description && <CardDescription className="text-xs">{node.category.general_description}</CardDescription>}
-                    {/* Impact pills */}
-                    <div className="flex gap-1 flex-wrap mt-1">
-                      {node.category.impact_victim && <Badge variant="secondary" className="text-[10px]">👤 {node.category.impact_victim.slice(0, 40)}…</Badge>}
-                      {node.category.impact_perpetrator && <Badge variant="secondary" className="text-[10px]">⚠️ {node.category.impact_perpetrator.slice(0, 40)}…</Badge>}
-                      {node.category.impact_school && <Badge variant="secondary" className="text-[10px]">🏫 {node.category.impact_school.slice(0, 40)}…</Badge>}
+                    <div className="flex items-center gap-3">
+                      <div className="flex gap-1.5 flex-wrap justify-end">
+                        <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>{node.groups.length} kelompok</Badge>
+                        <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>{totalBehaviors} perilaku</Badge>
+                      </div>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-category", node.category)}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {node.groups.map(grp => {
-                      const grpKey = `${node.category.id}-group-${grp.group.id}`;
-                      return (
-                        <div key={grpKey} className="border rounded-md">
-                          <button className="w-full flex items-center justify-between p-2 hover:bg-muted/50 rounded-t-md text-left" onClick={() => toggle(grpKey)}>
-                            <span className="text-sm font-medium">{grp.group.group_name}</span>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-[10px]">{grp.behaviors.length} butir</Badge>
-                              {expanded.has(grpKey) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                            </div>
-                          </button>
-                          {expanded.has(grpKey) && (
-                            <div className="border-t p-2 space-y-1">
-                              {grp.behaviors.map(b => (
-                                <div key={`${grpKey}-${b.id}`} className="flex items-start justify-between gap-2 text-xs p-1.5 rounded hover:bg-muted/50">
-                                  <div className="flex-1">
-                                    <span>{b.behavior_text}</span>
+                  </div>
+
+                  {/* Groups */}
+                  {node.groups.length > 0 && (
+                    <div className="border-t px-4 py-3 space-y-2">
+                      {node.groups.map(grp => {
+                        const grpKey = `${node.category.id}-grp-${grp.group.id}`;
+                        return (
+                          <div key={grpKey} className="rounded-lg border overflow-hidden">
+                            <button
+                              className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/50 hover:bg-muted/80 transition-colors"
+                              onClick={() => toggle(grpKey)}
+                            >
+                              <div className="flex items-center gap-2.5 text-left">
+                                <span className="text-sm font-medium">{grp.group.group_name}</span>
+                                <Badge variant="outline" className="text-xs font-medium">{grp.behaviors.length} butir</Badge>
+                              </div>
+                              {expanded.has(grpKey)
+                                ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                              }
+                            </button>
+
+                            {expanded.has(grpKey) && (
+                              <div className="border-t">
+                                {grp.behaviors.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground italic px-4 py-3">Belum ada butir perilaku — klik edit untuk menambahkan.</p>
+                                ) : grp.behaviors.map(b => (
+                                  <div key={b.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0">
+                                    <span className="flex-1 leading-relaxed">{b.behavior_text}</span>
                                     <LevelBadge levels={b.levels} />
+                                    <div className="flex gap-0.5 shrink-0">
+                                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => openDlg("edit-behavior", { ...b, group_name: grp.group.group_name })}>
+                                        <Pencil className="h-2.5 w-2.5" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" className="h-5 w-5 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/behaviors", b.id, b.behavior_text.slice(0, 30))}>
+                                        <Trash2 className="h-2.5 w-2.5" />
+                                      </Button>
+                                    </div>
                                   </div>
-                                  <div className="flex gap-1 shrink-0">
-                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => openDlg("edit-behavior", { ...b, group_name: grp.group.group_name })}><Pencil className="h-2.5 w-2.5" /></Button>
-                                    <Button size="icon" variant="ghost" className="h-5 w-5 text-red-500 hover:text-red-600" onClick={() => { if (confirm(`Hapus "${b.behavior_text.slice(0, 30)}…"?`)) doDelete("/discipline-handbook/behaviors", b.id); }}><Trash2 className="h-2.5 w-2.5" /></Button>
-                                  </div>
-                                </div>
-                              ))}
-                              {grp.behaviors.length === 0 && <p className="text-xs text-muted-foreground italic">Belum ada butir perilaku</p>}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {node.groups.length === 0 && <p className="text-xs text-muted-foreground italic">Belum ada kelompok perilaku</p>}
-                  </CardContent>
-                </Card>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {node.groups.length === 0 && (
+                    <div className="border-t px-4 py-2">
+                      <p className="text-xs text-muted-foreground italic">Belum ada kelompok perilaku</p>
+                    </div>
+                  )}
+                </div>
               );
             })}
-          </div>
-        </TabsPrimitive.Panel>
+          </TabsPrimitive.Panel>
 
-        {/* ── KATEGORI ── */}
-        <TabsPrimitive.Panel value="categories" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => openDlg("add-category")}><Plus className="h-4 w-4 mr-1" />Tambah Kategori</Button>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {categories.map(c => {
-            const node = tree.find(n => n.category.id === c.id);
-            return <CategoryCard key={c.id} cat={c} groupCount={node?.groups.length ?? 0} onEdit={(cat) => openDlg("edit-category", cat)} onDelete={doDeleteCategory} />;
-          })}
-          </div>
-          {categories.length === 0 && <p className="text-muted-foreground text-sm">Belum ada kategori.</p>}
-        </TabsPrimitive.Panel>
+          {/* ══════════════ KATEGORI ══════════════ */}
+          <TabsPrimitive.Panel value="categories" className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">4 tingkatan pelanggaran: Ringan, Sedang, Berat, Sangat Berat</p>
+              <Button size="sm" onClick={() => openDlg("add-category")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
+            </div>
 
-        {/* ── JENJANG ── */}
-        <TabsPrimitive.Panel value="levels" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => openDlg("add-level")}><Plus className="h-4 w-4 mr-1" />Tambah Jenjang</Button>
-          </div>
-          <div className="grid gap-2 md:grid-cols-4">
-            {levels.map(l => (
-              <Card key={l.id}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div><span className="font-bold text-lg">{l.code}</span><p className="text-xs text-muted-foreground">{l.name}</p></div>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => openDlg("edit-level", l)}><Pencil className="h-3 w-3" /></Button>
-                    <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => doDeleteLevel(l)}><Trash2 className="h-3 w-3" /></Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {levels.length === 0 && <p className="text-muted-foreground text-sm">Belum ada jenjang.</p>}
-        </TabsPrimitive.Panel>
-
-        {/* ── SOP ── */}
-        <TabsPrimitive.Panel value="guidelines" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => openDlg("add-guideline")}><Plus className="h-4 w-4 mr-1" />Tambah SOP</Button>
-          </div>
-          <div className="space-y-2">
-            {guidelines.map(g => (
-              <Card key={g.id}>
-                <CardContent className="p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <Badge>{catName(g.category_id)}</Badge>
-                        <Badge variant="outline">{levelName(g.level_id)}</Badge>
-                        <Badge variant="secondary">{g.target_type}</Badge>
-                        <Badge>Langkah {g.step_number}</Badge>
+            {categories.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Scale className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada kategori.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {categories.map(c => {
+                  const colors = CAT_COLORS[c.id] ?? { border: "border-l-gray-400", bg: "bg-muted border border-border", text: "text-foreground", dot: "bg-gray-400", badge: "bg-muted text-muted-foreground", desc: "text-muted-foreground" };
+                  const node = tree.find(n => n.category.id === c.id);
+                  const groupCount = node?.groups.length ?? 0;
+                  const behaviorCount = node?.groups.reduce((s, g) => s + g.behaviors.length, 0) ?? 0;
+                  return (
+                    <div key={c.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg} p-4`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                            <span className={`font-semibold text-sm ${colors.text}`}>{c.name}</span>
+                            <Badge variant="outline" className="text-[10px] font-mono">#{c.id}</Badge>
+                          </div>
+                          {c.general_description && <p className={`text-xs mb-2 ${colors.desc}`}>{c.general_description}</p>}
+                          <div className="flex gap-2 flex-wrap">
+                            <Badge className={`text-xs font-medium ${colors.badge}`}>{groupCount} kelompok</Badge>
+                            <Badge className={`text-xs font-medium ${colors.badge}`}>{behaviorCount} perilaku</Badge>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-category", c)}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => {
+                            const msg = groupCount > 0
+                              ? `Hapus "${c.name}" beserta ${groupCount} kelompok dan semua data terkait?`
+                              : `Hapus "${c.name}"?`;
+                            if (confirm(msg)) doDelete("/discipline-handbook/categories", c.id, c.name);
+                          }}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-sm">{g.guideline_text}</p>
+                      {/* Impact summary */}
+                      {(c.impact_victim || c.impact_perpetrator || c.impact_school) && (
+                        <div className={`mt-3 pt-2 border-t space-y-1 ${colors.desc}`}>
+                          {c.impact_victim && <p className="text-[10px]">👤 {c.impact_victim}</p>}
+                          {c.impact_perpetrator && <p className="text-[10px]">⚠️ {c.impact_perpetrator}</p>}
+                          {c.impact_school && <p className="text-[10px]">🏫 {c.impact_school}</p>}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button size="sm" variant="ghost" onClick={() => openDlg("edit-guideline", g)}><Pencil className="h-3 w-3" /></Button>
-                      <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => { if (confirm("Hapus SOP ini?")) doDelete("/discipline-handbook/guidelines", g.id); }}><Trash2 className="h-3 w-3" /></Button>
+                  );
+                })}
+              </div>
+            )}
+          </TabsPrimitive.Panel>
+
+          {/* ══════════════ JENJANG ══════════════ */}
+          <TabsPrimitive.Panel value="levels" className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Jenjang pendidikan yang berlaku untuk SOP dan sanksi</p>
+              <Button size="sm" onClick={() => openDlg("add-level")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
+            </div>
+
+            {levels.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <GraduationCap className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada jenjang.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {levels.sort((a, b) => a.sort_order - b.sort_order).map(l => (
+                  <div key={l.id} className="rounded-lg border p-4 flex items-start justify-between gap-2 hover:border-primary/40 transition-colors">
+                    <div>
+                      <span className="text-2xl font-bold font-mono text-primary">{l.code}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">{l.name}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Urutan: {l.sort_order}</p>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-level", l)}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => {
+                        const gCount = guidelines.filter(g => g.level_id === l.id).length;
+                        const cCount = consequences.filter(c => c.level_id === l.id).length;
+                        const dCount = documents.filter(d => d.level_id === l.id).length;
+                        const total = gCount + cCount + dCount;
+                        const msg = total > 0
+                          ? `Hapus "${l.name}"? Terpakai di ${total} data (SOP:${gCount} Sanksi:${cCount} Dokumen:${dCount})`
+                          : `Hapus "${l.name}"?`;
+                        if (confirm(msg)) doDelete("/discipline-handbook/levels", l.id, l.name);
+                      }}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {guidelines.length === 0 && <p className="text-muted-foreground text-sm">Belum ada SOP.</p>}
-        </TabsPrimitive.Panel>
+                ))}
+              </div>
+            )}
+          </TabsPrimitive.Panel>
 
-        {/* ── KONSEKUENSI / SANKSI ── */}
-        <TabsPrimitive.Panel value="consequences" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => openDlg("add-consequence")}><Plus className="h-4 w-4 mr-1" />Tambah Sanksi</Button>
-          </div>
-          <div className="space-y-2">
-            {consequences.map(c => (
-              <Card key={c.id}>
-                <CardContent className="p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <Badge>{catName(c.category_id)}</Badge>
-                        <Badge variant="outline">{levelName(c.level_id)}</Badge>
-                        <Badge variant="secondary">{c.consequence_type}</Badge>
-                      </div>
-                      <p className="text-sm">{c.consequence_text}</p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button size="sm" variant="ghost" onClick={() => openDlg("edit-consequence", c)}><Pencil className="h-3 w-3" /></Button>
-                      <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => { if (confirm("Hapus sanksi ini?")) doDelete("/discipline-handbook/consequences", c.id); }}><Trash2 className="h-3 w-3" /></Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {consequences.length === 0 && <p className="text-muted-foreground text-sm">Belum ada sanksi.</p>}
-        </TabsPrimitive.Panel>
+          {/* ══════════════ SOP ══════════════ */}
+          <TabsPrimitive.Panel value="guidelines" className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Panduan penanganan per kategori, jenjang, dan tahap</p>
+              <Button size="sm" onClick={() => openDlg("add-guideline")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
+            </div>
 
-        {/* ── DOKUMEN ADMINISTRASI ── */}
-        <TabsPrimitive.Panel value="documents" className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => openDlg("add-document")}><Plus className="h-4 w-4 mr-1" />Tambah Dokumen</Button>
-          </div>
-          <div className="space-y-2">
-            {documents.map(d => (
-              <Card key={d.id}>
-                <CardContent className="p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <Badge>{catName(d.category_id)}</Badge>
-                        <Badge variant="outline">{levelName(d.level_id)}</Badge>
-                        <Badge variant="secondary">{d.document_name}</Badge>
-                      </div>
-                      {d.template_url && <a href={d.template_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline">{d.template_url}</a>}
-                      {d.description && <p className="text-xs text-muted-foreground mt-1">{d.description}</p>}
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button size="sm" variant="ghost" onClick={() => openDlg("edit-document", d)}><Pencil className="h-3 w-3" /></Button>
-                      <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600" onClick={() => { if (confirm("Hapus dokumen ini?")) doDelete("/discipline-handbook/documents", d.id); }}><Trash2 className="h-3 w-3" /></Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {documents.length === 0 && <p className="text-muted-foreground text-sm">Belum ada dokumen.</p>}
-        </TabsPrimitive.Panel>
-      </TabsPrimitive.Root>
+            {guidelines.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <FileText className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada SOP.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/60 border-b">
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Tahap</th>
+                      <th className="text-center px-4 py-2.5 font-semibold text-muted-foreground w-14">Langkah</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Isi SOP</th>
+                      <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-14">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guidelines.map((g, i) => (
+                      <tr key={g.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} hover:bg-primary/5 transition-colors`}>
+                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
+                        <td className="px-4 py-3 font-medium">{catName(g.category_id)}</td>
+                        <td className="px-4 py-3"><Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(g.level_id)}</Badge></td>
+                        <td className="px-4 py-3"><Badge variant="secondary" className="text-xs">{g.target_type}</Badge></td>
+                        <td className="px-4 py-3 text-center"><Badge className="text-xs bg-primary/15 text-primary border-0 font-bold">{g.step_number}</Badge></td>
+                        <td className="px-4 py-3 max-w-xs">
+                          <p className="line-clamp-2 leading-relaxed">{g.guideline_text}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-guideline", g)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/guidelines", g.id, `SOP #${g.id}`)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </TabsPrimitive.Panel>
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* DIALOGS */}
-      {/* ═══════════════════════════════════════════════════════════ */}
+          {/* ══════════════ SANKSI ══════════════ */}
+          <TabsPrimitive.Panel value="consequences" className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Jenis sanksi dan detail konsekuensi per kategori dan jenjang</p>
+              <Button size="sm" onClick={() => openDlg("add-consequence")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
+            </div>
 
-      {/* ── Add/Edit Category ── */}
+            {consequences.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada sanksi.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/60 border-b">
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenis Sanksi</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Detail Sanksi</th>
+                      <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-14">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consequences.map((c, i) => (
+                      <tr key={c.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} hover:bg-primary/5 transition-colors`}>
+                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
+                        <td className="px-4 py-3 font-medium">{catName(c.category_id)}</td>
+                        <td className="px-4 py-3"><Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(c.level_id)}</Badge></td>
+                        <td className="px-4 py-3">
+                          <Badge className={`text-xs font-medium ${CONSEQUENCE_BADGE[c.consequence_type] ?? "bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}`}>
+                            {c.consequence_type}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          <p className="line-clamp-2 leading-relaxed">{c.consequence_text}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-consequence", c)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/consequences", c.id, `Sanksi #${c.id}`)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </TabsPrimitive.Panel>
+
+          {/* ══════════════ DOKUMEN ══════════════ */}
+          <TabsPrimitive.Panel value="documents" className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Dokumen administrasi yang diperlukan per kategori dan jenjang</p>
+              <Button size="sm" onClick={() => openDlg("add-document")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
+            </div>
+
+            {documents.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <FolderOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Belum ada dokumen.</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/60 border-b">
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Nama Dokumen</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Template</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Keterangan</th>
+                      <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-14">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((d, i) => (
+                      <tr key={d.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} hover:bg-primary/5 transition-colors`}>
+                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
+                        <td className="px-4 py-3 font-medium">{d.document_name}</td>
+                        <td className="px-4 py-3">{catName(d.category_id)}</td>
+                        <td className="px-4 py-3"><Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(d.level_id)}</Badge></td>
+                        <td className="px-4 py-3">
+                          {d.template_url ? (
+                            <a href={d.template_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-blue-500 hover:underline">
+                              <ExternalLink className="h-3 w-3" />
+                              <span className="text-xs truncate max-w-[140px]">{d.template_url.split("/").pop()}</span>
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          {d.description ? <p className="line-clamp-2 leading-relaxed">{d.description}</p> : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-document", d)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/documents", d.id, d.document_name)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </TabsPrimitive.Panel>
+        </TabsPrimitive.Root>
+      </div>
+
+      {/* ── Dialogs ── */}
       <Dialog open={dlg.open === "add-category" || dlg.open === "edit-category"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{dlg.data?.id ? "Edit Kategori" : "Tambah Kategori"}</DialogTitle>
-            <DialogDescription>4 tingkatan pelanggaran: Ringan, Sedang, Berat, Sangat Berat</DialogDescription>
+            <DialogDescription>4 tingkatan: Ringan, Sedang, Berat, Sangat Berat</DialogDescription>
           </DialogHeader>
           <FormCategory data={dlg.data} onSubmit={(body) => {
-            if (dlg.data?.id) doPost("/discipline-handbook/categories", { ...body, id: dlg.data.id }, () => {});
+            if (dlg.data?.id) doPut(`/discipline-handbook/categories/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/categories", body);
           }} />
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit Level ── */}
       <Dialog open={dlg.open === "add-level" || dlg.open === "edit-level"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{dlg.data?.id ? "Edit Jenjang" : "Tambah Jenjang"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Jenjang" : "Tambah Jenjang"}</DialogTitle></DialogHeader>
           <FormLevel data={dlg.data} onSubmit={(body) => {
-            if (dlg.data?.id) doPost("/discipline-handbook/levels", { ...body, id: dlg.data.id }, () => {});
+            if (dlg.data?.id) doPut(`/discipline-handbook/levels/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/levels", body);
           }} />
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit Group ── */}
       <Dialog open={dlg.open === "add-group"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Tambah Kelompok Perilaku</DialogTitle></DialogHeader>
@@ -429,51 +609,47 @@ export default function AdminDisciplineHandbookPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit Behavior ── */}
       <Dialog open={dlg.open === "add-behavior" || dlg.open === "edit-behavior"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{dlg.data?.id ? `Edit Perilaku: "${dlg.data.behavior_text?.slice(0, 30)}…"` : "Tambah Perilaku Spesifik"}</DialogTitle>
-            <DialogDescription>Pilih kelompok perilaku dan tentukan jenjang yang berlaku.</DialogDescription>
+            <DialogTitle>{dlg.data?.id ? `Edit Perilaku` : "Tambah Perilaku Spesifik"}</DialogTitle>
+            <DialogDescription>Pilih kelompok dan jenjang yang berlaku.</DialogDescription>
           </DialogHeader>
           <FormBehavior data={dlg.data} categories={categories} groups={tree.flatMap(n => n.groups.map(g => g.group))} levels={levels} onSubmit={(body) => {
             if (dlg.data?.id) {
               doPost("/discipline-handbook/behaviors", { ...body, id: dlg.data.id }, () => doPut(`/discipline-handbook/behaviors/${dlg.data.id}/levels`, { level_ids: body.level_ids }));
             } else {
-              doPost("/discipline-handbook/behaviors", { group_id: body.group_id, behavior_text: body.behavior_text }, () => {});
+              doPost("/discipline-handbook/behaviors", { group_id: body.group_id, behavior_text: body.behavior_text });
             }
           }} />
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit SOP ── */}
       <Dialog open={dlg.open === "add-guideline" || dlg.open === "edit-guideline"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit SOP" : "Tambah SOP"}</DialogTitle></DialogHeader>
           <FormGuideline data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
-            if (dlg.data?.id) doPost("/discipline-handbook/guidelines", { ...body, id: dlg.data.id }, () => {});
+            if (dlg.data?.id) doPut(`/discipline-handbook/guidelines/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/guidelines", body);
           }} />
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit Sanksi ── */}
       <Dialog open={dlg.open === "add-consequence" || dlg.open === "edit-consequence"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Sanksi" : "Tambah Sanksi / Konsekuensi"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Sanksi" : "Tambah Sanksi"}</DialogTitle></DialogHeader>
           <FormConsequence data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
-            if (dlg.data?.id) doPost("/discipline-handbook/consequences", { ...body, id: dlg.data.id }, () => {});
+            if (dlg.data?.id) doPut(`/discipline-handbook/consequences/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/consequences", body);
           }} />
         </DialogContent>
       </Dialog>
 
-      {/* ── Add/Edit Document ── */}
       <Dialog open={dlg.open === "add-document" || dlg.open === "edit-document"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Dokumen" : "Tambah Dokumen Administrasi"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Dokumen" : "Tambah Dokumen"}</DialogTitle></DialogHeader>
           <FormDocument data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
-            if (dlg.data?.id) doPost("/discipline-handbook/documents", { ...body, id: dlg.data.id }, () => {});
+            if (dlg.data?.id) doPut(`/discipline-handbook/documents/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/documents", body);
           }} />
         </DialogContent>
@@ -535,9 +711,7 @@ function FormGroup({ categories, onSubmit }: { categories: Category[]; onSubmit:
 function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: any; categories: Category[]; groups: BehaviorGroup[]; levels: EducationLevel[]; onSubmit: (b: any) => void }) {
   const [f, setF] = useState({ category_id: data ? String(groups.find(g => g.id === data.group_id)?.category_id ?? "") : "", group_id: data ? String(data.group_id) : "", behavior_text: data?.behavior_text ?? "", level_ids: data?.levels?.map((l: Level) => l.id) ?? [] });
   const [saving, setSaving] = useState(false);
-
   const filteredGroups = f.category_id ? groups.filter(g => g.category_id === Number(f.category_id)) : groups;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!f.group_id) { toast.error("Pilih kelompok perilaku"); return; }
@@ -545,11 +719,7 @@ function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: a
     onSubmit({ group_id: Number(f.group_id), behavior_text: f.behavior_text, level_ids: f.level_ids });
     setSaving(false);
   };
-
-  const toggleLevel = (id: number) => {
-    setF(prev => ({ ...prev, level_ids: prev.level_ids.includes(id) ? prev.level_ids.filter(l => l !== id) : [...prev.level_ids, id] }));
-  };
-
+  const toggleLevel = (id: number) => setF(prev => ({ ...prev, level_ids: prev.level_ids.includes(id) ? prev.level_ids.filter(l => l !== id) : [...prev.level_ids, id] }));
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div><Label>Kategori *</Label>
