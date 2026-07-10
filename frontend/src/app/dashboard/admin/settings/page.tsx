@@ -142,7 +142,7 @@ export default function AdminSettingsPage() {
 
               {aiSettings.enabled && (
                 <div className="space-y-4 pt-2">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Provider Type</Label>
                       <Select

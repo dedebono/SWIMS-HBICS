@@ -22,6 +22,7 @@ interface TopbarProps {
     email: string;
     role: string;
   };
+  onMenuClick?: () => void;
 }
 
 const roleTranslationKeys: Record<string, string> = {
@@ -35,7 +36,7 @@ const roleTranslationKeys: Record<string, string> = {
   IT_ADMIN: 'role.it_admin',
 };
 
-export function Topbar({ user }: TopbarProps) {
+export function Topbar({ user, onMenuClick }: TopbarProps) {
   const router = useRouter();
   const { logout } = useAuth();
   const { t, language } = useTranslation();
@@ -54,12 +55,25 @@ export function Topbar({ user }: TopbarProps) {
   };
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-border bg-card/50 px-6 backdrop-blur-sm">
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold text-foreground">{t('dashboard.title')}</h1>
+    <header className="flex h-16 items-center justify-between border-b border-border bg-card/50 px-4 backdrop-blur-sm sm:px-6">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onMenuClick}
+          className="md:hidden -ml-1 h-9 w-9"
+          aria-label="Open menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </Button>
+        <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">{t('dashboard.title')}</h1>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         <Button 
           variant="outline" 
           size="sm" 
@@ -68,7 +82,7 @@ export function Topbar({ user }: TopbarProps) {
         >
           {language === 'en' ? 'ID' : 'EN'}
         </Button>
-        <Badge variant="outline" className="text-xs font-normal">
+        <Badge variant="outline" className="hidden text-xs font-normal sm:inline-flex">
           {user.role in roleTranslationKeys ? t(roleTranslationKeys[user.role]) : user.role}
         </Badge>
 

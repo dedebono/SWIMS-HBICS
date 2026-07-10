@@ -172,7 +172,7 @@ export default function AdminDisciplineHandbookPage() {
       {/* ── Tab Navigation ── */}
       <div className="rounded-lg border bg-card">
         <TabsPrimitive.Root value={activeTab} onValueChange={setActiveTab}>
-          <TabsPrimitive.List className="grid grid-cols-6 w-full rounded-t-lg overflow-hidden border-b bg-card/60">
+          <TabsPrimitive.List className="flex w-full overflow-x-auto rounded-t-lg border-b bg-card/60 md:grid md:grid-cols-6">
             {[
               { value: "structure", icon: Layers, label: "Struktur" },
               { value: "categories", icon: Scale, label: "Kategori" },
@@ -184,7 +184,7 @@ export default function AdminDisciplineHandbookPage() {
               <TabsPrimitive.Tab
                 key={value}
                 value={value}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all outline-none cursor-pointer border-b-2 border-transparent data-selected:text-primary data-selected:border-primary data-selected:bg-primary/5"
+                className="flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all outline-none cursor-pointer border-b-2 border-transparent data-selected:text-primary data-selected:border-primary data-selected:bg-primary/5 md:flex-1"
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span>{label}</span>
@@ -413,7 +413,7 @@ export default function AdminDisciplineHandbookPage() {
                 <p className="text-sm">Belum ada SOP.</p>
               </div>
             ) : (
-              <div className="rounded-lg border overflow-hidden">
+              <div className="rounded-lg border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/60 border-b">
@@ -468,7 +468,7 @@ export default function AdminDisciplineHandbookPage() {
                 <p className="text-sm">Belum ada sanksi.</p>
               </div>
             ) : (
-              <div className="rounded-lg border overflow-hidden">
+              <div className="rounded-lg border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/60 border-b">
@@ -525,7 +525,7 @@ export default function AdminDisciplineHandbookPage() {
                 <p className="text-sm">Belum ada dokumen.</p>
               </div>
             ) : (
-              <div className="rounded-lg border overflow-hidden">
+              <div className="rounded-lg border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/60 border-b">

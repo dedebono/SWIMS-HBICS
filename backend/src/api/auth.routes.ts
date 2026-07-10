@@ -8,23 +8,27 @@ import { RateLimitError } from '../utils/errors.js';
 
 const router = Router();
 
-// ─── Rate limiting for refresh endpoint ───────────────────────────────────────
-const refreshAttempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_REFRESH_ATTEMPTS = 20;
-const REFRESH_WINDOW_MS = 15 * 60 * 1000; // 15 min
+// ─── Login Rate limiting ─────────────────────────────────────────────────────
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 min
 
-function checkRefreshRateLimit(ip: string): void {
+function checkLoginRateLimit(ip: string): void {
   const now = Date.now();
-  const entry = refreshAttempts.get(ip);
+  const entry = loginAttempts.get(ip);
   if (entry && now < entry.resetAt) {
-    if (entry.count >= MAX_REFRESH_ATTEMPTS) {
+    if (entry.count >= MAX_LOGIN_ATTEMPTS) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
       throw new RateLimitError(retryAfter);
     }
     entry.count++;
   } else {
-    refreshAttempts.set(ip, { count: 1, resetAt: now + REFRESH_WINDOW_MS });
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
   }
+}
+
+export function clearLoginRateLimit(ip: string): void {
+  loginAttempts.delete(ip);
 }
 
 // ─── Validation Schemas ──────────────────────────────────────────────────────
@@ -53,6 +57,9 @@ router.get('/captcha', asyncHandler(async (req, res) => {
 router.post(
   '/login',
   asyncHandler(async (req, res) => {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+    checkLoginRateLimit(ip);
+
     const body = loginSchema.parse(req.body);
 
     // Verify captcha before attempting login
@@ -64,6 +71,9 @@ router.post(
       body.tenant_slug,
       req.ip,
     );
+
+    // Clear rate limit on successful login
+    clearLoginRateLimit(ip);
 
     // Set httpOnly cookie for refresh token (XSS protection)
     res.setHeader('Set-Cookie', authService.buildRefreshCookie(result.tokens.refreshToken));
@@ -80,9 +90,6 @@ router.post(
 router.post(
   '/refresh',
   asyncHandler(async (req, res) => {
-    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
-    checkRefreshRateLimit(ip);
-
     // Prefer body param (for API clients), fall back to httpOnly cookie (for browsers)
     const parsed = refreshBodySchema.safeParse(req.body);
     let refreshToken = parsed.success ? (parsed.data as { refresh_token?: string }).refresh_token : undefined;
