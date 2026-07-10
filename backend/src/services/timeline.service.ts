@@ -4,7 +4,10 @@ import type {
   TimelineEvent,
   StudentProgress,
   StudentProfile,
+  StudentCaseSummary,
   RiskLevel,
+  CaseType,
+  CaseStatus,
 } from '@swims/shared';
 
 const RISK_RANK: Record<RiskLevel, number> = {
@@ -241,8 +244,8 @@ export async function getStudentProgress(
     else if (row.status === 'MONITORING') monitoring += count;
     else if (row.status === 'CLOSED') closed += count;
 
-    if (row.risk_level && RISK_RANK[row.risk_level] > maxRiskRank) {
-      maxRiskRank = RISK_RANK[row.risk_level];
+    if (row.risk_level && RISK_RANK[row.risk_level]! > maxRiskRank) {
+      maxRiskRank = RISK_RANK[row.risk_level]!;
       maxRisk = row.risk_level;
     }
   }
@@ -361,8 +364,8 @@ export async function getStudentProfile(
   let riskLevel: RiskLevel = 'LOW';
   let rank = -1;
   for (const r of riskRows.rows) {
-    if (r.risk_level && RISK_RANK[r.risk_level] > rank) {
-      rank = RISK_RANK[r.risk_level];
+    if (r.risk_level && RISK_RANK[r.risk_level]! > rank) {
+      rank = RISK_RANK[r.risk_level]!;
       riskLevel = r.risk_level;
     }
   }
@@ -424,4 +427,67 @@ export async function getStudentProfile(
     },
     timeline,
   };
+}
+
+/**
+ * Returns every case belonging to a student, with lightweight rollups
+ * (incident count, intervention count, latest incident date). This is what the
+ * Student Timeline page lists so a counselor can see ALL of a student's cases
+ * in one place and drill into any of them.
+ */
+export async function getStudentCases(
+  tenantId: string,
+  studentId: string,
+): Promise<StudentCaseSummary[]> {
+  const res = await queryWithTenant<{
+    case_id: string;
+    case_type: CaseType;
+    status: CaseStatus;
+    risk_level: RiskLevel;
+    opened_date: string | null;
+    closed_date: string | null;
+    summary: string | null;
+    assigned_counselor_name: string | null;
+    incident_count: string;
+    intervention_count: string;
+    latest_incident_at: string | null;
+  }>(
+    tenantId,
+    `SELECT
+       c.case_id,
+       c.case_type,
+       c.status,
+       c.risk_level,
+       c.opened_date,
+       c.closed_date,
+       c.summary,
+       u.full_name AS assigned_counselor_name,
+       (SELECT COUNT(*)::int FROM incidents i
+          WHERE i.case_id = c.case_id AND i.tenant_id = $1 AND i.deleted_at IS NULL) AS incident_count,
+       (SELECT COUNT(*)::int FROM interventions iv
+          WHERE iv.case_id = c.case_id AND iv.tenant_id = $1 AND iv.deleted_at IS NULL) AS intervention_count,
+       (SELECT MAX(i2.incident_at) FROM incidents i2
+          WHERE i2.case_id = c.case_id AND i2.tenant_id = $1 AND i2.deleted_at IS NULL) AS latest_incident_at
+     FROM cases c
+     LEFT JOIN users u ON u.user_id = c.assigned_counselor
+     WHERE c.student_id = $2 AND c.tenant_id = $1 AND c.deleted_at IS NULL
+     ORDER BY
+       CASE c.status WHEN 'OPEN' THEN 0 WHEN 'MONITORING' THEN 1 WHEN 'CLOSED' THEN 2 END,
+       c.opened_date DESC NULLS LAST`,
+    [tenantId, studentId],
+  );
+
+  return res.rows.map((r) => ({
+    case_id: r.case_id,
+    case_type: r.case_type,
+    status: r.status,
+    risk_level: r.risk_level,
+    opened_date: r.opened_date,
+    closed_date: r.closed_date,
+    summary: r.summary,
+    assigned_counselor_name: r.assigned_counselor_name,
+    incident_count: Number(r.incident_count),
+    intervention_count: Number(r.intervention_count),
+    latest_incident_at: r.latest_incident_at,
+  }));
 }

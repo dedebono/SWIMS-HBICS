@@ -135,4 +135,24 @@ router.get(
   }),
 );
 
+// ─── GET /api/students/:studentId/cases ─────────────────────────────────────
+
+router.get(
+  '/:studentId/cases',
+  checkPermission('students', 'read'),
+  asyncHandler(async (req, res) => {
+    const studentIdParam = req.params['studentId'];
+    if (!studentIdParam) {
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
+    }
+
+    const cases = await timelineService.getStudentCases(
+      req.tenantId,
+      String(studentIdParam),
+    );
+    sendSuccess(res, cases);
+  }),
+);
+
 export default router;

@@ -89,6 +89,25 @@ export interface StudentProfile {
   timeline: StudentProfileTimelineItem[];
 }
 
+// ─── Student Cases Types ────────────────────────────────────────────────────
+
+export type CaseType = 'BEHAVIORAL' | 'EMOTIONAL' | 'MEDICAL' | 'ACADEMIC' | 'POSITIVE';
+export type CaseStatus = 'OPEN' | 'MONITORING' | 'CLOSED';
+
+export interface StudentCaseSummary {
+  case_id: string;
+  case_type: CaseType;
+  status: CaseStatus;
+  risk_level: RiskLevel;
+  opened_date: string | null;
+  closed_date: string | null;
+  summary: string | null;
+  assigned_counselor_name: string | null;
+  incident_count: number;
+  intervention_count: number;
+  latest_incident_at: string | null;
+}
+
 // ─── Auth Types ──────────────────────────────────────────────────────────────
 
 export interface LoginRequest {

@@ -44,6 +44,34 @@ const riskBadge: Record<string, string> = {
   CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
 };
 
+interface StudentCase {
+  case_id: string;
+  case_type: 'BEHAVIORAL' | 'EMOTIONAL' | 'MEDICAL' | 'ACADEMIC' | 'POSITIVE';
+  status: 'OPEN' | 'MONITORING' | 'CLOSED';
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null;
+  opened_date: string | null;
+  closed_date: string | null;
+  summary: string | null;
+  assigned_counselor_name: string | null;
+  incident_count: number;
+  intervention_count: number;
+  latest_incident_at: string | null;
+}
+
+const caseTypeColors: Record<string, string> = {
+  BEHAVIORAL: 'bg-event-incident/15 text-event-incident border-event-incident/30',
+  EMOTIONAL: 'bg-event-case-change/15 text-event-case-change border-event-case-change/30',
+  MEDICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
+  ACADEMIC: 'bg-event-intervention/15 text-event-intervention border-event-intervention/30',
+  POSITIVE: 'bg-event-observation/15 text-event-observation border-event-observation/30',
+};
+
+const caseStatusColors: Record<string, string> = {
+  OPEN: 'bg-severity-high/15 text-severity-high border-severity-high/30',
+  MONITORING: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
+  CLOSED: 'bg-severity-low/15 text-severity-low border-severity-low/30',
+};
+
 const eventColors: Record<string, { dot: string; line: string; bg: string; label: string }> = {
   INCIDENT: {
     dot: 'bg-event-incident',
@@ -98,6 +126,7 @@ export default function StudentTimelinePage({
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [cases, setCases] = useState<StudentCase[]>([]);
 
   useEffect(() => {
     const fetchProgress = async () => {
@@ -111,6 +140,20 @@ export default function StudentTimelinePage({
       }
     };
     fetchProgress();
+  }, [resolvedParams.studentId]);
+
+  useEffect(() => {
+    const fetchCases = async () => {
+      try {
+        const res = await apiClient<StudentCase[]>(
+          `/students/${resolvedParams.studentId}/cases`,
+        );
+        if (res.success && res.data) setCases(res.data);
+      } catch {
+        /* non-fatal */
+      }
+    };
+    fetchCases();
   }, [resolvedParams.studentId]);
 
   useEffect(() => {
@@ -285,6 +328,63 @@ export default function StudentTimelinePage({
           </CardContent>
         </Card>
       )}
+
+      {/* Cases */}
+      <Card className="glass border-border/50">
+        <CardContent className="p-4 space-y-3">
+          <h3 className="text-sm font-semibold">Cases ({cases.length})</h3>
+          {cases.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No cases recorded for this student.</p>
+          ) : (
+            <div className="space-y-2">
+              {cases.map((c) => (
+                <a
+                  key={c.case_id}
+                  href={`/dashboard/cases/${c.case_id}`}
+                  className="block rounded-lg border p-3 transition-all hover:border-primary/40 hover:shadow-md"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className={`text-[10px] ${caseTypeColors[c.case_type] ?? ''}`}>
+                        {c.case_type}
+                      </Badge>
+                      <Badge variant="outline" className={`text-[10px] ${caseStatusColors[c.status] ?? ''}`}>
+                        {c.status}
+                      </Badge>
+                      {c.risk_level && (
+                        <Badge variant="outline" className={`text-[10px] ${riskBadge[c.risk_level]}`}>
+                          {c.risk_level}
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {c.opened_date
+                        ? new Date(c.opened_date).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })
+                        : '-'}
+                    </span>
+                  </div>
+                  {c.summary && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.summary}</p>
+                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                    <span>
+                      {c.incident_count} incident{c.incident_count !== 1 ? 's' : ''}
+                    </span>
+                    <span>
+                      {c.intervention_count} intervention{c.intervention_count !== 1 ? 's' : ''}
+                    </span>
+                    {c.assigned_counselor_name && <span>Counselor: {c.assigned_counselor_name}</span>}
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Timeline */}
       {isLoading ? (
