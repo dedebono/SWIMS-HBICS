@@ -27,6 +27,23 @@ interface TimelineEvent {
   relevance_weight: number;
 }
 
+interface StudentProgress {
+  has_data: boolean;
+  cases: { total: number; open: number; monitoring: number; closed: number; closure_rate: number };
+  interventions: { total: number; completed: number; scheduled: number; completion_rate: number };
+  incidents: { total: number };
+  observations: { total: number };
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | null;
+  progress_percentage: number;
+}
+
+const riskBadge: Record<string, string> = {
+  LOW: 'bg-severity-low/15 text-severity-low border-severity-low/30',
+  MEDIUM: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
+  HIGH: 'bg-severity-high/15 text-severity-high border-severity-high/30',
+  CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
+};
+
 const eventColors: Record<string, { dot: string; line: string; bg: string; label: string }> = {
   INCIDENT: {
     dot: 'bg-event-incident',
@@ -80,6 +97,21 @@ export default function StudentTimelinePage({
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [progress, setProgress] = useState<StudentProgress | null>(null);
+
+  useEffect(() => {
+    const fetchProgress = async () => {
+      try {
+        const res = await apiClient<StudentProgress>(
+          `/students/${resolvedParams.studentId}/progress`,
+        );
+        if (res.success && res.data) setProgress(res.data);
+      } catch {
+        /* non-fatal: timeline still renders */
+      }
+    };
+    fetchProgress();
+  }, [resolvedParams.studentId]);
 
   useEffect(() => {
     const fetchTimeline = async () => {
@@ -189,6 +221,70 @@ export default function StudentTimelinePage({
           )}
         </CardContent>
       </Card>
+
+      {/* Progress Summary */}
+      {progress && (
+        <Card className="glass border-border/50">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Student Progress</h3>
+              {progress.risk_level && (
+                <Badge variant="outline" className={`text-[10px] ${riskBadge[progress.risk_level]}`}>
+                  {progress.risk_level} risk
+                </Badge>
+              )}
+            </div>
+
+            {!progress.has_data ? (
+              <p className="text-xs text-muted-foreground">
+                No cases, interventions, or incidents recorded yet.
+              </p>
+            ) : (
+              <>
+                {/* Overall progress bar */}
+                <div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                    <span>Overall progress</span>
+                    <span className="font-medium text-foreground">{progress.progress_percentage}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${progress.progress_percentage}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Stat grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="rounded-lg border bg-card p-3">
+                    <p className="text-[11px] text-muted-foreground">Cases</p>
+                    <p className="text-lg font-bold">{progress.cases.total}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {progress.cases.open} open · {progress.cases.monitoring} mon · {progress.cases.closed} closed
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-3">
+                    <p className="text-[11px] text-muted-foreground">Interventions</p>
+                    <p className="text-lg font-bold">
+                      {progress.interventions.completed}/{progress.interventions.total}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{progress.interventions.scheduled} scheduled</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-3">
+                    <p className="text-[11px] text-muted-foreground">Incidents</p>
+                    <p className="text-lg font-bold">{progress.incidents.total}</p>
+                  </div>
+                  <div className="rounded-lg border bg-card p-3">
+                    <p className="text-[11px] text-muted-foreground">Achievements</p>
+                    <p className="text-lg font-bold text-green-600">{progress.observations.total}</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Timeline */}
       {isLoading ? (

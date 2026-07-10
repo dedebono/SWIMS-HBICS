@@ -91,4 +91,48 @@ router.get(
   }),
 );
 
+// ─── GET /api/students/:studentId/progress ──────────────────────────────────
+
+router.get(
+  '/:studentId/progress',
+  checkPermission('students', 'read'),
+  asyncHandler(async (req, res) => {
+    const studentIdParam = req.params['studentId'];
+    if (!studentIdParam) {
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
+    }
+
+    const progress = await timelineService.getStudentProgress(
+      req.tenantId,
+      String(studentIdParam),
+    );
+    sendSuccess(res, progress);
+  }),
+);
+
+// ─── GET /api/students/:studentId/profile ───────────────────────────────────
+
+router.get(
+  '/:studentId/profile',
+  checkPermission('students', 'read'),
+  asyncHandler(async (req, res) => {
+    const studentIdParam = req.params['studentId'];
+    if (!studentIdParam) {
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
+    }
+
+    const profile = await timelineService.getStudentProfile(
+      req.tenantId,
+      String(studentIdParam),
+    );
+    if (!profile) {
+      res.status(404).json({ success: false, error: 'Student not found' });
+      return;
+    }
+    sendSuccess(res, profile);
+  }),
+);
+
 export default router;

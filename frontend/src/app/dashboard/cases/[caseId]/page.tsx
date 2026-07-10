@@ -31,6 +31,7 @@ import {
 import { InterventionsTab } from '@/components/cases/interventions-tab';
 import { MediaTab } from '@/components/cases/media-tab';
 import { CommunicationsTab } from '@/components/cases/communications-tab';
+import { StudentProfileDialog } from '@/components/students/student-profile-dialog';
 import { RISK_COLORS, STATUS_COLORS } from '@/lib/constants';
 interface CaseDetail {
   case_id: string;
@@ -112,6 +113,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const [hasMoreTeachers, setHasMoreTeachers] = useState(false);
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [isLoadingShares, setIsLoadingShares] = useState(false);
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -366,11 +368,22 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
             {/* Student Details Card */}
             {studentData && (
               <Card className="glass border-border/50">
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <User className="w-4 h-4 text-primary" />
                     Student Details
                   </CardTitle>
+                  {studentData && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1 shrink-0"
+                      onClick={() => setProfileDialogOpen(true)}
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      View Profile
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <InfoRow label="Name" value={studentData.full_name} />
@@ -689,6 +702,13 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Student Profile Dialog */}
+      <StudentProfileDialog
+        studentId={caseData?.student_id ?? null}
+        open={profileDialogOpen}
+        onOpenChange={setProfileDialogOpen}
+      />
     </div>
   );
 }

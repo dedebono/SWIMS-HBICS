@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { apiClient } from '@/lib/api-client';
@@ -158,6 +159,14 @@ export function StudentProfileDialog({
                   </tbody>
                 </table>
               </div>
+            </div>
+            <div className="pt-2">
+              <Link
+                href={`/dashboard/students/${profile.student_id}/timeline`}
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                View full student timeline &amp; progress →
+              </Link>
             </div>
           </div>
         ) : (

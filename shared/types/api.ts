@@ -39,6 +39,56 @@ export interface TimelineEvent {
   metadata?: Record<string, unknown>;
 }
 
+// ─── Student Progress Types ──────────────────────────────────────────────────
+
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface StudentProgress {
+  has_data: boolean;
+  cases: {
+    total: number;
+    open: number;
+    monitoring: number;
+    closed: number;
+    closure_rate: number; // 0..1 (closed / total)
+  };
+  interventions: {
+    total: number;
+    completed: number;
+    scheduled: number;
+    completion_rate: number; // 0..1 (completed / total)
+  };
+  incidents: { total: number };
+  observations: { total: number };
+  risk_level: RiskLevel | null;
+  progress_percentage: number; // 0..100 derived overall
+}
+
+export interface StudentProfileTimelineItem {
+  date: string;
+  type: string;
+  status: string;
+  handled_by: string;
+}
+
+export interface StudentProfile {
+  student_id: string;
+  full_name: string;
+  national_id: string | null;
+  enrollment: {
+    class_name: string | null;
+    academic_year: string | null;
+  };
+  summary: {
+    total_active_cases: number;
+    total_incidents: number;
+    risk_level: RiskLevel;
+    positive_count: number;
+    last_incident_date: string | null;
+  };
+  timeline: StudentProfileTimelineItem[];
+}
+
 // ─── Auth Types ──────────────────────────────────────────────────────────────
 
 export interface LoginRequest {
