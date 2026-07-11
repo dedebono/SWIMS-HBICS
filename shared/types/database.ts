@@ -49,7 +49,6 @@ export type Severity = (typeof Severity)[keyof typeof Severity];
 export const Role = {
   TEACHER: 'TEACHER',
   SUBSTITUTE_TEACHER: 'SUBSTITUTE_TEACHER',
-  HOMEROOM_TEACHER: 'HOMEROOM_TEACHER',
   COUNSELOR: 'COUNSELOR',
   SCHOOL_NURSE: 'SCHOOL_NURSE',
   SCHOOL_HEAD: 'SCHOOL_HEAD',

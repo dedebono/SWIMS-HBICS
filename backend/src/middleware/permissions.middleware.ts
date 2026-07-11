@@ -4,6 +4,7 @@ import type { Role } from '@swims/shared';
 import { ForbiddenError } from '../utils/errors.js';
 import { pool } from '../db/pool.js';
 import { hasSharedAccess } from '../services/case-shares.service.js';
+import { getTenantPermissionMatrix } from '../services/role-permissions.service.js';
 
 // ─── ABAC result cache (TTL: 60s) ───────────────────────────────────────────────
 // Prevents pool exhaustion when many teachers access cases simultaneously.
@@ -51,10 +52,26 @@ export function checkPermission(resource: Resource, action: Action) {
       const role = req.userRole as Role;
       console.log(`[Permission Check] Starting for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
-      // ── Step 1: RBAC check ──────────────────────────────────────────────
-      const rolePerms = PERMISSIONS[role];
-      if (!rolePerms) {
-        console.error(`[RBAC Error] Unknown role: ${role}`);
+      // ── Step 1: RBAC check (dynamic, per-tenant) ───────────────────────
+      // Permission matrix is loaded from the role_permissions table. If the DB
+      // read fails, fall back to the static PERMISSIONS matrix so the system
+      // never fully locks out on a transient DB error.
+      const tenantId = req.tenantId;
+      let rolePerms: Record<string, Record<string, boolean>>;
+      if (!tenantId) {
+        rolePerms = (PERMISSIONS as unknown as Record<string, Record<string, Record<string, boolean>>>)[role] ?? {};
+      } else {
+        try {
+          const matrix = await getTenantPermissionMatrix(tenantId);
+          rolePerms = matrix[role] ?? {};
+        } catch (err) {
+          console.error(`[RBAC Error] Failed to load dynamic matrix, using static fallback:`, err);
+          rolePerms = (PERMISSIONS as unknown as Record<string, Record<string, Record<string, boolean>>>)[role] ?? {};
+        }
+      }
+
+      if (!rolePerms || Object.keys(rolePerms).length === 0) {
+        console.error(`[RBAC Error] Unknown role or no permissions for role: ${role}`);
         return next(new ForbiddenError(`Unknown role: ${role}`));
       }
 

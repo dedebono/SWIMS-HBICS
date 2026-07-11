@@ -47,7 +47,7 @@ export default function LoginPage() {
       
       switch (loggedInUser.role) {
         case 'IT_ADMIN':
-          router.push('/dashboard/admin/settings');
+          router.push('/dashboard/admin');
           break;
         case 'COUNSELOR':
           router.push('/dashboard/counselor');
@@ -63,9 +63,6 @@ export default function LoginPage() {
           break;
         case 'CASE_REVIEWER':
           router.push('/dashboard/reviewer');
-          break;
-        case 'HOMEROOM_TEACHER':
-          router.push('/dashboard/homeroom');
           break;
         default:
           // TEACHER, SUBSTITUTE_TEACHER, etc.

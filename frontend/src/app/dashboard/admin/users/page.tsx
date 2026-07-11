@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Users, UploadCloud, RefreshCw, Search, Filter, ArrowUpDown, ChevronUp, ChevronDown, Pencil } from "lucide-react";
+import { Users, UploadCloud, RefreshCw, Search, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 import Papa from "papaparse";
+import RolePermissionsManager from "@/components/admin/RolePermissionsManager";
 
-type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'HOMEROOM_TEACHER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER';
+type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER';
 
 interface UserData {
   id: string;
@@ -41,6 +42,7 @@ export default function AdminUsersPage() {
 
   const [users, setUsers] = useState<UserData[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [allUsersOpen, setAllUsersOpen] = useState(false);
 
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState("");
@@ -325,6 +327,7 @@ export default function AdminUsersPage() {
                     <SelectItem value="COUNSELOR">Counselor</SelectItem>
                     <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
                     <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
+                    <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
                     <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
                   </SelectContent>
                 </Select>
@@ -419,18 +422,25 @@ export default function AdminUsersPage() {
       {/* ALL USERS LIST */}
       <Card className="glass shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              All Directory Users
-            </CardTitle>
-            <CardDescription>View all students and staff members in the system.</CardDescription>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setAllUsersOpen(o => !o)} aria-label="Toggle users list">
+              {allUsersOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                All Directory Users
+                <span className="text-xs font-normal text-muted-foreground">({users.length})</span>
+              </CardTitle>
+              <CardDescription>View all students and staff members in the system.</CardDescription>
+            </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => fetchUsers(true)} disabled={isLoadingUsers}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingUsers ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </CardHeader>
+        {allUsersOpen && (
         <CardContent>
           {/* Filter Bar */}
           <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -557,6 +567,7 @@ export default function AdminUsersPage() {
             </div>
           )}
         </CardContent>
+        )}
       </Card>
 
       {/* EDIT USER DIALOG */}
@@ -599,6 +610,7 @@ export default function AdminUsersPage() {
                       <SelectItem value="COUNSELOR">Counselor</SelectItem>
                       <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
                       <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
+                      <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
                       <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
                     </SelectContent>
                   </Select>
@@ -640,6 +652,9 @@ export default function AdminUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ROLE PERMISSIONS MANAGER */}
+      <RolePermissionsManager />
     </div>
   );
 }

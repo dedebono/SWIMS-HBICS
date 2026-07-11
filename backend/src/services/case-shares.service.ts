@@ -209,7 +209,7 @@ export async function listAvailableTeachers(
      WHERE tenant_id = $1
        AND deleted_at IS NULL
        AND is_active = true
-       AND role IN ('TEACHER', 'SUBSTITUTE_TEACHER', 'HOMEROOM_TEACHER', 'COUNSELOR', 'SCHOOL_HEAD')`;
+       AND role IN ('TEACHER', 'SUBSTITUTE_TEACHER', 'COUNSELOR', 'SCHOOL_HEAD')`;
 
   const [{ rows: rows }, { rows: countRows }] = await Promise.all([
     queryWithTenant<TeacherListItem>(

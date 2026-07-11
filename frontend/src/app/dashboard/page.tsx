@@ -14,7 +14,7 @@ export default function DashboardRootPage() {
     // Redirect EVERY role to their specific sub-dashboard folder
     switch (user.role) {
       case 'IT_ADMIN':
-        router.replace('/dashboard/admin/settings');
+        router.replace('/dashboard/admin');
         break;
       case 'COUNSELOR':
         router.replace('/dashboard/counselor');
