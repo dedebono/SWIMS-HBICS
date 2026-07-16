@@ -16,6 +16,7 @@ export interface CreateIncidentInput {
   severity: string;
   description: string;
   location?: string;
+  student_grade?: string | null;
   incident_at: string;
   witnesses?: Array<{ user_id?: string; name: string; statement?: string }>;
   immediate_actions?: string;
@@ -29,6 +30,7 @@ export interface UpdateIncidentInput {
   severity?: string;
   description?: string;
   location?: string;
+  student_grade?: string | null;
   incident_at?: string;
   witnesses?: Array<{ user_id?: string; name: string; statement?: string }>;
   immediate_actions?: string;
@@ -61,8 +63,8 @@ export async function createIncident(
     const { rows } = await client.query<IncidentRow>(
       `INSERT INTO incidents (
         tenant_id, case_id, student_id, category, sub_category, severity,
-        description, location, incident_at, reported_by, witnesses, immediate_actions, involved_teacher, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        description, location, student_grade, incident_at, reported_by, witnesses, immediate_actions, involved_teacher, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING *`,
       [
         tenantId,
@@ -73,6 +75,7 @@ export async function createIncident(
         input.severity,
         input.description,
         input.location ?? null,
+        input.student_grade ?? null,
         input.incident_at,
         reportedBy,
         JSON.stringify(input.witnesses ?? []),
@@ -256,6 +259,10 @@ export async function updateIncident(
   if (input.location !== undefined) {
     setClauses.push(`location = $${paramIdx++}`);
     values.push(input.location);
+  }
+  if (input.student_grade !== undefined) {
+    setClauses.push(`student_grade = $${paramIdx++}`);
+    values.push(input.student_grade ?? null);
   }
   if (input.incident_at !== undefined) {
     setClauses.push(`incident_at = $${paramIdx++}`);

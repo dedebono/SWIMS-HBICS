@@ -98,20 +98,16 @@ services:
       - minio
 
   frontend:
+    # Production build is baked into the image at build time (see ./Dockerfile).
+    # No source bind-mount, so the baked .next is what actually runs.
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: swims_frontend
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/frontend/node_modules
-      - /app/backend/node_modules
-      - /app/shared/node_modules
-    command: npm run dev:frontend
     ports:
       - '3000:3000'
     environment:
+      - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://localhost:4000/api
       - BACKEND_INTERNAL_URL=http://backend:4000
     depends_on:

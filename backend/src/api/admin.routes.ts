@@ -8,6 +8,7 @@ import { queryWithTenant } from '../db/pool.js';
 import { executeRightToBeForgotten } from '../services/rtbf.service.js';
 import * as adminUsersService from '../services/admin-users.service.js';
 import * as rolePermissionsService from '../services/role-permissions.service.js';
+import * as dataMigrationService from '../services/data-migration.service.js';
 import { NotFoundError } from '../utils/errors.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 
@@ -213,6 +214,35 @@ router.get(
       students: Number(students.rows[0]?.count ?? 0),
       roleDistribution,
     });
+  }),
+);
+
+// ─── DATA MIGRATION (Export / Import) ─────────────────────────────────
+// Lets the IT admin export all users, students and active cases (with their
+// related records, excluding media) for migration to a new production server,
+// and import such an export back in.
+
+router.get(
+  '/export',
+  checkPermission('admin', 'read'),
+  asyncHandler(async (req, res) => {
+    const payload = await dataMigrationService.exportData(req.tenantId);
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="swims-export-${stamp}.json"`,
+    );
+    res.json(payload);
+  }),
+);
+
+router.post(
+  '/import',
+  checkPermission('admin', 'manage'),
+  asyncHandler(async (req, res) => {
+    const result = await dataMigrationService.importData(req.tenantId, req.body);
+    sendSuccess(res, result);
   }),
 );
 

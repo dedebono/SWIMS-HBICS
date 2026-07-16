@@ -108,7 +108,7 @@ function SelectFilter({
   options: { value: string; label: string }[]; placeholder: string;
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select value={value} onValueChange={(v) => onChange(v ?? "")}>
       <SelectTrigger className="h-8 text-xs w-auto min-w-[120px]">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

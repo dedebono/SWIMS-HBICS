@@ -187,7 +187,7 @@ export default function RolePermissionsManager() {
         <div className="pt-2 flex flex-col md:flex-row md:items-end gap-4 mb-4">
           <div className="space-y-2 w-full md:w-72">
             <Label>Role</Label>
-            <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v)}>
+            <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v ?? selectedRole)}>
               <SelectTrigger>
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>

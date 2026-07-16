@@ -160,6 +160,7 @@ export interface IncidentRow {
   severity: Severity;
   description: string;
   location: string | null;
+  student_grade: string | null;
   incident_at: string;
   reported_by: string;
   involved_teacher: string | null;

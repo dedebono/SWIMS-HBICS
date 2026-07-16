@@ -38,7 +38,7 @@ app.use(cors({
   origin: env.ALLOWED_ORIGINS.split(',').map(o => o.trim()),
   credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(morgan('short'));
 
 // Trust proxy for accurate IP in rate limiting

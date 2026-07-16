@@ -696,7 +696,7 @@ function FormGroup({ categories, onSubmit }: { categories: Category[]; onSubmit:
   return (
     <form onSubmit={(e) => { e.preventDefault(); if (!f.category_id) { toast.error("Pilih kategori"); return; } setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id) }); setSaving(false); }} className="space-y-3">
       <div><Label>Kategori *</Label>
-        <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v })}>
+        <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
           <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
           <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
@@ -709,7 +709,7 @@ function FormGroup({ categories, onSubmit }: { categories: Category[]; onSubmit:
 }
 
 function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: any; categories: Category[]; groups: BehaviorGroup[]; levels: EducationLevel[]; onSubmit: (b: any) => void }) {
-  const [f, setF] = useState({ category_id: data ? String(groups.find(g => g.id === data.group_id)?.category_id ?? "") : "", group_id: data ? String(data.group_id) : "", behavior_text: data?.behavior_text ?? "", level_ids: data?.levels?.map((l: Level) => l.id) ?? [] });
+  const [f, setF] = useState({ category_id: data ? String(groups.find(g => g.id === data.group_id)?.category_id ?? "") : "", group_id: data ? String(data.group_id) : "", behavior_text: data?.behavior_text ?? "", level_ids: (data?.levels?.map((l: Level) => l.id) ?? []) as number[] });
   const [saving, setSaving] = useState(false);
   const filteredGroups = f.category_id ? groups.filter(g => g.category_id === Number(f.category_id)) : groups;
   const handleSubmit = (e: React.FormEvent) => {
@@ -723,13 +723,13 @@ function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: a
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div><Label>Kategori *</Label>
-        <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v, group_id: "" })}>
+        <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "", group_id: "" })}>
           <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
           <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
       <div><Label>Kelompok Perilaku *</Label>
-        <Select value={f.group_id} onValueChange={v => setF({ ...f, group_id: v })}>
+        <Select value={f.group_id} onValueChange={v => setF({ ...f, group_id: v ?? "" })}>
           <SelectTrigger><SelectValue placeholder="Pilih kelompok" /></SelectTrigger>
           <SelectContent>{filteredGroups.map(g => <SelectItem key={g.id} value={String(g.id)}>{g.group_name}</SelectItem>)}</SelectContent>
         </Select>
@@ -760,13 +760,13 @@ function FormGuideline({ data, categories, levels, onSubmit }: { data?: Handling
     <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id), step_number: Number(f.step_number) }); setSaving(false); }} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div><Label>Kategori *</Label>
-          <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v })}>
+          <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
             <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div><Label>Jenjang *</Label>
-          <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v })}>
+          <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>
@@ -795,13 +795,13 @@ function FormConsequence({ data, categories, levels, onSubmit }: { data?: Conseq
     <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id) }); setSaving(false); }} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div><Label>Kategori *</Label>
-          <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v })}>
+          <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
             <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div><Label>Jenjang *</Label>
-          <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v })}>
+          <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>
@@ -826,13 +826,13 @@ function FormDocument({ data, categories, levels, onSubmit }: { data?: RequiredD
     <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id) }); setSaving(false); }} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div><Label>Kategori *</Label>
-          <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v })}>
+          <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
             <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div><Label>Jenjang *</Label>
-          <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v })}>
+          <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>

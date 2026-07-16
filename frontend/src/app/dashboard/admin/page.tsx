@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -17,6 +18,8 @@ import {
   GraduationCap,
   ShieldCheck,
   ArrowRight,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 interface SystemSummary {
@@ -106,6 +109,70 @@ export default function AdminDashboardPage() {
     count: summary!.roleDistribution[r],
   }));
   const maxDist = Math.max(1, ...dist.map((d) => d.count));
+
+  // ── Data migration (export / import) ──
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<Record<string, number> | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    setExporting(true);
+    setImportError(null);
+    try {
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('swims_access_token')
+          : null;
+      const res = await fetch('/api/admin/export', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error(`Export gagal (HTTP ${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `swims-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setImportError(e?.message || 'Export gagal.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setSelectedFile(e.target.files?.[0] ?? null);
+    setImportResult(null);
+    setImportError(null);
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setImporting(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const text = await selectedFile.text();
+      const payload = JSON.parse(text);
+      const res = await apiClient<{ imported: Record<string, number>; version: number }>(
+        '/admin/import',
+        { method: 'POST', body: payload },
+      );
+      if (res.success && res.data) setImportResult(res.data.imported);
+      else setImportError(res.error || 'Import gagal.');
+    } catch (e: any) {
+      setImportError(e?.message || 'Import gagal.');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -209,6 +276,63 @@ export default function AdminDashboardPage() {
           </Card>
         </>
       )}
+
+      {/* Data migration */}
+      <Card className="glass shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Upload className="h-4 w-4 text-primary" />
+            Migrasi Data
+          </CardTitle>
+          <CardDescription>
+            Export data untuk migrasi ke server produksi baru, lalu import di
+            server tujuan. Termasuk: pengguna, siswa, kasus aktif (+ insiden,
+            intervensi, observasi, berbagi kasus). Media tidak disertakan.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={handleExport} disabled={exporting}>
+              <Download className="mr-2 h-4 w-4" />
+              {exporting ? 'Mengekspor…' : 'Export Data'}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              Pilih File JSON
+            </Button>
+            <Button onClick={handleImport} disabled={!selectedFile || importing}>
+              <Upload className="mr-2 h-4 w-4" />
+              {importing ? 'Mengimpor…' : 'Import Data'}
+            </Button>
+          </div>
+
+          {selectedFile && (
+            <p className="text-sm text-muted-foreground">File: {selectedFile.name}</p>
+          )}
+          {importError && <p className="text-sm text-red-600">{importError}</p>}
+          {importResult && (
+            <div className="text-sm">
+              <p className="font-medium text-emerald-700">Import selesai:</p>
+              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                {Object.entries(importResult).map(([k, v]) => (
+                  <li key={k}>
+                    {k}: {v}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Baris dengan ID sudah ada dilewati (idempoten).
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

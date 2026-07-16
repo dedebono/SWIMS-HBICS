@@ -1,3 +1,5 @@
+import type { CaseType, CaseStatus, RiskLevel } from './database.js';
+
 // ─── Consistent API Response Envelope ────────────────────────────────────────
 
 export interface ApiResponse<T> {
@@ -40,8 +42,6 @@ export interface TimelineEvent {
 }
 
 // ─── Student Progress Types ──────────────────────────────────────────────────
-
-export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface StudentProgress {
   has_data: boolean;
@@ -90,9 +90,6 @@ export interface StudentProfile {
 }
 
 // ─── Student Cases Types ────────────────────────────────────────────────────
-
-export type CaseType = 'BEHAVIORAL' | 'EMOTIONAL' | 'MEDICAL' | 'ACADEMIC' | 'POSITIVE';
-export type CaseStatus = 'OPEN' | 'MONITORING' | 'CLOSED';
 
 export interface StudentCaseSummary {
   case_id: string;

@@ -1,0 +1,22 @@
+# Dev override for local hot-reload editing of the frontend.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d frontend
+#
+# This restores source bind-mount + `next dev` (hot reload) for the frontend
+# service, overriding the production settings in docker-compose.yml.
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/frontend/node_modules
+      - /app/backend/node_modules
+      - /app/shared/node_modules
+    command: npm run dev:frontend
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+      - BACKEND_INTERNAL_URL=http://backend:4000

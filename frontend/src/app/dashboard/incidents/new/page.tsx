@@ -29,6 +29,7 @@ interface FormData {
   severity: string;
   description: string;
   location: string;
+  student_grade: string;
   incident_at: string;
   immediate_actions: string;
   involved_students_raw: string;
@@ -73,6 +74,7 @@ export default function NewIncidentPage() {
     severity: '',
     description: '',
     location: '',
+    student_grade: '',
     incident_at: new Date().toISOString().slice(0, 16),
     immediate_actions: '',
     involved_students_raw: '',
@@ -220,6 +222,7 @@ export default function NewIncidentPage() {
         severity: formData.severity,
         description: formData.description,
         location: formData.location || undefined,
+        student_grade: formData.student_grade || undefined,
         incident_at: new Date(formData.incident_at).toISOString(),
         immediate_actions: formData.immediate_actions || undefined,
         metadata: {
@@ -586,6 +589,20 @@ export default function NewIncidentPage() {
                   onChange={(e) => updateField('involved_teacher', e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">This is a free-text field and is not linked to the user database.</p>
+              </div>
+
+              {/* Student Grade */}
+              <div className="space-y-2">
+                <Label htmlFor="student-grade">Student Grade</Label>
+                <Input
+                  id="student-grade"
+                  placeholder="e.g. KG-A, Grade 5, Grade 12"
+                  value={formData.student_grade}
+                  onChange={(e) => updateField('student_grade', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Free-text field (kindergarten to senior grade). Fill manually.
+                </p>
               </div>
 
               {/* Location */}

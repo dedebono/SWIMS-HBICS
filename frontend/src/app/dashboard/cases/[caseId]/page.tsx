@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useCallback } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { ErrorBoundary } from '@/components/layout/error-boundary';
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Bot, Sparkles, User, AlertCircle, HeartHandshake, Share2, Users, X, Check, Loader2, Trash2 } from 'lucide-react';
+import { Bot, Sparkles, User, AlertCircle, HeartHandshake, Share2, Users, X, Check, Loader2, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -57,6 +57,7 @@ interface IncidentItem {
   severity: string;
   description: string;
   location: string | null;
+  student_grade?: string | null;
   incident_at: string;
   immediate_actions: string | null;
   language_flag: boolean;
@@ -97,6 +98,7 @@ export default function CaseDetailPageWrapper(props: { params: Promise<{ caseId:
 function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const resolvedParams = use(params);
   const { user } = useAuth();
+  const canEditIncident = ['COUNSELOR', 'HEAD', 'IT_ADMIN'].includes(user?.role ?? '');
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
   const [studentData, setStudentData] = useState<any | null>(null);
@@ -118,12 +120,21 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
+  // Involved-teacher edit state
+  const [editingIncident, setEditingIncident] = useState<IncidentItem | null>(null);
+  const [involvedTeacherSelect, setInvolvedTeacherSelect] = useState('');
+  const [isSavingTeacher, setIsSavingTeacher] = useState(false);
+
+  const fetchIncidents = useCallback(async (caseId: string) => {
+    const incRes = await apiClient<IncidentItem[]>(`/cases/${caseId}/incidents`);
+    if (incRes.success && incRes.data) setIncidents(incRes.data);
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const [caseRes, incRes] = await Promise.all([
+      const [caseRes] = await Promise.all([
         apiClient<CaseDetail>(`/cases/${resolvedParams.caseId}`),
-        apiClient<IncidentItem[]>(`/cases/${resolvedParams.caseId}/incidents`),
       ]);
 
       if (caseRes.success && caseRes.data) {
@@ -136,11 +147,11 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
         const sharesRes = await apiClient<Array<{ share_id: string; shared_with: string; shared_with_name: string; shared_with_role: string }>>(`/cases/${resolvedParams.caseId}/shares`);
         if (sharesRes.success && sharesRes.data) setShares(sharesRes.data);
       }
-      if (incRes.success && incRes.data) setIncidents(incRes.data);
+      await fetchIncidents(resolvedParams.caseId);
       setIsLoading(false);
     };
     fetchData();
-  }, [resolvedParams.caseId]);
+  }, [resolvedParams.caseId, fetchIncidents]);
 
   const handleRiskOverride = async () => {
     if (!riskOverride || !justification.trim()) return;
@@ -246,6 +257,33 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
       toast.success('Share removed');
     } else {
       toast.error('Failed to remove share');
+    }
+  };
+
+  // ─── Involved Teacher edit handlers ──────────────────────────────────────
+
+  const openInvolvedTeacherDialog = async (inc: IncidentItem) => {
+    setEditingIncident(inc);
+    setInvolvedTeacherSelect(inc.involved_teacher ?? '');
+    if (teachers.length === 0) {
+      await loadTeachers(1);
+    }
+  };
+
+  const handleSaveInvolvedTeacher = async (teacherId: string | null) => {
+    if (!editingIncident) return;
+    setIsSavingTeacher(true);
+    const res = await apiClient(`/incidents/${editingIncident.incident_id}`, {
+      method: 'PATCH',
+      body: { involved_teacher: teacherId },
+    });
+    setIsSavingTeacher(false);
+    if (res.success) {
+      toast.success(teacherId ? 'Involved teacher updated' : 'Involved teacher cleared');
+      setEditingIncident(null);
+      await fetchIncidents(resolvedParams.caseId);
+    } else {
+      toast.error(res.error || 'Failed to update involved teacher');
     }
   };
 
@@ -542,20 +580,46 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                       </div>
                     )}
 
-                    {/* Meta row: date, location */}
+                    {/* Involved Teacher (editable) */}
+                    {(canEditIncident || inc.involved_teacher_name || inc.metadata?.manual_involved_teacher || inc.involved_teacher) && (
+                      <div className="rounded-md bg-muted/40 border border-border/50 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-muted-foreground">Involved Teacher</p>
+                          {canEditIncident && (
+                            <button
+                              type="button"
+                              onClick={() => openInvolvedTeacherDialog(inc)}
+                              className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              {inc.involved_teacher_name || inc.metadata?.manual_involved_teacher ? 'Change' : 'Set'}
+                            </button>
+                          )}
+                        </div>
+                        {inc.involved_teacher_name || inc.metadata?.manual_involved_teacher || inc.involved_teacher ? (
+                          <p className="text-sm font-medium flex items-center gap-1.5 mt-0.5">
+                            <User className="w-3.5 h-3.5 text-primary/80" />
+                            {inc.involved_teacher_name ?? inc.metadata?.manual_involved_teacher ?? inc.involved_teacher}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/70 mt-0.5">Not set</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Meta row: date, location, grade */}
                     <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground/70">
                       <span>📅 {new Date(inc.incident_at).toLocaleString()}</span>
                       {inc.location && <span>📍 {inc.location}</span>}
+                      {inc.student_grade && (
+                        <span className="flex items-center gap-1 text-primary/80 font-medium">
+                          🎓 Grade: {inc.student_grade}
+                        </span>
+                      )}
                       {inc.reporter_name && (
                         <span className="flex items-center gap-1 text-primary/80 font-medium">
                           <User className="w-3 h-3" />
                           Reported by: {inc.reporter_name}
-                        </span>
-                      )}
-                      {(inc.involved_teacher_name || inc.involved_teacher) && (
-                        <span className="flex items-center gap-1 text-muted-foreground/80 font-medium">
-                          <User className="w-3 h-3" />
-                          Involved teacher: {inc.metadata?.manual_involved_teacher ?? inc.involved_teacher_name ?? inc.involved_teacher}
                         </span>
                       )}
                     </div>
@@ -698,6 +762,66 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
             <Button variant="outline" onClick={() => setShareDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleShareSave} disabled={isSharing}>
               {isSharing ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Involved Teacher Edit Dialog */}
+      <Dialog open={!!editingIncident} onOpenChange={(open) => { if (!open) setEditingIncident(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" /> Set Involved Teacher
+            </DialogTitle>
+            <DialogDescription>
+              Select the teacher involved in this incident. This records who was present or implicated.
+            </DialogDescription>
+          </DialogHeader>
+          {isLoadingTeachers ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : teachers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No teachers found.</p>
+          ) : (
+            <div className="space-y-1 max-h-72 overflow-y-auto">
+              {teachers.map(t => {
+                const selected = involvedTeacherSelect === t.user_id;
+                return (
+                  <button
+                    key={t.user_id}
+                    type="button"
+                    onClick={() => setInvolvedTeacherSelect(t.user_id)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${selected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/50 border border-transparent'}`}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${selected ? 'bg-primary border-primary' : 'border-muted-foreground/40'}`}>
+                      {selected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{t.full_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{t.email} • {t.role.replace('_', ' ')}</p>
+                    </div>
+                  </button>
+                );
+              })}
+              {hasMoreTeachers && (
+                <button
+                  type="button"
+                  onClick={() => loadTeachers(teacherPage + 1)}
+                  className="w-full text-xs text-primary hover:underline py-2"
+                >
+                  Load more teachers
+                </button>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleSaveInvolvedTeacher(null)} disabled={isSavingTeacher}>
+              Clear
+            </Button>
+            <Button onClick={() => handleSaveInvolvedTeacher(involvedTeacherSelect || null)} disabled={isSavingTeacher}>
+              {isSavingTeacher ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

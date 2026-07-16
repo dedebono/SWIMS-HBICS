@@ -26,6 +26,7 @@ interface IncidentRow {
   severity: string;
   description: string;
   location: string | null;
+  student_grade?: string | null;
   incident_at: string;
   immediate_actions: string | null;
   reported_by: string;
@@ -219,6 +220,9 @@ export default function IncidentsPage() {
                       <p className="text-xs text-muted-foreground/90">
                         👩‍🏫 Involved teacher: {inc.metadata?.manual_involved_teacher ?? inc.involved_teacher_name ?? inc.involved_teacher}
                       </p>
+                    )}
+                    {inc.student_grade && (
+                      <p className="text-xs text-primary font-medium">🎓 Grade: {inc.student_grade}</p>
                     )}
 
                     {/* Row 3: Description */}
