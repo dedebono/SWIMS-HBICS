@@ -5,6 +5,8 @@ services:
     image: postgres:16-alpine
     container_name: swims_postgres
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
     environment:
       POSTGRES_USER: swims
       POSTGRES_PASSWORD: swims_dev_password
@@ -23,6 +25,8 @@ services:
     image: edoburu/pgbouncer:latest
     container_name: swims_pgbouncer
     restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 64m
     environment:
       - DATABASE_URL=postgres://swims:swims_dev_password@postgres:5432/swims
       - LISTEN_PORT=6432
@@ -41,6 +45,8 @@ services:
     image: redis:7-alpine
     container_name: swims_redis
     restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 64m
     ports:
       - '6379:6379'
     volumes:
@@ -55,6 +61,8 @@ services:
     image: minio/minio:latest
     container_name: swims_minio
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
     environment:
       MINIO_ROOT_USER: swims_minio
       MINIO_ROOT_PASSWORD: swims_minio_password
@@ -71,6 +79,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: swims_backend
     restart: unless-stopped
+    mem_limit: 768m
+    mem_reservation: 384m
     # We mount the volumes to allow hot-reloading from host
     volumes:
       - .:/app
@@ -110,6 +120,8 @@ services:
       dockerfile: Dockerfile
     container_name: swims_frontend
     restart: unless-stopped
+    mem_limit: 768m
+    mem_reservation: 384m
     ports:
       - '3000:3000'
     environment:
