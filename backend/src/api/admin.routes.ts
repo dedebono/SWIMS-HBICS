@@ -47,8 +47,10 @@ const userSchema = z.object({
   password: z.string().min(8).optional(),
 });
 
+// Lenient wrapper: accept any array of rows (up to 1000), validate each row
+// individually so invalid rows can be skipped instead of failing the whole upload.
 const bulkUserSchema = z.object({
-  users: z.array(userSchema).min(1).max(1000)
+  users: z.array(z.record(z.any())).min(1).max(1000)
 });
 
 router.get(
@@ -76,8 +78,21 @@ router.post(
   checkPermission('admin', 'create'),
   asyncHandler(async (req, res) => {
     const body = bulkUserSchema.parse(req.body);
-    const result = await adminUsersService.createUsersBulk(req.tenantId, body.users);
-    sendCreated(res, result);
+
+    // Validate each row individually; skip invalid ones (bad email, missing name, etc.)
+    const validUsers: adminUsersService.CreateUserData[] = [];
+    let invalidCount = 0;
+    for (const row of body.users) {
+      const parsed = userSchema.safeParse(row);
+      if (parsed.success) {
+        validUsers.push(parsed.data);
+      } else {
+        invalidCount++;
+      }
+    }
+
+    const result = await adminUsersService.createUsersBulk(req.tenantId, validUsers);
+    sendCreated(res, { ...result, invalid: invalidCount });
   }),
 );
 

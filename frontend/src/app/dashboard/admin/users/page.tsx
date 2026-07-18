@@ -225,13 +225,29 @@ export default function AdminUsersPage() {
       skipEmptyLines: true,
       complete: async (results) => {
         try {
-          // Validate and clean data
-          const parsedUsers = results.data.map((row: any) => ({
-            full_name: row.full_name?.trim(),
-            email: row.email?.trim(),
-            role: (row.role?.trim().toUpperCase() || "STUDENT") as Role,
-            national_id: row.national_id?.trim() || undefined,
-          })).filter(u => u.full_name);
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const seenEmails = new Set<string>();
+          let skippedLocal = 0;
+
+          // Validate and clean data — skip rows missing name / with invalid or
+          // duplicate email; upload the rest.
+          const parsedUsers = (results.data as any[])
+            .map((row: any) => ({
+              full_name: row.full_name?.trim(),
+              email: row.email?.trim(),
+              role: (row.role?.trim().toUpperCase() || "STUDENT") as Role,
+              national_id: row.national_id?.trim() || undefined,
+            }))
+            .filter((u) => {
+              const emailLower = u.email?.toLowerCase();
+              // Require a name and a valid email; drop duplicate emails within the file.
+              if (!u.full_name || !emailLower || !emailRegex.test(emailLower) || seenEmails.has(emailLower)) {
+                skippedLocal++;
+                return false;
+              }
+              seenEmails.add(emailLower);
+              return true;
+            });
 
           if (parsedUsers.length === 0) {
             toast.error("No valid users found in the CSV. Please check the format.");
@@ -241,14 +257,19 @@ export default function AdminUsersPage() {
 
           toast.info(`Uploading ${parsedUsers.length} users...`);
 
-          const res = await apiClient<{ created: number, duplicates: number }>("/admin/users/bulk", {
+          const res = await apiClient<{ created: number, duplicates: number, invalid?: number, failed?: number }>("/admin/users/bulk", {
             method: "POST",
             body: { users: parsedUsers },
           });
 
           if (res.success && res.data) {
-            const { created, duplicates } = res.data;
-            toast.success(`Bulk import complete! Added ${created} users. Skipped ${duplicates} duplicates.`);
+            const { created, duplicates, invalid = 0, failed = 0 } = res.data;
+            const skippedTotal = skippedLocal + invalid;
+            let msg = `Bulk import complete! Added ${created} users.`;
+            if (duplicates) msg += ` Skipped ${duplicates} duplicates.`;
+            if (skippedTotal) msg += ` Ignored ${skippedTotal} invalid rows.`;
+            if (failed) msg += ` ${failed} rows failed.`;
+            toast.success(msg);
             setBulkFile(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
             fetchUsers();

@@ -89,11 +89,12 @@ export async function createUser(tenantId: string, data: CreateUserData): Promis
 /**
  * Creates multiple users from bulk CSV import.
  */
-export async function createUsersBulk(tenantId: string, users: CreateUserData[]): Promise<{ created: number, duplicates: number }> {
-  if (!users.length) return { created: 0, duplicates: 0 };
+export async function createUsersBulk(tenantId: string, users: CreateUserData[]): Promise<{ created: number, duplicates: number, failed: number }> {
+  if (!users.length) return { created: 0, duplicates: 0, failed: 0 };
 
   let createdCount = 0;
   let duplicateCount = 0;
+  let failedCount = 0;
 
   for (const user of users) {
     try {
@@ -104,13 +105,15 @@ export async function createUsersBulk(tenantId: string, users: CreateUserData[])
       if (error.name === 'ValidationError' && (error.message.includes('already exists') || error.message.includes('duplicate'))) {
         duplicateCount++;
       } else {
-        // Re-throw other errors to stop the bulk operation
-        throw error;
+        // Skip any other problematic row (bad data, constraint error, etc.)
+        // and keep processing the rest of the batch instead of aborting.
+        failedCount++;
+        console.error(`[Bulk Import] Skipped row for "${user.email}":`, error?.message || error);
       }
     }
   }
 
-  return { created: createdCount, duplicates: duplicateCount };
+  return { created: createdCount, duplicates: duplicateCount, failed: failedCount };
 }
 
 /**
