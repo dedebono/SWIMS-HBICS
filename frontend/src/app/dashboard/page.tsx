@@ -31,6 +31,9 @@ export default function DashboardRootPage() {
       case 'CASE_REVIEWER':
         router.replace('/dashboard/reviewer');
         break;
+      case 'PERSONAL':
+        router.replace('/dashboard/personal');
+        break;
       case 'STUDENT':
         router.replace('/dashboard/student');
         break;

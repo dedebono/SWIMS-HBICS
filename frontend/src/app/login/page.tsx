@@ -64,6 +64,9 @@ export default function LoginPage() {
         case 'CASE_REVIEWER':
           router.push('/dashboard/reviewer');
           break;
+        case 'PERSONAL':
+          router.push('/dashboard/personal');
+          break;
         default:
           // TEACHER, SUBSTITUTE_TEACHER, etc.
           router.push('/dashboard');

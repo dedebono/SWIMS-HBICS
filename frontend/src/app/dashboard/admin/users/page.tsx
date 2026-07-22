@@ -13,7 +13,7 @@ import { apiClient } from "@/lib/api-client";
 import Papa from "papaparse";
 import RolePermissionsManager from "@/components/admin/RolePermissionsManager";
 
-type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER';
+type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER' | 'PERSONAL';
 
 interface UserData {
   id: string;
@@ -24,6 +24,7 @@ interface UserData {
   created_at: string;
   type: 'STAFF' | 'STUDENT';
   national_id?: string;
+  gender?: string | null;
 }
 
 export default function AdminUsersPage() {
@@ -34,6 +35,7 @@ export default function AdminUsersPage() {
     role: "STUDENT" as Role,
     national_id: "",
     password: "",
+    gender: "",
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +125,7 @@ export default function AdminUsersPage() {
         email: formData.email,
         role: formData.role,
         national_id: formData.national_id || undefined,
+        gender: formData.gender || undefined,
       };
       if (formData.password) body.password = formData.password;
 
@@ -153,13 +156,14 @@ export default function AdminUsersPage() {
       role: user.role,
       is_active: user.is_active,
       password: "",
+      gender: user.gender || "",
     });
     setIsEditSubmitting(false);
   };
 
   const closeEditDialog = () => {
     setEditUser(null);
-    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "" });
+    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "", gender: "" });
   };
 
   const handleEditSubmit = async () => {
@@ -179,6 +183,7 @@ export default function AdminUsersPage() {
         if (editForm.email) body.email = editForm.email;
         body.role = editForm.role;
         body.is_active = editForm.is_active;
+        body.gender = editForm.gender || null;
       }
       if (editForm.password) body.password = editForm.password;
 
@@ -350,6 +355,23 @@ export default function AdminUsersPage() {
                     <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
                     <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
                     <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
+                    <SelectItem value="PERSONAL">Personal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Gender (Optional)</Label>
+                <Select
+                  value={formData.gender}
+                  onValueChange={(v) => setFormData({ ...formData, gender: v ?? "" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">Male</SelectItem>
+                    <SelectItem value="FEMALE">Female</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -487,6 +509,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="COUNSELOR">Counselor</SelectItem>
                   <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
                   <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
+                  <SelectItem value="PERSONAL">Personal</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -541,6 +564,7 @@ export default function AdminUsersPage() {
                     <tr key={user.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-4">
                         <div className="font-semibold text-zinc-900 dark:text-zinc-100">{user.full_name}</div>
+                        {user.gender && <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{user.gender}</div>}
                       </td>
                       <td className="px-4 py-4">
                         <code className="text-[11px] bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded font-mono text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
@@ -633,6 +657,23 @@ export default function AdminUsersPage() {
                       <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
                       <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
                       <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
+                      <SelectItem value="PERSONAL">Personal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Gender (Optional)</Label>
+                  <Select
+                    value={editForm.gender}
+                    onValueChange={(v) => setEditForm({ ...editForm, gender: v ?? "" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

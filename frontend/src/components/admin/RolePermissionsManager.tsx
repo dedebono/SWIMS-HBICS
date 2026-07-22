@@ -18,6 +18,7 @@ const ROLES = [
   "COUNSELOR",
   "SCHOOL_HEAD",
   "SCHOOL_NURSE",
+  "PERSONAL",
 ] as const;
 
 const RESOURCES: { key: string; label: string }[] = [

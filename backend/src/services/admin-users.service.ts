@@ -12,6 +12,7 @@ export interface CreateUserData {
   email: string;
   role: Role;
   national_id?: string;
+  gender?: string;
   password?: string;
 }
 
@@ -73,10 +74,10 @@ export async function createUser(tenantId: string, data: CreateUserData): Promis
       const passwordHash = await bcrypt.hash(passwordToUse, 12);
 
       const { rows } = await client.query<{ user_id: string }>(
-        `INSERT INTO users (tenant_id, full_name, email, password_hash, role)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO users (tenant_id, full_name, email, password_hash, role, gender)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING user_id`,
-        [tenantId, data.full_name, emailLower, passwordHash, data.role]
+        [tenantId, data.full_name, emailLower, passwordHash, data.role, data.gender ?? null]
       );
 
       return { user_id: rows[0]!.user_id };
@@ -123,7 +124,7 @@ export async function getAllUsers(tenantId: string) {
   const client = await getClientWithTenant(tenantId);
   try {
     const { rows: staff } = await client.query(
-      `SELECT user_id as id, full_name, email, role, is_active, created_at, 'STAFF' as type
+      `SELECT user_id as id, full_name, email, role, gender, is_active, created_at, 'STAFF' as type
        FROM users 
        WHERE tenant_id = $1 
        ORDER BY full_name ASC`,
@@ -167,6 +168,7 @@ export interface UpdateUserData {
   email?: string;
   role?: Role;
   national_id?: string;
+  gender?: string;
   is_active?: boolean;
   password?: string;
 }
@@ -210,6 +212,10 @@ export async function updateUser(
       if (data.role !== undefined) {
         updates.push(`role = $${paramIndex++}`);
         values.push(data.role);
+      }
+      if (data.gender !== undefined) {
+        updates.push(`gender = $${paramIndex++}`);
+        values.push(data.gender ?? null);
       }
       if (data.is_active !== undefined) {
         updates.push(`is_active = $${paramIndex++}`);

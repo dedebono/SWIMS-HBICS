@@ -22,7 +22,7 @@ const navItems = [
         <rect width="7" height="5" x="3" y="16" rx="1" />
       </svg>
     ),
-    roles: ['TEACHER', 'SUBSTITUTE_TEACHER', 'COUNSELOR', 'SCHOOL_NURSE', 'SCHOOL_HEAD', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN'],
+    roles: ['TEACHER', 'SUBSTITUTE_TEACHER', 'COUNSELOR', 'SCHOOL_NURSE', 'SCHOOL_HEAD', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'PERSONAL'],
   },
   {
     label: 'User Management',

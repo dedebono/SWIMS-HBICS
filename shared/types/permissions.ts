@@ -144,4 +144,17 @@ export const PERMISSIONS: PermissionMatrix = {
     students: crud,
     admin: crud,
   },
+  PERSONAL: {
+    cases: none,            // personal account — no case access
+    incidents: none,
+    interventions: none,
+    media_assets: none,
+    alerts: none,
+    reports: none,
+    consents: none,
+    audit_logs: none,
+    positive_observations: none,
+    students: none,
+    admin: none,
+  },
 };
