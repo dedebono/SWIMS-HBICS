@@ -15,9 +15,13 @@ import { apiClient } from "@/lib/api-client";
 
 const ROLES = [
   "TEACHER",
+  "SUBSTITUTE_TEACHER",
   "COUNSELOR",
   "SCHOOL_HEAD",
   "SCHOOL_NURSE",
+  "BOARD_MEMBER",
+  "CASE_REVIEWER",
+  "IT_ADMIN",
   "PERSONAL",
 ] as const;
 

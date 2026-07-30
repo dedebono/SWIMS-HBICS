@@ -60,6 +60,7 @@ export default function AdminUsersPage() {
     role: "" as string,
     is_active: true,
     password: "",
+    gender: "",
   });
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
@@ -136,7 +137,7 @@ export default function AdminUsersPage() {
 
       if (res.success) {
         toast.success(`User ${formData.full_name} has been added successfully!`);
-        setFormData({ full_name: "", email: "", role: "STUDENT", national_id: "", password: "" });
+        setFormData({ full_name: "", email: "", role: "STUDENT", national_id: "", password: "", gender: "" });
         fetchUsers();
       } else {
         toast.error(res.error || "Failed to add user.");

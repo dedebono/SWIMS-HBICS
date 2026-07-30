@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 
 interface FormData {
   student_id: string;
+  student_name: string;
   case_id: string;
   category: string;
   sub_category: string;
@@ -66,8 +68,11 @@ export default function NewIncidentPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  const [ddPos, setDdPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [formData, setFormData] = useState<FormData>({
     student_id: '',
+    student_name: '',
     case_id: '',
     category: '',
     sub_category: '',
@@ -141,6 +146,27 @@ export default function NewIncidentPage() {
     return () => clearTimeout(timer);
   }, [studentSearch]);
 
+  // Keep the search-results dropdown positioned under the input.
+  // Rendered via portal (see below) so the Card's overflow-hidden can't clip it.
+  useEffect(() => {
+    const open = studentSearch.trim().length >= 2;
+    if (!open || !searchWrapRef.current) {
+      setDdPos(null);
+      return;
+    }
+    const update = () => {
+      const r = searchWrapRef.current!.getBoundingClientRect();
+      setDdPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [studentSearch, searchResults.length, isSearching]);
+
   const handleStudentSelect = async (idOrUuid: string) => {
     setIsValidating(true);
     try {
@@ -154,6 +180,7 @@ export default function NewIncidentPage() {
 
       const student = studentRes.data;
       updateField('student_id', student.student_id);
+      updateField('student_name', student.full_name || student.display_id || student.student_id);
       setStep('details');
       
       // 2. Fetch existing cases for this student
@@ -390,7 +417,7 @@ export default function NewIncidentPage() {
               </div>
             ) : (
               <div className="space-y-4 relative">
-                <div className="relative">
+                <div className="relative" ref={searchWrapRef}>
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
                     className="pl-9 bg-background"
@@ -403,13 +430,17 @@ export default function NewIncidentPage() {
                   )}
                 </div>
 
-                {/* Dropdown for search results */}
-                {studentSearch.length >= 2 && (
-                  <div className="absolute top-12 left-0 right-0 z-10 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
+                {/* Dropdown for search results — rendered via portal so the Card's
+                    overflow-hidden can't clip it. Positioned under the input. */}
+                {studentSearch.length >= 2 && ddPos && typeof document !== 'undefined' && createPortal(
+                  <div
+                    style={{ position: 'fixed', top: ddPos.top, left: ddPos.left, width: ddPos.width, zIndex: 50 }}
+                    className="bg-background border rounded-md shadow-lg max-h-60 overflow-auto"
+                  >
                     {searchResults.length > 0 ? (
                       <div className="p-2 space-y-1">
                         {searchResults.map((student) => (
-                          <div 
+                          <div
                             key={student.student_id}
                             className="p-3 hover:bg-muted/50 rounded-md cursor-pointer transition-colors flex flex-col"
                             onClick={() => handleStudentSelect(student.student_id)}
@@ -423,7 +454,7 @@ export default function NewIncidentPage() {
                               )}
                             </div>
                             <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              UUID: {student.student_id.slice(0, 8)}... 
+                              UUID: {student.student_id.slice(0, 8)}...
                               {student.metadata?.email && ` • ${student.metadata.email}`}
                             </span>
                           </div>
@@ -434,7 +465,8 @@ export default function NewIncidentPage() {
                         No students found matching "{studentSearch}"
                       </div>
                     )}
-                  </div>
+                  </div>,
+                  document.body
                 )}
 
                 <p className="text-xs text-muted-foreground mt-4">
@@ -471,7 +503,7 @@ export default function NewIncidentPage() {
                 <div>
                   <CardTitle>Step 2: Incident Details</CardTitle>
                   <CardDescription>
-                    ID: <span className="font-mono text-xs">{formData.student_id.slice(0, 8)}...</span>
+                    Student: <span className="font-medium">{formData.student_name}</span>
                   </CardDescription>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setStep('identify')}>

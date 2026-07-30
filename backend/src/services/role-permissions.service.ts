@@ -93,16 +93,52 @@ async function ensureSeeded(tenantId: string): Promise<void> {
   try {
     await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
 
-    const { rows: existing } = await client.query<{ count: string }>(
-      `SELECT COUNT(*)::int AS count FROM role_permissions WHERE tenant_id = $1`,
+    // Find which roles from the static matrix are missing in this tenant.
+    // We seed ONLY the missing ones. This avoids the migration-026 race
+    // where PERSONAL rows can be backfilled before the tenant is fully
+    // seeded — in that scenario the old "COUNT(*) > 0" shortcut would
+    // silently skip seeding all other roles.
+    const { rows: existingRoles } = await client.query<{ role: string }>(
+      `SELECT DISTINCT role FROM role_permissions WHERE tenant_id = $1`,
       [tenantId],
     );
-    if (Number(existing[0]?.count ?? 0) > 0) return;
+    const present = new Set(existingRoles.map(r => r.role));
+    const allRoles = Object.keys(PERMISSIONS).sort();
+    const missing = allRoles.filter(r => !present.has(r));
 
-    const seed = buildDefaultRows(tenantId);
+    if (missing.length === 0) {
+      // Also make sure the admin 'manage' defaults exist for the tenant
+      const { rows: manageRows } = await client.query<{ role: string }>(
+        `SELECT DISTINCT role FROM role_permissions WHERE tenant_id = $1 AND resource = 'admin' AND action = 'manage'`,
+        [tenantId],
+      );
+      const hasManage = new Set(manageRows.map(r => r.role));
+      const missingManage = Object.entries(DEFAULT_MANAGE_ROLES)
+        .filter(([role, allowed]) => allowed && !hasManage.has(role))
+        .map(([role]) => role);
+
+      if (missingManage.length === 0) return;
+
+      // Seed admin 'manage' defaults
+      const placeholders: string[] = [];
+      const values: unknown[] = [];
+      let i = 1;
+      for (const role of missingManage) {
+        placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
+        values.push(tenantId, role, 'admin', 'manage', true);
+      }
+      await client.query(
+        `INSERT INTO role_permissions (tenant_id, role, resource, action, allowed)
+         VALUES ${placeholders.join(', ')}
+         ON CONFLICT (tenant_id, role, resource, action) DO NOTHING`,
+        values,
+      );
+      return;
+    }
+
+    const seed = (buildDefaultRows(tenantId) as (PermissionRow & { tenant_id: string })[]).filter((r) => missing.includes(r.role));
     if (seed.length === 0) return;
 
-    // Bulk insert with ON CONFLICT DO NOTHING so concurrent seeding is safe.
     const placeholders: string[] = [];
     const values: unknown[] = [];
     let i = 1;
