@@ -7,6 +7,7 @@ import { pool } from '../db/pool.js';
 import * as quisionerService from '../services/quisioner.service.js';
 import * as staffService from '../services/staff-quisioner.service.js';
 import * as settingsService from '../services/quisioner-settings.service.js';
+import * as quisionerListsService from '../services/quisioner-lists.service.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 
 const router = Router();
@@ -22,7 +23,13 @@ router.post('/quisioner/staff/verify-nik', setTenantFromSlug, asyncHandler(async
 }));
 
 router.get('/quisioner/staff/questions', setTenantFromSlug, asyncHandler(async (req, res) => {
-  sendSuccess(res, await quisionerService.listQuestions((req as any).tenantId));
+  const tenantId = (req as any).tenantId;
+  const list = await quisionerListsService.getActiveListForTargets(tenantId, ['staff']);
+  if (list) {
+    sendSuccess(res, await quisionerService.listQuestions(tenantId, list.question_list_id));
+    return;
+  }
+  sendSuccess(res, await quisionerService.listQuestions(tenantId));
 }));
 
 router.get('/quisioner/staff/questions/:qid/answers', setTenantFromSlug, asyncHandler(async (req, res) => {
@@ -31,8 +38,14 @@ router.get('/quisioner/staff/questions/:qid/answers', setTenantFromSlug, asyncHa
 
 router.post('/quisioner/staff/submit', setTenantFromSlug, asyncHandler(async (req, res) => {
   const { nik, answers } = req.body as { nik: string; answers: any[] };
+  const tenantId = (req as any).tenantId;
   try {
-    const result = await staffService.submitStaffQuisioner((req as any).tenantId, { nik, answers });
+    const list = await quisionerListsService.getActiveListForTargets(tenantId, ['staff']);
+    const result = await staffService.submitStaffQuisioner(tenantId, {
+      nik,
+      answers,
+      question_list_id: list?.question_list_id ?? null,
+    });
     sendCreated(res, result);
   } catch (e: any) {
     if (e.statusCode === 422) return res.status(422).json({ message: e.message });

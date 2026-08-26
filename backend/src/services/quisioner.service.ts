@@ -1,12 +1,15 @@
 import { queryWithTenant } from '../db/pool.js';
 import type { QuisionerQuestionRow, QuisionerAnswerRow } from '@swims/shared';
 
-export async function listQuestions(tenantId: string): Promise<QuisionerQuestionRow[]> {
-  const { rows } = await queryWithTenant<QuisionerQuestionRow>(
-    tenantId,
-    `SELECT * FROM quisioner_questions WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY order_index ASC, created_at ASC`,
-    [tenantId],
-  );
+export async function listQuestions(tenantId: string, listId?: string): Promise<QuisionerQuestionRow[]> {
+  const params: unknown[] = [tenantId];
+  let sql = `SELECT * FROM quisioner_questions WHERE tenant_id = $1 AND deleted_at IS NULL`;
+  if (listId) {
+    params.push(listId);
+    sql += ` AND question_list_id = $${params.length}`;
+  }
+  sql += ` ORDER BY order_index ASC, created_at ASC`;
+  const { rows } = await queryWithTenant<QuisionerQuestionRow>(tenantId, sql, params);
   return rows;
 }
 
@@ -15,13 +18,14 @@ export async function createQuestion(tenantId: string, data: {
   question_type: 'multiple_choice' | 'checkbox' | 'text' | 'rating';
   is_required?: boolean;
   order_index?: number;
+  question_list_id?: string | null;
 }): Promise<QuisionerQuestionRow> {
   const { rows } = await queryWithTenant<QuisionerQuestionRow>(
     tenantId,
-    `INSERT INTO quisioner_questions (tenant_id, question_text, question_type, is_required, order_index)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO quisioner_questions (tenant_id, question_text, question_type, is_required, order_index, question_list_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [tenantId, data.question_text, data.question_type, data.is_required ?? true, data.order_index ?? 0],
+    [tenantId, data.question_text, data.question_type, data.is_required ?? true, data.order_index ?? 0, data.question_list_id ?? null],
   );
   return rows[0];
 }

@@ -130,6 +130,7 @@ export interface StaffQuisionerSubmissionRow {
   answers: unknown;
   status: 'new' | 'reviewed' | 'scheduled' | 'closed';
   counselor_notes: string | null;
+  question_list_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -350,6 +351,7 @@ export interface QuisionerQuestionRow {
   question_type: 'multiple_choice' | 'checkbox' | 'text' | 'rating';
   is_required: boolean;
   order_index: number;
+  question_list_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -361,6 +363,18 @@ export interface QuisionerAnswerRow {
   answer_text: string;
   score: number;
   created_at: string;
+  deleted_at: string | null;
+}
+
+export interface QuestionListRow {
+  question_list_id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  targets: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
   deleted_at: string | null;
 }
 

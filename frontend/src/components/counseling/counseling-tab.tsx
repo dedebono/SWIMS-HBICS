@@ -69,7 +69,7 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
     let cancelled = false;
     setLoading(true);
     Promise.all([
-      apiClient<Question[]>('/quisioner/questions'),
+      apiClient<Question[]>('/quisioner/questions?context=appointment'),
       apiClient<any>(`/cases/${caseId}/counseling`),
       apiClient<Appointment[]>(`/appointments?type=student&student_id=${studentId}&created_for=${studentId}`),
       apiClient<any>(`/students/${studentId}`),

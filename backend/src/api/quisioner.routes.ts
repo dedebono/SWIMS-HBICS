@@ -5,6 +5,7 @@ import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as quisionerService from '../services/quisioner.service.js';
 import * as quisionerSettingsService from '../services/quisioner-settings.service.js';
+import * as quisionerListsService from '../services/quisioner-lists.service.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 
 const router = Router();
@@ -17,8 +18,23 @@ router.get(
   '/questions',
   checkPermission('quisioner', 'read'),
   asyncHandler(async (req, res) => {
-    const items = await quisionerService.listQuestions(req.tenantId);
-    sendSuccess(res, items);
+    const context = typeof req.query.context === 'string' ? req.query.context : undefined;
+    const listId = typeof req.query.list_id === 'string' ? req.query.list_id : undefined;
+    if (listId) {
+      sendSuccess(res, await quisionerService.listQuestions(req.tenantId, listId));
+      return;
+    }
+    if (context === 'appointment') {
+      const list = await quisionerListsService.getActiveListForTargets(req.tenantId, [
+        'appointment_student',
+        'appointment_case',
+      ]);
+      if (list) {
+        sendSuccess(res, await quisionerService.listQuestions(req.tenantId, list.question_list_id));
+        return;
+      }
+    }
+    sendSuccess(res, await quisionerService.listQuestions(req.tenantId));
   }),
 );
 
@@ -121,6 +137,73 @@ router.post(
     const effectiveThreshold = threshold ?? await quisionerSettingsService.getThreshold(req.tenantId);
     const recommendation = await quisionerService.getRecommendation(score, effectiveThreshold);
     sendSuccess(res, { score, recommendation, threshold: effectiveThreshold });
+  }),
+);
+
+// ─── QUESTION LISTS (Daftar Pertanyaan) ──────────────────────────────────────
+
+router.get(
+  '/lists',
+  checkPermission('quisioner', 'read'),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await quisionerListsService.listQuestionLists(req.tenantId));
+  }),
+);
+
+router.post(
+  '/lists',
+  checkPermission('quisioner', 'create'),
+  asyncHandler(async (req, res) => {
+    const { name, description, targets, is_active } = req.body as {
+      name: string;
+      description?: string;
+      targets?: string[];
+      is_active?: boolean;
+    };
+    const item = await quisionerListsService.createQuestionList(req.tenantId, {
+      name,
+      description,
+      targets: targets ?? [],
+      is_active,
+    });
+    sendCreated(res, item);
+  }),
+);
+
+router.get(
+  '/lists/:listId',
+  checkPermission('quisioner', 'read'),
+  asyncHandler(async (req, res) => {
+    const item = await quisionerListsService.getQuestionList(req.tenantId, req.params.listId);
+    if (!item) return res.status(404).json({ message: 'Not found' });
+    sendSuccess(res, item);
+  }),
+);
+
+router.get(
+  '/lists/:listId/questions',
+  checkPermission('quisioner', 'read'),
+  asyncHandler(async (req, res) => {
+    sendSuccess(res, await quisionerListsService.getQuestionsByList(req.tenantId, req.params.listId));
+  }),
+);
+
+router.patch(
+  '/lists/:listId',
+  checkPermission('quisioner', 'update'),
+  asyncHandler(async (req, res) => {
+    const updated = await quisionerListsService.updateQuestionList(req.tenantId, req.params.listId, req.body);
+    if (!updated) return res.status(404).json({ message: 'Not found' });
+    sendSuccess(res, updated);
+  }),
+);
+
+router.delete(
+  '/lists/:listId',
+  checkPermission('quisioner', 'delete'),
+  asyncHandler(async (req, res) => {
+    const ok = await quisionerListsService.deleteQuestionList(req.tenantId, req.params.listId);
+    res.status(ok ? 204 : 404).end();
   }),
 );
 

@@ -21,7 +21,11 @@ export async function verifyNik(tenantId: string, nik: string): Promise<{ valid:
 
 export async function submitStaffQuisioner(
   tenantId: string,
-  data: { nik: string; answers: Array<{ question_id: string; answer_text?: string; score: number }> },
+  data: {
+    nik: string;
+    answers: Array<{ question_id: string; answer_text?: string; score: number }>;
+    question_list_id?: string | null;
+  },
 ) {
   const v = await verifyNik(tenantId, data.nik);
   if (!v.valid) {
@@ -45,9 +49,9 @@ export async function submitStaffQuisioner(
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `INSERT INTO staff_quisioner_submissions (tenant_id, staff_user_id, total_score, recommendation, answers)
-       VALUES ($1, $2, $3, $4, $5) RETURNING submission_id`,
-      [tenantId, staffUserId, score, recommendation, JSON.stringify(data.answers)],
+      `INSERT INTO staff_quisioner_submissions (tenant_id, staff_user_id, total_score, recommendation, answers, question_list_id)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING submission_id`,
+      [tenantId, staffUserId, score, recommendation, JSON.stringify(data.answers), data.question_list_id ?? null],
     );
     await client.query('COMMIT');
     return { submission_id: rows[0].submission_id, score, recommendation };
