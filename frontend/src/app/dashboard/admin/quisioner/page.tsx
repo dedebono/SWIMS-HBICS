@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
@@ -220,16 +221,19 @@ export default function QuisionerAdminPage() {
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
             <Label htmlFor="qtarget">Sasaran Quisioner</Label>
-            <select
-              id="qtarget"
-              className="border rounded p-2"
+            <Select
               value={target}
               disabled={targetLoading}
-              onChange={(e) => handleSaveTarget(e.target.value as 'student' | 'staff')}
+              onValueChange={(v) => handleSaveTarget((v ?? 'student') as 'student' | 'staff')}
             >
-              <option value="student">Siswa (Alur Kasus)</option>
-              <option value="staff">Staff (Laman Quisioner)</option>
-            </select>
+              <SelectTrigger id="qtarget" className="w-56">
+                <SelectValue placeholder="Pilih sasaran" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="student">Siswa (Alur Kasus)</SelectItem>
+                <SelectItem value="staff">Staff (Laman Quisioner)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           {target === 'staff' && slug && (
             <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
