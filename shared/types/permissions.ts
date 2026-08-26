@@ -22,7 +22,10 @@ export type Resource =
   | 'audit_logs'
   | 'positive_observations'
   | 'students'
-  | 'admin';
+  | 'admin'
+  | 'quisioner'
+  | 'appointments'
+  | 'availability';
 
 export type Action = 'create' | 'read' | 'update' | 'delete';
 
@@ -52,6 +55,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: cru,
     students: readOnly,
     admin: none,
+    quisioner: cr,
+    appointments: none,
+    availability: none,
   },
   SUBSTITUTE_TEACHER: {
     cases: cr,
@@ -65,6 +71,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: cru,
     students: readOnly,
     admin: none,
+    quisioner: cr,
+    appointments: none,
+    availability: none,
   },
   COUNSELOR: {
     cases: crud,
@@ -78,6 +87,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: crud,
     students: readUpdate,
     admin: none,
+    quisioner: readOnly,
+    appointments: crud,
+    availability: crud,
   },
   SCHOOL_NURSE: {
     cases: readOnly,        // medical-category only (enforced by ABAC)
@@ -91,6 +103,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: readOnly,
     students: readOnly,
     admin: none,
+    quisioner: readOnly,
+    appointments: readUpdate,
+    availability: readOnly,
   },
   SCHOOL_HEAD: {
     cases: { create: true, read: true, update: true, delete: false }, // cannot delete
@@ -104,6 +119,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: readOnly,
     students: readOnly,
     admin: none,
+    quisioner: readOnly,
+    appointments: readUpdate,
+    availability: readOnly,
   },
   BOARD_MEMBER: {
     cases: readOnly,        // anonymized only (enforced by ABAC)
@@ -117,6 +135,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: readOnly,
     students: none,         // no PII access
     admin: none,
+    quisioner: none,
+    appointments: none,
+    availability: none,
   },
   CASE_REVIEWER: {
     cases: readOnly,        // assigned cases only (enforced by ABAC)
@@ -130,6 +151,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: readOnly,
     students: readOnly,
     admin: none,
+    quisioner: none,
+    appointments: none,
+    availability: none,
   },
   IT_ADMIN: {
     cases: readOnly,        // no descriptions (enforced by ABAC — data minimization)
@@ -143,6 +167,9 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: readOnly,
     students: crud,
     admin: crud,
+    quisioner: crud,
+    appointments: crud,
+    availability: crud,
   },
   PERSONAL: {
     cases: none,            // personal account — no case access
@@ -156,5 +183,24 @@ export const PERMISSIONS: PermissionMatrix = {
     positive_observations: none,
     students: none,
     admin: none,
+    quisioner: none,
+    appointments: cr,
+    availability: readOnly,
+  },
+  PSYCHOLOGIST: {
+    cases: none,
+    incidents: none,
+    interventions: none,
+    media_assets: none,
+    alerts: none,
+    reports: none,
+    consents: none,
+    audit_logs: none,
+    positive_observations: none,
+    students: none,
+    admin: none,
+    quisioner: readOnly,
+    appointments: crud,
+    availability: crud,
   },
 };

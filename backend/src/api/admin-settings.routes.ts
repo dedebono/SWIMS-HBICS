@@ -32,7 +32,19 @@ const settingsSchema = z.object({
     gdriveRefreshToken: z.string().optional(),
     gdriveFolderId: z.string().optional(),
     provider: z.string().optional() // Allow the frontend's raw provider field
-  }).passthrough().optional()
+  }).passthrough().optional(),
+  waha: z.object({
+    url: z.string().optional(),
+    session: z.string().optional(),
+    apiKey: z.string().optional(),
+  }).passthrough().optional(),
+  email: z.object({
+    host: z.string().optional(),
+    port: z.coerce.number().optional(),
+    secure: z.boolean().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+  }).passthrough().optional(),
 });
 
 const checkAiSchema = z.object({
@@ -82,7 +94,9 @@ router.patch(
         ...currentSettings,
         ...updates,
         ai: { ...currentSettings.ai, ...updates.ai },
-        storage: { ...currentSettings.storage, ...updates.storage }
+        storage: { ...currentSettings.storage, ...updates.storage },
+        waha: { ...currentSettings.waha, ...updates.waha },
+        email: { ...currentSettings.email, ...updates.email },
       };
 
       await client.query('UPDATE tenants SET settings = $1 WHERE tenant_id = $2', [JSON.stringify(newSettings), req.tenantId]);

@@ -57,7 +57,7 @@ export const createCommunicationSchema = z.object({
 export const createUserSchema = z.object({
   full_name: z.string().min(2),
   email: z.string().email(),
-  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER', 'PERSONAL']),
+  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER', 'PERSONAL', 'PSYCHOLOGIST']),
   national_id: z.string().optional(),
   gender: z.string().optional(),
   password: z.string().min(8).optional(),
@@ -70,7 +70,7 @@ export const bulkCreateUsersSchema = z.object({
 export const updateUserSchema = z.object({
   full_name: z.string().min(2).optional(),
   email: z.string().email().optional(),
-  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER', 'PERSONAL']).optional(),
+  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER', 'PERSONAL', 'PSYCHOLOGIST']).optional(),
   national_id: z.string().optional(),
   is_active: z.boolean().optional(),
   password: z.string().min(8).optional(),

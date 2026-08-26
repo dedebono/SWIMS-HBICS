@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Bot, Sparkles, User, AlertCircle, HeartHandshake, Share2, Users, X, Check, Loader2, Trash2, Pencil } from 'lucide-react';
+import { Bot, Sparkles, User, AlertCircle, HeartHandshake, Share2, Users, X, Check, Loader2, Trash2, Pencil, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -32,6 +32,7 @@ import { InterventionsTab } from '@/components/cases/interventions-tab';
 import { MediaTab } from '@/components/cases/media-tab';
 import { CommunicationsTab } from '@/components/cases/communications-tab';
 import { StudentProfileDialog } from '@/components/students/student-profile-dialog';
+import { CounselingTab } from '@/components/counseling/counseling-tab';
 import { RISK_COLORS, STATUS_COLORS } from '@/lib/constants';
 interface CaseDetail {
   case_id: string;
@@ -398,6 +399,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
           <TabsTrigger value="media">Media</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="counseling">Janji Temu</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -699,6 +701,11 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
               <p className="text-xs text-muted-foreground/60 mt-1">View detailed audit logs for all changes to this case</p>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Counseling / Janji Temu Tab */}
+        <TabsContent value="counseling" className="space-y-4">
+          <CounselingTab caseId={caseData.case_id} studentId={caseData.student_id} user={user} />
         </TabsContent>
       </Tabs>
 

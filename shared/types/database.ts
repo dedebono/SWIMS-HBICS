@@ -56,6 +56,7 @@ export const Role = {
   CASE_REVIEWER: 'CASE_REVIEWER',
   IT_ADMIN: 'IT_ADMIN',
   PERSONAL: 'PERSONAL',
+  PSYCHOLOGIST: 'PSYCHOLOGIST',
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
@@ -112,6 +113,7 @@ export interface StudentRow {
   gender: string | null;
   national_id: string | null;
   qr_code: string | null;
+  phone_number: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   deleted_at: string | null;
@@ -317,4 +319,58 @@ export interface HomeroomAssignmentRow {
   academic_year: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface QuisionerQuestionRow {
+  question_id: string;
+  tenant_id: string;
+  question_text: string;
+  question_type: 'multiple_choice' | 'checkbox' | 'text' | 'rating';
+  is_required: boolean;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface QuisionerAnswerRow {
+  answer_id: string;
+  question_id: string;
+  answer_text: string;
+  score: number;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export interface AppointmentRow {
+  appointment_id: string;
+  tenant_id: string;
+  type: 'student' | 'personal';
+  status: 'pending' | 'awaiting_parent_choice' | 'awaiting_psychologist_availability' | 'confirmed' | 'cancelled' | 'completed';
+  scheduled_at: string | null;
+  location: 'online' | 'offline' | null;
+  notes: string | null;
+  created_by: string;
+  created_for: string;
+  student_id: string | null;
+  counselor_id: string | null;
+  psychologist_id: string | null;
+  school_nurse_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface AvailabilitySlotRow {
+  slot_id: string;
+  tenant_id: string;
+  professional_id: string;
+  slot_start: string;
+  slot_end: string;
+  is_available: boolean;
+  appointment_id: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 }

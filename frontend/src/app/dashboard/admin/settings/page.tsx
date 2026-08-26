@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Save, Cloud, CheckCircle, AlertTriangle } from "lucide-react";
+import { Bot, Save, Cloud, CheckCircle, AlertTriangle, MessageSquare, Mail } from "lucide-react";
 
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(false);
@@ -34,6 +34,20 @@ export default function AdminSettingsPage() {
     publicUrl: "",
   });
 
+  const [wahaSettings, setWahaSettings] = useState({
+    url: "http://100.127.221.23:3002",
+    session: "default",
+    apiKey: "",
+  });
+
+  const [emailSettings, setEmailSettings] = useState({
+    host: "smtp.sumopod.com",
+    port: 465,
+    secure: true,
+    username: "",
+    password: "",
+  });
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -46,6 +60,8 @@ export default function AdminSettingsPage() {
       if (res.success && res.data) {
         if (res.data.ai) setAiSettings(prev => ({ ...prev, ...res.data.ai }));
         if (res.data.storage) setStorageSettings(prev => ({ ...prev, ...res.data.storage }));
+        if (res.data.waha) setWahaSettings(prev => ({ ...prev, ...res.data.waha }));
+        if (res.data.email) setEmailSettings(prev => ({ ...prev, ...res.data.email }));
       }
     } catch (error) {
       toast.error("Failed to load settings. Are you an IT Admin?");
@@ -54,12 +70,14 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleSaveSettings = async (category: "ai" | "storage") => {
+  const handleSaveSettings = async (category: "ai" | "storage" | "waha" | "email") => {
     try {
       setSaving(true);
-      const payload = category === "ai"
-        ? { ai: aiSettings }
-        : { storage: { ...storageSettings, storageProvider: storageSettings.provider } };
+      let payload: any = {};
+      if (category === "ai") payload.ai = aiSettings;
+      else if (category === "storage") payload.storage = { ...storageSettings, storageProvider: storageSettings.provider };
+      else if (category === "waha") payload.waha = wahaSettings;
+      else if (category === "email") payload.email = emailSettings;
 
       const res = await apiClient<any>("/admin/settings", {
         method: "PATCH",
@@ -105,16 +123,20 @@ export default function AdminSettingsPage() {
           IT Admin Settings
         </h1>
         <p className="text-zinc-500 dark:text-zinc-400 mt-2">
-          Manage system configurations, integrations, and storage backends.
+          Manage system configurations, integrations, and external services.
         </p>
       </div>
 
       <Tabs
         style={{ display: 'block', overflow: 'auto' }}
-        defaultValue="ai" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        defaultValue="ai"
+        className="w-full"
+      >
+        <TabsList className="grid w-full max-w-2xl grid-cols-4">
           <TabsTrigger value="ai">AI Insights</TabsTrigger>
-          <TabsTrigger value="storage">Storage Providers</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
+          <TabsTrigger value="waha">WAHA</TabsTrigger>
+          <TabsTrigger value="email">Email SMTP</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ai" className="mt-6 space-y-6">
@@ -241,7 +263,7 @@ export default function AdminSettingsPage() {
                 <div className="rounded-md bg-muted/50 p-4">
                   <h4 className="text-sm font-semibold mb-2">Local Server Storage Active</h4>
                   <p className="text-sm text-muted-foreground">
-                    Files will be securely saved directly to the backend server's local file system (e.g. <code>backend/uploads/</code>). No additional configuration keys are required for this provider.
+                    Files will be securely saved directly to the backend server&apos;s local file system (e.g. <code>backend/uploads/</code>). No additional configuration keys are required for this provider.
                   </p>
                 </div>
               ) : (
@@ -286,6 +308,125 @@ export default function AdminSettingsPage() {
             <CardFooter className="flex justify-end border-t p-6">
               <Button onClick={() => handleSaveSettings("storage")} disabled={saving}>
                 <Save className="mr-2 h-4 w-4" /> Save Storage Settings
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="waha" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-emerald-500" />
+                WAHA Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure WhatsApp integration via WAHA for notifications and messaging.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>WAHA URL</Label>
+                  <Input
+                    placeholder="http://100.127.221.23:3002"
+                    value={wahaSettings.url || ""}
+                    onChange={(e) => setWahaSettings({ ...wahaSettings, url: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Session</Label>
+                  <Input
+                    placeholder="default"
+                    value={wahaSettings.session || ""}
+                    onChange={(e) => setWahaSettings({ ...wahaSettings, session: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <Input
+                  type="password"
+                  placeholder="Enter WAHA API key"
+                  value={wahaSettings.apiKey || ""}
+                  onChange={(e) => setWahaSettings({ ...wahaSettings, apiKey: e.target.value })}
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-end border-t p-6">
+              <Button onClick={() => handleSaveSettings("waha")} disabled={saving}>
+                <Save className="mr-2 h-4 w-4" /> Save WAHA Settings
+              </Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="email" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-orange-500" />
+                Email SMTP Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure SMTP settings for sending emails (parent notifications, appointment confirmations, etc.).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>SMTP Host</Label>
+                  <Input
+                    placeholder="smtp.sumopod.com"
+                    value={emailSettings.host || ""}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, host: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Port</Label>
+                  <Input
+                    type="number"
+                    placeholder="465"
+                    value={emailSettings.port || ""}
+                    onChange={(e) => setEmailSettings({ ...emailSettings, port: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-4 shadow-sm">
+                <div className="space-y-0.5">
+                  <Label className="text-base">SSL/TLS</Label>
+                  <p className="text-sm text-zinc-500">Enable secure connection (recommended for port 465).</p>
+                </div>
+                <Switch
+                  checked={!!emailSettings.secure}
+                  onCheckedChange={(v) => setEmailSettings({ ...emailSettings, secure: v })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Username</Label>
+                <Input
+                  placeholder="username"
+                  value={emailSettings.username || ""}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, username: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Password</Label>
+                <Input
+                  type="password"
+                  placeholder="password"
+                  value={emailSettings.password || ""}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, password: e.target.value })}
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-end border-t p-6">
+              <Button onClick={() => handleSaveSettings("email")} disabled={saving}>
+                <Save className="mr-2 h-4 w-4" /> Save Email Settings
               </Button>
             </CardFooter>
           </Card>

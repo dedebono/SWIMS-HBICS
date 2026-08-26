@@ -13,7 +13,7 @@ import { apiClient } from "@/lib/api-client";
 import Papa from "papaparse";
 import RolePermissionsManager from "@/components/admin/RolePermissionsManager";
 
-type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER' | 'PERSONAL';
+type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER' | 'PERSONAL' | 'PSYCHOLOGIST';
 
 interface UserData {
   id: string;
@@ -25,6 +25,7 @@ interface UserData {
   type: 'STAFF' | 'STUDENT';
   national_id?: string;
   gender?: string | null;
+  phone_number?: string | null;
 }
 
 export default function AdminUsersPage() {
@@ -61,6 +62,7 @@ export default function AdminUsersPage() {
     is_active: true,
     password: "",
     gender: "",
+    phone_number: "",
   });
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
@@ -158,13 +160,14 @@ export default function AdminUsersPage() {
       is_active: user.is_active,
       password: "",
       gender: user.gender || "",
+      phone_number: user.phone_number || "",
     });
     setIsEditSubmitting(false);
   };
 
   const closeEditDialog = () => {
     setEditUser(null);
-    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "", gender: "" });
+    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "", gender: "", phone_number: "" });
   };
 
   const handleEditSubmit = async () => {
@@ -185,6 +188,9 @@ export default function AdminUsersPage() {
         body.role = editForm.role;
         body.is_active = editForm.is_active;
         body.gender = editForm.gender || null;
+      } else {
+        // Students: allow phone number to be set/updated here (used for WAHA notifications)
+        body.phone_number = editForm.phone_number || null;
       }
       if (editForm.password) body.password = editForm.password;
 
@@ -352,6 +358,7 @@ export default function AdminUsersPage() {
                     <SelectItem value="STUDENT">Student</SelectItem>
                     <SelectItem value="TEACHER">Teacher</SelectItem>
                     <SelectItem value="COUNSELOR">Counselor</SelectItem>
+                    <SelectItem value="PSYCHOLOGIST">Psychologist</SelectItem>
                     <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
                     <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
                     <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
@@ -508,6 +515,7 @@ export default function AdminUsersPage() {
                   <SelectItem value="STUDENT">Student</SelectItem>
                   <SelectItem value="TEACHER">Teacher</SelectItem>
                   <SelectItem value="COUNSELOR">Counselor</SelectItem>
+                  <SelectItem value="PSYCHOLOGIST">Psychologist</SelectItem>
                   <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
                   <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
                   <SelectItem value="PERSONAL">Personal</SelectItem>
@@ -556,6 +564,7 @@ export default function AdminUsersPage() {
                     </th>
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3 rounded-tr-md text-right">Joined</th>
                     <th className="px-4 py-3 rounded-tr-md text-center">Actions</th>
                   </tr>
@@ -592,6 +601,9 @@ export default function AdminUsersPage() {
                             {user.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </span>
+                      </td>
+                      <td className="px-4 py-4 text-muted-foreground">
+                        {user.phone_number || <span className="text-zinc-300 dark:text-zinc-700">no-phone</span>}
                       </td>
                       <td className="px-4 py-4 text-right text-muted-foreground tabular-nums text-[11px]">
                         {new Date(user.created_at).toLocaleDateString()}
@@ -654,6 +666,7 @@ export default function AdminUsersPage() {
                     <SelectContent>
                       <SelectItem value="TEACHER">Teacher</SelectItem>
                       <SelectItem value="COUNSELOR">Counselor</SelectItem>
+                      <SelectItem value="PSYCHOLOGIST">Psychologist</SelectItem>
                       <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
                       <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
                       <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
@@ -700,9 +713,18 @@ export default function AdminUsersPage() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Student profile editing is managed separately in the student directory.
-              </p>
+              <>
+                <div className="space-y-2">
+                  <Label>Phone Number (Optional)</Label>
+                  <Input
+                    type="tel"
+                    value={editForm.phone_number}
+                    onChange={e => setEditForm({ ...editForm, phone_number: e.target.value })}
+                    placeholder="e.g., +6281234567890"
+                  />
+                  <p className="text-xs text-muted-foreground">Include country code (e.g., +62 for Indonesia). Used for WhatsApp appointment notifications.</p>
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>

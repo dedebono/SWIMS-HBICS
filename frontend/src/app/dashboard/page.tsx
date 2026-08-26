@@ -19,6 +19,9 @@ export default function DashboardRootPage() {
       case 'COUNSELOR':
         router.replace('/dashboard/counselor');
         break;
+      case 'PSYCHOLOGIST':
+        router.replace('/dashboard/psychologist');
+        break;
       case 'SCHOOL_HEAD':
         router.replace('/dashboard/head');
         break;
@@ -40,7 +43,6 @@ export default function DashboardRootPage() {
       case 'TEACHER':
       case 'SUBSTITUTE_TEACHER':
       default:
-        // Teacher dashboard is now in its own folder
         router.replace('/dashboard/teacher');
         break;
     }

@@ -132,7 +132,7 @@ export async function getAllUsers(tenantId: string) {
     );
 
     const { rows: students } = await client.query(
-      `SELECT student_id as id, full_name, metadata->>'email' as email, 'STUDENT' as role, true as is_active, created_at, 'STUDENT' as type, national_id
+      `SELECT student_id as id, full_name, metadata->>'email' as email, 'STUDENT' as role, true as is_active, created_at, 'STUDENT' as type, national_id, phone_number
        FROM students
        WHERE tenant_id = $1
        ORDER BY full_name ASC`,
@@ -169,6 +169,7 @@ export interface UpdateUserData {
   role?: Role;
   national_id?: string;
   gender?: string;
+  phone_number?: string | null;
   is_active?: boolean;
   password?: string;
 }
@@ -259,6 +260,10 @@ export async function updateUser(
         const encryptedNationalId = data.national_id ? encryptField(data.national_id) : null;
         updates.push(`national_id = $${paramIndex++}`);
         values.push(encryptedNationalId);
+      }
+      if (data.phone_number !== undefined) {
+        updates.push(`phone_number = $${paramIndex++}`);
+        values.push(data.phone_number || null);
       }
 
       if (updates.length === 0) {

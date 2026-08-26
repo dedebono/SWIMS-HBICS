@@ -37,18 +37,18 @@ export function clearTokens(): void {
   localStorage.removeItem('swims_user');
 }
 
-export function getStoredUser(): { user_id: string; full_name: string; email: string; role: string; tenant_id: string } | null {
+export function getStoredUser(): { user_id: string; full_name: string; email: string; role: string; tenant_id: string; gender?: string } | null {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem('swims_user');
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as { user_id: string; full_name: string; email: string; role: string; tenant_id: string };
+    return JSON.parse(raw) as { user_id: string; full_name: string; email: string; role: string; tenant_id: string; gender?: string };
   } catch {
     return null;
   }
 }
 
-export function setStoredUser(user: { user_id: string; full_name: string; email: string; role: string; tenant_id: string }): void {
+export function setStoredUser(user: { user_id: string; full_name: string; email: string; role: string; tenant_id: string; gender?: string }): void {
   localStorage.setItem('swims_user', JSON.stringify(user));
 }
 

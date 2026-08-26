@@ -9,6 +9,7 @@ interface User {
   email: string;
   role: string;
   tenant_id: string;
+  gender?: string;
 }
 
 interface AuthContextType {
