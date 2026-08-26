@@ -31,6 +31,7 @@ import insightsRoutes from './api/insights.routes.js';
 import disciplineHandbookRoutes from './api/discipline-handbook.routes.js';
 import quisionerRoutes from './api/quisioner.routes.js';
 import appointmentsRoutes from './api/appointments.routes.js';
+import staffQuisionerRoutes from './api/staff-quisioner.routes.js';
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ app.use('/api', communicationsRoutes);
 app.use('/api', observationsRoutes);
 app.use('/api', insightsRoutes);
 app.use('/api', teacherRouter);
+app.use('/api', staffQuisionerRoutes);
 
 // ─── Error Handler (must be last) ───────────────────────────────────────────
 

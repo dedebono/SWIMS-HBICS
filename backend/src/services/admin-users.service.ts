@@ -73,11 +73,23 @@ export async function createUser(tenantId: string, data: CreateUserData): Promis
       const passwordToUse = data.password || DEFAULT_PASSWORD;
       const passwordHash = await bcrypt.hash(passwordToUse, 12);
 
+      let nationalIdHash: string | null = null;
+      if (data.national_id) {
+        nationalIdHash = hashNationalId(data.national_id);
+        const { rowCount: dupCount } = await client.query(
+          `SELECT 1 FROM users WHERE tenant_id = $1 AND national_id_hash = $2 AND deleted_at IS NULL`,
+          [tenantId, nationalIdHash],
+        );
+        if (dupCount && dupCount > 0) {
+          throw new ValidationError('A user with this National ID / Employee ID already exists.');
+        }
+      }
+
       const { rows } = await client.query<{ user_id: string }>(
-        `INSERT INTO users (tenant_id, full_name, email, password_hash, role, gender)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users (tenant_id, full_name, email, password_hash, role, gender, national_id, national_id_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING user_id`,
-        [tenantId, data.full_name, emailLower, passwordHash, data.role, data.gender ?? null]
+        [tenantId, data.full_name, emailLower, passwordHash, data.role, data.gender ?? null, data.national_id ?? null, nationalIdHash]
       );
 
       return { user_id: rows[0]!.user_id };
@@ -226,6 +238,20 @@ export async function updateUser(
         const passwordHash = await bcrypt.hash(data.password, 12);
         updates.push(`password_hash = $${paramIndex++}`);
         values.push(passwordHash);
+      }
+      if (data.national_id !== undefined) {
+        const nidHash = hashNationalId(data.national_id);
+        const { rowCount: dupCount } = await client.query(
+          `SELECT 1 FROM users WHERE tenant_id = $1 AND national_id_hash = $2 AND user_id != $3 AND deleted_at IS NULL`,
+          [tenantId, nidHash, userId],
+        );
+        if (dupCount && dupCount > 0) {
+          throw new ValidationError('A user with this National ID / Employee ID already exists.');
+        }
+        updates.push(`national_id = $${paramIndex++}`);
+        values.push(data.national_id);
+        updates.push(`national_id_hash = $${paramIndex++}`);
+        values.push(nidHash);
       }
 
       if (updates.length === 0) {

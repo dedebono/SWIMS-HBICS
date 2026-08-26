@@ -56,6 +56,13 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
   const [submitted, setSubmitted] = useState(false);
 
   const isTeacher = user?.role === 'TEACHER';
+  const [quisionerTarget, setQuisionerTarget] = useState<string>('student');
+
+  useEffect(() => {
+    apiClient<{ target: string }>('/quisioner/settings').then(r => {
+      if (r.success && r.data) setQuisionerTarget(r.data.target);
+    });
+  }, []);
 
   useEffect(() => {
     if (!isTeacher) return;
@@ -162,6 +169,16 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
       <Card className="glass border-border/50">
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
           Fitur Quisioner & Janji Temu hanya tersedia untuk akun Guru.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (quisionerTarget && quisionerTarget !== 'student') {
+    return (
+      <Card className="glass border-border/50">
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          Quisioner siswa sedang nonaktif karena Admin IT mengatur quisioner untuk staff.
         </CardContent>
       </Card>
     );

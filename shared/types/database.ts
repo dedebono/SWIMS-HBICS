@@ -101,6 +101,8 @@ export interface UserRow {
   password_hash: string;
   role: Role;
   is_active: boolean;
+  national_id: string | null;
+  national_id_hash: string | null;
   created_at: string;
   deleted_at: string | null;
 }
@@ -117,6 +119,26 @@ export interface StudentRow {
   metadata: Record<string, unknown>;
   created_at: string;
   deleted_at: string | null;
+}
+
+export interface StaffQuisionerSubmissionRow {
+  submission_id: string;
+  tenant_id: string;
+  staff_user_id: string;
+  total_score: number;
+  recommendation: 'professional' | 'internal';
+  answers: unknown;
+  status: 'new' | 'reviewed' | 'scheduled' | 'closed';
+  counselor_notes: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface StaffQuisionerSubmissionWithStaff extends StaffQuisionerSubmissionRow {
+  staff_name: string;
+  staff_gender: string;
+  staff_email: string | null;
 }
 
 export interface StudentEnrollmentHistoryRow {

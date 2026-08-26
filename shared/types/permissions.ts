@@ -25,7 +25,8 @@ export type Resource =
   | 'admin'
   | 'quisioner'
   | 'appointments'
-  | 'availability';
+  | 'availability'
+  | 'staff_quisioner';
 
 export type Action = 'create' | 'read' | 'update' | 'delete';
 
@@ -58,6 +59,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: cr,
     appointments: none,
     availability: none,
+    staff_quisioner: none,
   },
   SUBSTITUTE_TEACHER: {
     cases: cr,
@@ -74,6 +76,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: cr,
     appointments: none,
     availability: none,
+    staff_quisioner: none,
   },
   COUNSELOR: {
     cases: crud,
@@ -90,6 +93,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: readOnly,
     appointments: crud,
     availability: crud,
+    staff_quisioner: readUpdate,
   },
   SCHOOL_NURSE: {
     cases: readOnly,        // medical-category only (enforced by ABAC)
@@ -106,6 +110,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: readOnly,
     appointments: readUpdate,
     availability: readOnly,
+    staff_quisioner: none,
   },
   SCHOOL_HEAD: {
     cases: { create: true, read: true, update: true, delete: false }, // cannot delete
@@ -122,6 +127,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: readOnly,
     appointments: readUpdate,
     availability: readOnly,
+    staff_quisioner: none,
   },
   BOARD_MEMBER: {
     cases: readOnly,        // anonymized only (enforced by ABAC)
@@ -138,6 +144,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: none,
     appointments: none,
     availability: none,
+    staff_quisioner: none,
   },
   CASE_REVIEWER: {
     cases: readOnly,        // assigned cases only (enforced by ABAC)
@@ -154,6 +161,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: none,
     appointments: none,
     availability: none,
+    staff_quisioner: none,
   },
   IT_ADMIN: {
     cases: readOnly,        // no descriptions (enforced by ABAC — data minimization)
@@ -170,6 +178,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: crud,
     appointments: crud,
     availability: crud,
+    staff_quisioner: crud,
   },
   PERSONAL: {
     cases: none,            // personal account — no case access
@@ -186,6 +195,7 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: none,
     appointments: cr,
     availability: readOnly,
+    staff_quisioner: none,
   },
   PSYCHOLOGIST: {
     cases: none,
@@ -202,5 +212,6 @@ export const PERMISSIONS: PermissionMatrix = {
     quisioner: readOnly,
     appointments: crud,
     availability: crud,
+    staff_quisioner: readUpdate,
   },
 };

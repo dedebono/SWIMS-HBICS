@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface Question {
   question_id: string;
@@ -35,6 +36,10 @@ export default function QuisionerAdminPage() {
   const [form, setForm] = useState({ question_text: '', question_type: 'multiple_choice' as Question['question_type'], is_required: true, order_index: 0 });
   const [answerForm, setAnswerForm] = useState<Record<string, { answer_text: string; score: string }>>({});
 
+  const [target, setTarget] = useState<'student' | 'staff'>('student');
+  const [slug, setSlug] = useState('');
+  const [targetLoading, setTargetLoading] = useState(true);
+
   const fetchQuestions = async () => {
     setLoading(true);
     const res = await apiClient<Question[]>('/quisioner/questions');
@@ -49,9 +54,36 @@ export default function QuisionerAdminPage() {
     setThresholdLoading(false);
   };
 
+  const fetchSettings = async () => {
+    setTargetLoading(true);
+    const res = await apiClient<{ target: 'student' | 'staff' }>('/quisioner/settings');
+    if (res.success && res.data) setTarget(res.data.target);
+    setTargetLoading(false);
+  };
+
+  const fetchSlug = async () => {
+    const res = await apiClient<{ slug: string }>('/quisioner/tenant-slug');
+    if (res.success && res.data) setSlug(res.data.slug);
+  };
+
+  const handleSaveTarget = async (value: 'student' | 'staff') => {
+    setTarget(value);
+    const res = await apiClient<{ target: 'student' | 'staff' }>('/quisioner/settings', {
+      method: 'PATCH',
+      body: { target: value },
+    });
+    if (res.success) {
+      toast.success('Penggunaan quisioner diperbarui');
+    } else {
+      toast.error(res.error ?? 'Gagal menyimpan');
+    }
+  };
+
   useEffect(() => {
     fetchQuestions();
     fetchThreshold();
+    fetchSettings();
+    fetchSlug();
   }, []);
 
   const fetchAnswers = async (questionId: string) => {
@@ -174,6 +206,49 @@ export default function QuisionerAdminPage() {
           </div>
           {threshold !== null && (
             <p className="text-xs text-muted-foreground mt-2">Skor &ge; {threshold} = Rekomendasi <strong>Professional</strong>. Di bawah itu = <strong>Internal</strong>.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Penggunaan &amp; QR Code Quisioner</CardTitle>
+          <CardDescription>
+            Pilih sasaran quisioner. Mode &quot;Staff&quot; mengaktifkan laman quisioner untuk karyawan (scan QR di bawah).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Label htmlFor="qtarget">Sasaran Quisioner</Label>
+            <select
+              id="qtarget"
+              className="border rounded p-2"
+              value={target}
+              disabled={targetLoading}
+              onChange={(e) => handleSaveTarget(e.target.value as 'student' | 'staff')}
+            >
+              <option value="student">Siswa (Alur Kasus)</option>
+              <option value="staff">Staff (Laman Quisioner)</option>
+            </select>
+          </div>
+          {target === 'staff' && slug && (
+            <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Scan QR ini untuk membuka laman quisioner staff:</p>
+              <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/staff?t=${slug}`} size={180} />
+              <div className="flex items-center gap-2">
+                <code className="text-xs break-all rounded bg-muted px-2 py-1">{typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/staff?t={slug}</code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/staff?t=${slug}`);
+                    toast.success('Link disalin');
+                  }}
+                >
+                  Salin Link
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
