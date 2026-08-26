@@ -73,6 +73,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/guidebook', guidebookRoutes);
 app.use('/api/discipline-handbook', disciplineHandbookRoutes);
+app.use('/api', staffQuisionerRoutes);
 app.use('/api/quisioner', quisionerRoutes);
 app.use('/api/appointments', appointmentsRoutes);
 
@@ -84,7 +85,6 @@ app.use('/api', communicationsRoutes);
 app.use('/api', observationsRoutes);
 app.use('/api', insightsRoutes);
 app.use('/api', teacherRouter);
-app.use('/api', staffQuisionerRoutes);
 
 // ─── Error Handler (must be last) ───────────────────────────────────────────
 
