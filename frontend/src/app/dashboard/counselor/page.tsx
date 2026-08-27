@@ -9,11 +9,14 @@ import {
   ShieldAlert,
   ArrowRight,
   RefreshCw,
+  Calendar,
+  Plus,
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 
@@ -35,6 +38,14 @@ interface DormantCase {
 interface DashboardData {
   stats: DashboardStats;
   dormantCases: DormantCase[];
+}
+
+interface AvailabilitySlot {
+  slot_id: string;
+  slot_start: string;
+  slot_end: string;
+  is_available: boolean;
+  appointment_id?: string | null;
 }
 
 // ─── Dashboard Stats Card ──────────────────────────────────────────────────────
@@ -140,6 +151,8 @@ export default function CounselorDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<AvailabilitySlot[]>([]);
+  const [slotForm, setSlotForm] = useState({ slot_start: "", slot_end: "" });
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -150,7 +163,26 @@ export default function CounselorDashboardPage() {
     } else {
       setError(res.error ?? "Failed to load dashboard data.");
     }
+    const user = (typeof window !== 'undefined') ? JSON.parse(localStorage.getItem('swims_user') || '{}') : {};
+    if (user.user_id) {
+      const availRes = await apiClient<AvailabilitySlot[]>(`/availability/${user.user_id}`);
+      if (availRes.success && availRes.data) setAvailability(availRes.data);
+    }
     setLoading(false);
+  };
+
+  const handleAddAvailability = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const user = JSON.parse(localStorage.getItem('swims_user') || '{}');
+    if (!user.user_id) { toast.error('Sesi tidak valid.'); return; }
+    const res = await apiClient('/availability', { method: 'POST', body: { ...slotForm, professional_id: user.user_id } });
+    if (res.success) {
+      toast.success('Slot ketersediaan ditambahkan');
+      setSlotForm({ slot_start: '', slot_end: '' });
+      fetchDashboard();
+    } else {
+      toast.error(res.error ?? 'Gagal menambah slot');
+    }
   };
 
   useEffect(() => {
@@ -257,6 +289,61 @@ export default function CounselorDashboardPage() {
           />
         )}
       </div>
+
+      {/* Availability */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Ketersediaan Jadwal Konseling</CardTitle>
+          <CardDescription>Tambah slot waktu tersedia agar guru/staff dapat booking melalui QR.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleAddAvailability} className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs">Mulai</Label>
+              <input
+                type="datetime-local"
+                className="border rounded p-2"
+                value={slotForm.slot_start}
+                onChange={(e) => setSlotForm({ ...slotForm, slot_start: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Selesai</Label>
+              <input
+                type="datetime-local"
+                className="border rounded p-2"
+                value={slotForm.slot_end}
+                onChange={(e) => setSlotForm({ ...slotForm, slot_end: e.target.value })}
+                required
+              />
+            </div>
+            <Button type="submit" className="gap-2">
+              <Plus className="w-4 h-4" /> Tambah Slot
+            </Button>
+          </form>
+          <div className="space-y-2">
+            {availability.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Belum ada slot tersedia.</p>
+            ) : (
+              availability
+                .slice()
+                .sort((a, b) => new Date(a.slot_start).getTime() - new Date(b.slot_start).getTime())
+                .map((s) => (
+                  <div key={s.slot_id} className="flex items-center justify-between border rounded p-3 text-sm">
+                    <span>
+                      {new Date(s.slot_start).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} –{' '}
+                      {new Date(s.slot_end).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                    </span>
+                    <Badge className={s.is_available ? 'bg-green-100 text-green-700 text-[10px]' : 'bg-gray-100 text-gray-600 text-[10px]'}>
+                      {s.is_available ? 'Tersedia' : s.appointment_id ? 'Terisi' : 'Nonaktif'}
+                    </Badge>
+                  </div>
+                ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
