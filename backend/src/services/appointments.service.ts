@@ -153,7 +153,7 @@ export async function updateAvailabilitySlot(tenantId: string, slotId: string, d
 }): Promise<AvailabilitySlotRow | null> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
-  let idx = 2;
+  let idx = 1;
 
   if (data.slot_start !== undefined) { setClauses.push(`slot_start = $${idx++}`); values.push(data.slot_start); }
   if (data.slot_end !== undefined) { setClauses.push(`slot_end = $${idx++}`); values.push(data.slot_end); }

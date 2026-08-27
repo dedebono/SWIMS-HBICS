@@ -32,6 +32,7 @@ import disciplineHandbookRoutes from './api/discipline-handbook.routes.js';
 import quisionerRoutes from './api/quisioner.routes.js';
 import appointmentsRoutes from './api/appointments.routes.js';
 import staffQuisionerRoutes from './api/staff-quisioner.routes.js';
+import counselingBookingRoutes from './api/counseling-booking.routes.js';
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/guidebook', guidebookRoutes);
 app.use('/api/discipline-handbook', disciplineHandbookRoutes);
 app.use('/api', staffQuisionerRoutes);
+app.use('/api', counselingBookingRoutes);
 app.use('/api/quisioner', quisionerRoutes);
 app.use('/api/appointments', appointmentsRoutes);
 

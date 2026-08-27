@@ -408,6 +408,43 @@ export default function QuisionerAdminPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>QR Code Booking Konseling (Guru &amp; Staff)</CardTitle>
+          <CardDescription>
+            Guru/staff scan QR ini untuk langsung booking janji temu konseling dengan konselor (tanpa login).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {slug && (
+            <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Scan QR ini untuk membuka laman booking konseling:</p>
+              <QRCodeSVG
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/book?t=${slug}`}
+                size={180}
+              />
+              <div className="flex items-center gap-2">
+                <code className="text-xs break-all rounded bg-muted px-2 py-1">
+                  {typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/book?t={slug}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(
+                      `${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/book?t=${slug}`,
+                    );
+                    toast.success('Link disalin');
+                  }}
+                >
+                  Salin Link
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ── DAFTAR PERTANYAAN (question lists) ─────────────────────────────── */}
       <Card>
         <CardHeader>
