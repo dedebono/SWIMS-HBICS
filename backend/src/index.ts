@@ -31,6 +31,7 @@ import insightsRoutes from './api/insights.routes.js';
 import disciplineHandbookRoutes from './api/discipline-handbook.routes.js';
 import quisionerRoutes from './api/quisioner.routes.js';
 import appointmentsRoutes from './api/appointments.routes.js';
+import referralsRoutes from './api/referrals.routes.js';
 import staffQuisionerRoutes from './api/staff-quisioner.routes.js';
 import counselingBookingRoutes from './api/counseling-booking.routes.js';
 const app = express();
@@ -78,6 +79,7 @@ app.use('/api', staffQuisionerRoutes);
 app.use('/api', counselingBookingRoutes);
 app.use('/api/quisioner', quisionerRoutes);
 app.use('/api/appointments', appointmentsRoutes);
+app.use('/api/referrals', referralsRoutes);
 
 // Protected Root-Level Routers
 app.use('/api', incidentsRoutes);

@@ -186,6 +186,7 @@ export default function SchoolHeadDashboard() {
   // Stats (real data from API)
   const [openCount, setOpenCount] = useState<number | "…">("…");
   const [criticalCount, setCriticalCount] = useState<number | "…">("…");
+  const [pendingApprovals, setPendingApprovals] = useState<number | "…">("…");
 
   // AI Summary state
   const [isRunning, setIsRunning] = useState(false);
@@ -195,12 +196,14 @@ export default function SchoolHeadDashboard() {
   // Fetch basic stats on mount
   useEffect(() => {
     const fetchStats = async () => {
-      const [openRes, critRes] = await Promise.all([
+      const [openRes, critRes, refRes] = await Promise.all([
         apiClient<CaseRow[]>("/cases?status=OPEN&limit=100"),
         apiClient<CaseRow[]>("/cases?status=OPEN&risk_level=CRITICAL&limit=100"),
+        apiClient<unknown[]>("/referrals"),
       ]);
       if (openRes.success) setOpenCount(openRes.meta?.total ?? (openRes.data?.length ?? 0));
       if (critRes.success) setCriticalCount(critRes.meta?.total ?? (critRes.data?.length ?? 0));
+      if (refRes.success) setPendingApprovals(refRes.data?.length ?? 0);
     };
     fetchStats();
   }, []);
@@ -317,7 +320,7 @@ export default function SchoolHeadDashboard() {
         />
         <DashboardCard
           title="Pending Approvals"
-          value="—"
+          value={pendingApprovals}
           icon={<FileText className="text-orange-500" />}
         />
         <DashboardCard

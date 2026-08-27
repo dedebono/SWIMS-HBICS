@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
+import CounselingSessions from "@/components/counselor/CounselingSessions";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -344,6 +345,8 @@ export default function CounselorDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      <CounselingSessions />
     </div>
   );
 }
