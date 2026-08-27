@@ -12,6 +12,7 @@ COPY backend/package.json ./backend/
 COPY shared/package.json ./shared/
 
 # Install dependencies
+ENV npm_config_registry=https://mirrors.tencentyun.com/npm
 RUN npm ci
 
 # Copy the rest of the application code

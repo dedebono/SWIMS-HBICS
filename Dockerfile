@@ -16,6 +16,7 @@ COPY package.json package-lock.json ./
 COPY frontend/package.json ./frontend/
 COPY backend/package.json ./backend/
 COPY shared/package.json ./shared/
+ENV npm_config_registry=https://mirrors.tencentyun.com/npm
 RUN npm ci
 
 # ---------------- builder ----------------
