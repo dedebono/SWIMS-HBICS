@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/error-handler.middleware.js';
 import { setTenantFromSlug } from '../middleware/tenant.middleware.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 import * as bookingService from '../services/staff-booking.service.js';
-import { verifyNik } from '../services/staff-quisioner.service.js';
+import { verifyNik } from '../services/staff-booking.service.js';
 
 const router = Router();
 

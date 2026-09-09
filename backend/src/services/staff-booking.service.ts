@@ -3,6 +3,18 @@ import { hashNationalId } from '../utils/encryption.js';
 import { createAppointment, confirmAppointment, updateAvailabilitySlot } from './appointments.service.js';
 import { sendNotificationToUser } from './notifications.service.js';
 
+export async function verifyNik(tenantId: string, nik: string): Promise<{ valid: boolean; staff_name?: string }> {
+  if (!nik || !nik.trim()) return { valid: false };
+  const hash = hashNationalId(nik);
+  const { rows } = await queryWithTenant<{ user_id: string; full_name: string }>(
+    tenantId,
+    `SELECT user_id, full_name FROM users
+     WHERE tenant_id = $1 AND national_id_hash = $2 AND role = 'PERSONAL' AND is_active = true`,
+    [tenantId, hash],
+  );
+  return rows[0] ? { valid: true, staff_name: rows[0].full_name } : { valid: false };
+}
+
 export interface CounselorSlot {
   slot_id: string;
   slot_start: string;
