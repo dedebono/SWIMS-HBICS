@@ -7,13 +7,16 @@ Built with modern web technologies, SWIMS features a robust Role-Based Access Co
 ## 🚀 Key Features
 
 - **Multi-Tenant SaaS Architecture**: Scalable architecture to support multiple schools/districts within a single deployment.
-- **Granular Access Control**: Advanced RBAC and ABAC ensuring data minimization, privacy, and contextual access (e.g., Teachers only see their assigned students, Nurses only handle medical incidents).
+- **Granular Access Control**: Advanced RBAC and ABAC ensuring data minimization, privacy, and contextual access (e.g., Teachers only see their assigned students, Nurses only handle medical incidents). Permissions are dynamic per-role via IT Admin dashboard.
 - **Incident & Case Management**: Complete lifecycle tracking for behavioral and medical incidents, case escalations, and interventions.
 - **Positive Observations**: Dedicated tracking for positive reinforcement and student achievements.
 - **AI-Powered Insights**: Integrated AI analysis (powered by Ollama/Local LLMs) to detect patterns, evaluate intervention efficacy, and summarize student records.
 - **Secure Media Assets**: AWS S3/Firebase integrated secure file handling, redaction support, and presigned uploads for sensitive evidence tracking.
 - **Right to Be Forgotten (RTBF)**: Compliance with data privacy regulations (GDPR/FERPA) allowing IT Admins to securely scrub PII.
 - **Comprehensive Audit Logging**: Immutable audit trails for all sensitive data access and system modifications.
+- **WAHA WhatsApp Integration**: Appointment notifications sent automatically via WAHA HTTP API to student/guardian phone numbers. Phone numbers managed by IT Admin.
+- **Quisioner Module**: Staff and student quisioner forms for data collection. IT Admin manages quisioner configuration.
+- **Social Media Scheduling (Repliz)**: Automated daily Threads/Twitter posts via Repliz API — news threads, quotes, and motivational content scheduled at peak engagement hours (WIB).
 
 ## 🛠 Tech Stack
 
@@ -33,6 +36,8 @@ Built with modern web technologies, SWIMS features a robust Role-Based Access Co
 - **Validation**: Zod
 - **Auth**: JWT (`jsonwebtoken`) + `bcryptjs`; Firebase SSO-ready
 - **Mail / PDF**: nodemailer, pdfkit
+- **WhatsApp**: WAHA HTTP API (`axios`) — appointment notifications to student/guardian phones
+- **Social Media**: Repliz API (`axios`) — automated Threads/Twitter scheduling
 - **Testing**: Vitest + Supertest
 - **AI**: Ollama integration for on-premise/local LLM insights
 
@@ -131,6 +136,7 @@ graph TD
   AUTH --> AD["IT Admin / Super Admin"]
   AUTH --> TC["Teacher / Substitute"]
   AUTH --> ST["Student"]
+  AUTH --> RV["Reviewer"]
 
   CO --> CO1["Dashboard"]
   CO --> CO2["Availability - set counseling schedule"]
@@ -145,8 +151,11 @@ graph TD
   NU --> NU2["Isi Hasil Puspaga"]
   AD --> AD1["User / Role / Permission Mgmt"]
   AD --> AD2["Tenant Settings + RTBF"]
+  AD --> AD3["Quisioner Management"]
+  AD --> AD4["Discipline Handbook"]
   TC --> TC1["Students / Incidents / Cases / Observations / Quisioner"]
   ST --> ST1["Own records / Quisioner"]
+  RV --> RV1["Dashboard / Board - aggregated view"]
 ```
 
 ### 👥 Use Case Diagram
@@ -173,17 +182,20 @@ flowchart LR
   UC9["Tangani insiden medis"]
   UC10["Kelola user / role / permission"]
   UC11["RTBF scrub PII"]
-  UC12["Kirim notifikasi"]
+  UC12["Kirim notifikasi WAHA"]
   UC13["Generate AI insight"]
   UC14["Audit log"]
+  UC15["Kelola quisioner (admin)"]
+  UC16["Isi quisioner (siswa/guru)"]
+  UC17["Edit phone number siswa (admin IT)"]
 
   SG --> UC0
-  KO --> UC1 & UC2 & UC3 & UC4 & UC5
+  KO --> UC1 & UC2 & UC3 & UC4 & UC5 & UC16
   PS --> UC6
   SH --> UC7 & UC8
   NU --> UC9 & UC5
-  AD --> UC10 & UC11
-  SYS --> UC12 & UC13 & UC14
+  AD --> UC10 & UC11 & UC12 & UC15 & UC17
+  SYS --> UC13 & UC14
 
   UC0 --> UC12
   UC4 --> UC7
@@ -244,6 +256,7 @@ erDiagram
   tenants ||--o{ psychologist_referrals : "has"
   tenants ||--o{ cases : "has"
   tenants ||--o{ incidents : "has"
+  tenants ||--o{ quisioners : "has"
 
   users ||--o{ appointments : "counselor_id"
   users ||--o{ appointments : "psychologist_id"
@@ -254,7 +267,18 @@ erDiagram
   users ||--o{ psychologist_referrals : "leader_id"
   users ||--o{ availability_slots : "professional_id"
 
-  students ||--o{ appointments : "student_id"
+  students {
+    uuid student_id PK
+    string national_id UK
+    string full_name
+    string gender
+    string phone_number "WAHA notification target"
+    jsonb metadata
+    string tenant_id FK
+    timestamp created_at
+    timestamp deleted_at
+  }
+  appointments ||--o{ students : "student_id"
   appointments ||--o{ psychologist_referrals : "appointment_id"
   appointments ||--o| availability_slots : "appointment_id"
 ```
@@ -314,12 +338,11 @@ cd frontend && npm run dev          # next dev
 **Docker (recommended)**
 ```bash
 # 1) prune old images/build cache (keeps volumes)
-docker system prune -a -f
-docker builder prune -f
+sudo docker system prune -a -f
+sudo docker builder prune -f
 
 # 2) build shared dist, then compose up (frontend = prod build, backend = dev + auto migrate)
-cd shared && npm run build
-cd ..
+cd shared && npm run build && cd ..
 docker compose up -d --build
 ```
 - `swims_backend` runs `npm run migrate && npm run dev:backend` on start (migrations auto-applied).

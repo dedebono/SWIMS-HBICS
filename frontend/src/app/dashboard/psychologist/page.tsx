@@ -29,6 +29,9 @@ interface AvailabilitySlot {
   slot_end: string;
   is_available: boolean;
   appointment_id?: string | null;
+  repeat_pattern?: string | null;
+  repeat_day?: number | null;
+  parent_slot_id?: string | null;
 }
 
 export default function PsychologistDashboard() {
@@ -37,6 +40,9 @@ export default function PsychologistDashboard() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [slotForm, setSlotForm] = useState({ slot_start: "", slot_end: "" });
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatPattern, setRepeatPattern] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
+  const [repeatWeeks, setRepeatWeeks] = useState<1 | 2 | 3 | 4>(1);
   const [noteForm, setNoteForm] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
 
@@ -55,9 +61,20 @@ export default function PsychologistDashboard() {
   const handleAddAvailability = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = JSON.parse(localStorage.getItem('swims_user') || '{}');
-    const res = await apiClient('/availability', { method: 'POST', body: { ...slotForm, professional_id: user.user_id } });
-    if (res.success) { toast.success('Slot tersedia ditambahkan'); setSlotForm({ slot_start: '', slot_end: '' }); fetchData(); }
-    else { toast.error(res.error ?? 'Gagal'); }
+    const payload: Record<string, unknown> = { ...slotForm };
+    if (repeatEnabled) {
+      payload.repeat_pattern = repeatPattern;
+      payload.repeat_weeks = repeatWeeks;
+    }
+    const res = await apiClient('/availability', { method: 'POST', body: payload });
+    if (res.success) {
+      toast.success(repeatEnabled ? 'Slot berulang ditambahkan' : 'Slot tersedia ditambahkan');
+      setSlotForm({ slot_start: '', slot_end: '' });
+      setRepeatEnabled(false);
+      fetchData();
+    } else {
+      toast.error(res.error ?? 'Gagal');
+    }
   };
 
   const handleConfirmAppointment = async (appointmentId: string) => {
@@ -134,12 +151,35 @@ export default function PsychologistDashboard() {
           <CardDescription>Tambah slot waktu yang tersedia untuk janji temu.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAddAvailability} className="flex gap-3 items-end">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1">
+          <form onSubmit={handleAddAvailability} className="flex flex-col gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <input type="datetime-local" className="border rounded p-2" value={slotForm.slot_start} onChange={e => setSlotForm({ ...slotForm, slot_start: e.target.value })} required />
               <input type="datetime-local" className="border rounded p-2" value={slotForm.slot_end} onChange={e => setSlotForm({ ...slotForm, slot_end: e.target.value })} required />
             </div>
-            <Button type="submit" className="gap-2"><Plus className="w-4 h-4" /> Tambah</Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={repeatEnabled} onChange={e => setRepeatEnabled(e.target.checked)} className="accent-primary" />
+                Berulang
+              </label>
+              {repeatEnabled && (
+                <>
+                  <select className="border rounded p-1.5 text-sm" value={repeatPattern} onChange={e => setRepeatPattern(e.target.value as 'weekly' | 'biweekly' | 'monthly')}>
+                    <option value="weekly">Mingguan</option>
+                    <option value="biweekly">Dua Mingguan</option>
+                    <option value="monthly">Bulanan</option>
+                  </select>
+                  {repeatPattern === 'biweekly' && (
+                    <select className="border rounded p-1.5 text-sm" value={repeatWeeks} onChange={e => setRepeatWeeks(Number(e.target.value) as 1 | 2 | 3 | 4)}>
+                      <option value={1}>Setiap 1 minggu</option>
+                      <option value={2}>Setiap 2 minggu</option>
+                      <option value={3}>Setiap 3 minggu</option>
+                      <option value={4}>Setiap 4 minggu</option>
+                    </select>
+                  )}
+                </>
+              )}
+            </div>
+            <Button type="submit" className="gap-2 self-start"><Plus className="w-4 h-4" /> {repeatEnabled ? 'Tambah Berulang' : 'Tambah'}</Button>
           </form>
         </CardContent>
       </Card>

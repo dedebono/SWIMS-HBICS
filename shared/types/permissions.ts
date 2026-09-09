@@ -26,7 +26,8 @@ export type Resource =
   | 'quisioner'
   | 'appointments'
   | 'availability'
-  | 'staff_quisioner';
+  | 'staff_quisioner'
+  | 'employee_counseling';
 
 export type Action = 'create' | 'read' | 'update' | 'delete';
 
@@ -60,6 +61,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: none,
     availability: none,
     staff_quisioner: none,
+    employee_counseling: cr,
   },
   SUBSTITUTE_TEACHER: {
     cases: cr,
@@ -77,6 +79,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: none,
     availability: none,
     staff_quisioner: none,
+    employee_counseling: cr,
   },
   COUNSELOR: {
     cases: crud,
@@ -94,6 +97,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: crud,
     availability: crud,
     staff_quisioner: readUpdate,
+    employee_counseling: crud,
   },
   SCHOOL_NURSE: {
     cases: readOnly,        // medical-category only (enforced by ABAC)
@@ -111,6 +115,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: readUpdate,
     availability: readOnly,
     staff_quisioner: none,
+    employee_counseling: cr,
   },
   SCHOOL_HEAD: {
     cases: { create: true, read: true, update: true, delete: false }, // cannot delete
@@ -128,6 +133,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: readUpdate,
     availability: readOnly,
     staff_quisioner: none,
+    employee_counseling: readOnly,
   },
   BOARD_MEMBER: {
     cases: readOnly,        // anonymized only (enforced by ABAC)
@@ -145,6 +151,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: none,
     availability: none,
     staff_quisioner: none,
+    employee_counseling: none,
   },
   CASE_REVIEWER: {
     cases: readOnly,        // assigned cases only (enforced by ABAC)
@@ -162,6 +169,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: none,
     availability: none,
     staff_quisioner: none,
+    employee_counseling: none,
   },
   IT_ADMIN: {
     cases: readOnly,        // no descriptions (enforced by ABAC — data minimization)
@@ -179,6 +187,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: crud,
     availability: crud,
     staff_quisioner: crud,
+    employee_counseling: crud,
   },
   PERSONAL: {
     cases: none,            // personal account — no case access
@@ -196,6 +205,7 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: cr,
     availability: readOnly,
     staff_quisioner: none,
+    employee_counseling: cr,
   },
   PSYCHOLOGIST: {
     cases: none,
@@ -213,5 +223,6 @@ export const PERMISSIONS: PermissionMatrix = {
     appointments: crud,
     availability: crud,
     staff_quisioner: readUpdate,
+    employee_counseling: crud,
   },
 };

@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import CounselingSessions from "@/components/counselor/CounselingSessions";
+import { AppointmentPicker } from "@/components/ui/appointment-picker";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,9 @@ interface AvailabilitySlot {
   slot_end: string;
   is_available: boolean;
   appointment_id?: string | null;
+  repeat_pattern?: string | null;
+  repeat_day?: number | null;
+  parent_slot_id?: string | null;
 }
 
 // ─── Dashboard Stats Card ──────────────────────────────────────────────────────
@@ -154,6 +158,10 @@ export default function CounselorDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [availability, setAvailability] = useState<AvailabilitySlot[]>([]);
   const [slotForm, setSlotForm] = useState({ slot_start: "", slot_end: "" });
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatPattern, setRepeatPattern] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
+  const [repeatWeeks, setRepeatWeeks] = useState<1 | 2 | 3 | 4>(1);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -176,10 +184,16 @@ export default function CounselorDashboardPage() {
     e.preventDefault();
     const user = JSON.parse(localStorage.getItem('swims_user') || '{}');
     if (!user.user_id) { toast.error('Sesi tidak valid.'); return; }
-    const res = await apiClient('/availability', { method: 'POST', body: { ...slotForm, professional_id: user.user_id } });
+    const payload: Record<string, unknown> = { ...slotForm };
+    if (repeatEnabled) {
+      payload.repeat_pattern = repeatPattern;
+      payload.repeat_weeks = repeatWeeks;
+    }
+    const res = await apiClient('/availability', { method: 'POST', body: payload });
     if (res.success) {
-      toast.success('Slot ketersediaan ditambahkan');
+      toast.success(repeatEnabled ? 'Slot berulang ditambahkan' : 'Slot ketersediaan ditambahkan');
       setSlotForm({ slot_start: '', slot_end: '' });
+      setRepeatEnabled(false);
       fetchDashboard();
     } else {
       toast.error(res.error ?? 'Gagal menambah slot');
@@ -319,10 +333,63 @@ export default function CounselorDashboardPage() {
                 required
               />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={repeatEnabled}
+                  onChange={(e) => setRepeatEnabled(e.target.checked)}
+                  className="accent-primary"
+                />
+                Berulang
+              </Label>
+              {repeatEnabled && (
+                <div className="flex gap-2 items-center">
+                  <select
+                    className="border rounded p-1.5 text-xs"
+                    value={repeatPattern}
+                    onChange={(e) => setRepeatPattern(e.target.value as 'weekly' | 'biweekly' | 'monthly')}
+                  >
+                    <option value="weekly">Mingguan</option>
+                    <option value="biweekly">Dua Mingguan</option>
+                    <option value="monthly">Bulanan</option>
+                  </select>
+                  {repeatPattern === 'biweekly' && (
+                    <select
+                      className="border rounded p-1.5 text-xs"
+                      value={repeatWeeks}
+                      onChange={(e) => setRepeatWeeks(Number(e.target.value) as 1 | 2 | 3 | 4)}
+                    >
+                      <option value={1}>Setiap 1 minggu</option>
+                      <option value={2}>Setiap 2 minggu</option>
+                      <option value={3}>Setiap 3 minggu</option>
+                      <option value={4}>Setiap 4 minggu</option>
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
             <Button type="submit" className="gap-2">
-              <Plus className="w-4 h-4" /> Tambah Slot
+              <Plus className="w-4 h-4" /> {repeatEnabled ? 'Tambah Berulang' : 'Tambah Slot'}
             </Button>
           </form>
+
+          {/* Calendar view of slots */}
+          {availability.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs">Kalender Slot</Label>
+              <AppointmentPicker
+                slots={availability}
+                selectedDate={selectedDate}
+                onDateSelect={(d) => { setSelectedDate(d); }}
+                selectedSlotId={null}
+                onSlotSelect={() => {}}
+                disabledBefore={new Date()}
+              />
+            </div>
+          )}
+
+          {/* List view of slots */}
           <div className="space-y-2">
             {availability.length === 0 ? (
               <p className="text-sm text-muted-foreground">Belum ada slot tersedia.</p>

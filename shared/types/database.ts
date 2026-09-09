@@ -398,6 +398,8 @@ export interface AppointmentRow {
   deleted_at: string | null;
 }
 
+export type RepeatPattern = 'weekly' | 'biweekly' | 'monthly';
+
 export interface AvailabilitySlotRow {
   slot_id: string;
   tenant_id: string;
@@ -406,6 +408,10 @@ export interface AvailabilitySlotRow {
   slot_end: string;
   is_available: boolean;
   appointment_id: string | null;
+  repeat_pattern: RepeatPattern | null;
+  repeat_day: number | null;       // 0=Sun .. 6=Sat
+  repeat_time: string | null;      // HH:MM
+  parent_slot_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
