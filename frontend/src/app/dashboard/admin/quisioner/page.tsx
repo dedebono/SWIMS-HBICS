@@ -37,16 +37,14 @@ interface QuestionList {
   is_active: boolean;
 }
 
-type ListTarget = 'staff' | 'appointment_student' | 'appointment_case';
+type ListTarget = 'appointment_student' | 'appointment_case';
 
 const TARGET_OPTIONS: { value: ListTarget; label: string }[] = [
-  { value: 'staff', label: 'Staff (Quisioner Karyawan)' },
   { value: 'appointment_student', label: 'Janji Temu · Siswa' },
   { value: 'appointment_case', label: 'Janji Temu · Kasus' },
 ];
 
 const TARGET_LABEL: Record<string, string> = {
-  staff: 'Staff',
   appointment_student: 'Janji Temu · Siswa',
   appointment_case: 'Janji Temu · Kasus',
 };
@@ -68,9 +66,7 @@ export default function QuisionerAdminPage() {
   });
   const [answerForm, setAnswerForm] = useState<Record<string, { answer_text: string; score: string }>>({});
 
-  const [target, setTarget] = useState<'student' | 'staff'>('student');
   const [slug, setSlug] = useState('');
-  const [targetLoading, setTargetLoading] = useState(true);
 
   // ── Daftar Pertanyaan (question lists) ─────────────────────────────────────
   const [lists, setLists] = useState<QuestionList[]>([]);
@@ -85,7 +81,7 @@ export default function QuisionerAdminPage() {
   }>({
     name: '',
     description: '',
-    targets: { staff: false, appointment_student: false, appointment_case: false },
+    targets: { appointment_student: false, appointment_case: false },
     is_active: true,
   });
 
@@ -113,36 +109,15 @@ export default function QuisionerAdminPage() {
     setThresholdLoading(false);
   };
 
-  const fetchSettings = async () => {
-    setTargetLoading(true);
-    const res = await apiClient<{ target: 'student' | 'staff' }>('/quisioner/settings');
-    if (res.success && res.data) setTarget(res.data.target);
-    setTargetLoading(false);
-  };
-
   const fetchSlug = async () => {
     const res = await apiClient<{ slug: string }>('/quisioner/tenant-slug');
     if (res.success && res.data) setSlug(res.data.slug);
-  };
-
-  const handleSaveTarget = async (value: 'student' | 'staff') => {
-    setTarget(value);
-    const res = await apiClient<{ target: 'student' | 'staff' }>('/quisioner/settings', {
-      method: 'PATCH',
-      body: { target: value },
-    });
-    if (res.success) {
-      toast.success('Penggunaan quisioner diperbarui');
-    } else {
-      toast.error(res.error ?? 'Gagal menyimpan');
-    }
   };
 
   useEffect(() => {
     fetchQuestions();
     fetchLists();
     fetchThreshold();
-    fetchSettings();
     fetchSlug();
   }, []);
 
@@ -274,7 +249,6 @@ export default function QuisionerAdminPage() {
       name: l.name,
       description: l.description ?? '',
       targets: {
-        staff: l.targets.includes('staff'),
         appointment_student: l.targets.includes('appointment_student'),
         appointment_case: l.targets.includes('appointment_case'),
       },
@@ -286,7 +260,7 @@ export default function QuisionerAdminPage() {
   const cancelEditList = () => {
     setEditingListId(null);
     setShowListForm(false);
-    setListForm({ name: '', description: '', targets: { staff: false, appointment_student: false, appointment_case: false }, is_active: true });
+    setListForm({ name: '', description: '', targets: { appointment_student: false, appointment_case: false }, is_active: true });
   };
 
   const handleSaveList = async (e: React.FormEvent) => {
@@ -362,54 +336,6 @@ export default function QuisionerAdminPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Penggunaan &amp; QR Code Quisioner</CardTitle>
-          <CardDescription>
-            Pilih sasaran quisioner. Mode &quot;Staff&quot; mengaktifkan laman quisioner untuk karyawan (scan QR di bawah).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Label htmlFor="qtarget">Sasaran Quisioner</Label>
-            <Select
-              value={target}
-              disabled={targetLoading}
-              onValueChange={(v) => handleSaveTarget((v ?? 'student') as 'student' | 'staff')}
-            >
-              <SelectTrigger id="qtarget" className="w-56">
-                <SelectValue placeholder="Pilih sasaran" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="student">Siswa (Alur Kasus)</SelectItem>
-                <SelectItem value="staff">Staff (Laman Quisioner)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {target === 'staff' && slug && (
-            <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">Scan QR ini untuk membuka laman quisioner staff:</p>
-              <QRCodeSVG value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/staff?t=${slug}`} size={180} />
-              <div className="flex items-center gap-2">
-                <code className="text-xs break-all rounded bg-muted px-2 py-1">
-                  {typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/staff?t={slug}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/staff?t=${slug}`);
-                    toast.success('Link disalin');
-                  }}
-                >
-                  Salin Link
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>QR Code Booking Konseling (Guru &amp; Staff)</CardTitle>
           <CardDescription>
             Guru/staff scan QR ini untuk langsung booking janji temu konseling dengan konselor (tanpa login).
@@ -452,7 +378,7 @@ export default function QuisionerAdminPage() {
             <div>
               <CardTitle>Daftar Pertanyaan</CardTitle>
               <CardDescription>
-                Kelompokkan pertanyaan menjadi daftar, lalu assign ke <strong>Staff</strong> atau{' '}
+                Kelompokkan pertanyaan menjadi daftar, lalu assign ke{' '}
                 <strong>Janji Temu (Siswa / Kasus)</strong>. Daftar yang aktif dipakai oleh flow terkait.
               </CardDescription>
             </div>
