@@ -81,7 +81,7 @@ app.use('/api', staffQuisionerRoutes);
 app.use('/api', counselingBookingRoutes);
 app.use('/api', employeeCounselingRoutes);
 app.use('/api/quisioner', quisionerRoutes);
-app.use('/api/appointments', appointmentsRoutes);
+app.use('/api', appointmentsRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/referrals', referralsRoutes);
 

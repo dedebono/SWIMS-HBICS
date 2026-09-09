@@ -17,7 +17,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiClient } from "@/lib/api-client";
+import { localDatetimeToUTC, formatLocalTime, formatLocalTimeOnly } from "@/lib/utils";
 import { toast } from "sonner";
 import CounselingSessions from "@/components/counselor/CounselingSessions";
 import { AppointmentPicker } from "@/components/ui/appointment-picker";
@@ -162,6 +164,9 @@ export default function CounselorDashboardPage() {
   const [repeatPattern, setRepeatPattern] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
   const [repeatWeeks, setRepeatWeeks] = useState<1 | 2 | 3 | 4>(1);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedBookedSlot, setSelectedBookedSlot] = useState<{ slot_id: string; slot_start: string; slot_end: string; appointment_id: string } | null>(null);
+  const [bookedAppointment, setBookedAppointment] = useState<any | null>(null);
+  const [loadingAppointment, setLoadingAppointment] = useState(false);
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -180,11 +185,28 @@ export default function CounselorDashboardPage() {
     setLoading(false);
   };
 
+  const handleSlotClick = async (slot: AvailabilitySlot) => {
+    if (!slot.appointment_id) return;
+    setSelectedBookedSlot({ slot_id: slot.slot_id, slot_start: slot.slot_start, slot_end: slot.slot_end, appointment_id: slot.appointment_id });
+    setLoadingAppointment(true);
+    const res = await apiClient<any>(`/appointments/${slot.appointment_id}`);
+    if (res.success && res.data) {
+      setBookedAppointment(res.data);
+    } else {
+      toast.error('Gagal memuat detail jadwal.');
+      setBookedAppointment(null);
+    }
+    setLoadingAppointment(false);
+  };
+
   const handleAddAvailability = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = JSON.parse(localStorage.getItem('swims_user') || '{}');
     if (!user.user_id) { toast.error('Sesi tidak valid.'); return; }
-    const payload: Record<string, unknown> = { ...slotForm };
+    const payload: Record<string, unknown> = {
+      slot_start: localDatetimeToUTC(slotForm.slot_start),
+      slot_end: localDatetimeToUTC(slotForm.slot_end),
+    };
     if (repeatEnabled) {
       payload.repeat_pattern = repeatPattern;
       payload.repeat_weeks = repeatWeeks;
@@ -400,12 +422,20 @@ export default function CounselorDashboardPage() {
                 .map((s) => (
                   <div key={s.slot_id} className="flex items-center justify-between border rounded p-3 text-sm">
                     <span>
-                      {new Date(s.slot_start).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} –{' '}
-                      {new Date(s.slot_end).toLocaleTimeString('id-ID', { timeStyle: 'short' })}
+                      {formatLocalTime(s.slot_start)} – {formatLocalTimeOnly(s.slot_end)}
                     </span>
-                    <Badge className={s.is_available ? 'bg-green-100 text-green-700 text-[10px]' : 'bg-gray-100 text-gray-600 text-[10px]'}>
-                      {s.is_available ? 'Tersedia' : s.appointment_id ? 'Terisi' : 'Nonaktif'}
-                    </Badge>
+                    {s.appointment_id ? (
+                      <button
+                        onClick={() => handleSlotClick(s)}
+                        className="bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded cursor-pointer hover:bg-gray-200 transition-colors"
+                      >
+                        Terisi
+                      </button>
+                    ) : s.is_available ? (
+                      <Badge className="bg-green-100 text-green-700 text-[10px]">Tersedia</Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 text-gray-600 text-[10px]">Nonaktif</Badge>
+                    )}
                   </div>
                 ))
             )}
@@ -414,6 +444,36 @@ export default function CounselorDashboardPage() {
       </Card>
 
       <CounselingSessions />
+
+      <Dialog open={!!selectedBookedSlot} onOpenChange={(open) => { if (!open) { setSelectedBookedSlot(null); setBookedAppointment(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Detail Jadwal Konseling</DialogTitle>
+          </DialogHeader>
+          {loadingAppointment ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Memuat...</p>
+          ) : bookedAppointment ? (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className="text-muted-foreground">Waktu:</span></div>
+                <div>{selectedBookedSlot ? `${formatLocalTime(selectedBookedSlot.slot_start)} – ${formatLocalTimeOnly(selectedBookedSlot.slot_end)}` : '-'}</div>
+                <div><span className="text-muted-foreground">Status:</span></div>
+                <div><span className={`inline-block px-2 py-0.5 rounded text-xs ${bookedAppointment.status === 'confirmed' ? 'bg-green-100 text-green-800' : bookedAppointment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>{bookedAppointment.status}</span></div>
+                <div><span className="text-muted-foreground">Lokasi:</span></div>
+                <div>{bookedAppointment.location ?? '-'}</div>
+                {bookedAppointment.notes && (
+                  <>
+                    <div><span className="text-muted-foreground">Catatan:</span></div>
+                    <div>{bookedAppointment.notes}</div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground py-4 text-center">Detail tidak tersedia.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

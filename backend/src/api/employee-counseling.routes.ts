@@ -30,8 +30,8 @@ router.post('/employee-counseling/submit', setTenantFromSlug, asyncHandler(async
 
 // ── PROTECTED: List submissions ─────────────────────────────────────────────
 router.get('/employee-counseling/submissions', authenticate, setTenantContext, asyncHandler(async (req, res) => {
-  const role = (req as any).user.role as Role;
-  const userId = (req as any).userId;
+  const role = req.userRole as Role;
+  const userId = req.userId;
   const tenantId = req.tenantId!;
 
   const filters: Parameters<typeof ecService.listSubmissions>[1] = {};
@@ -52,8 +52,8 @@ router.get('/employee-counseling/submissions', authenticate, setTenantContext, a
 // ── PROTECTED: Get single submission ────────────────────────────────────────
 router.get('/employee-counseling/submissions/:id', authenticate, setTenantContext, asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
-  const userId = (req as any).userId;
-  const role = (req as any).user.role as Role;
+  const userId = req.userId;
+  const role = req.userRole as Role;
   const submission = await ecService.getSubmission(tenantId, req.params.id);
 
   if (!submission) return res.status(404).json({ message: 'Not found' });
@@ -122,7 +122,7 @@ router.patch('/employee-counseling/submissions/:id/close', authenticate, setTena
 
 // ── PROTECTED: Access log (admin only) ─────────────────────────────────────
 router.get('/employee-counseling/submissions/:id/access-log', authenticate, setTenantContext, checkPermission('employee_counseling', 'read'), asyncHandler(async (req, res) => {
-  const role = (req as any).user.role as Role;
+  const role = req.userRole as Role;
   if (role !== 'IT_ADMIN') return res.status(403).json({ message: 'Admin only' });
 
   const log = await ecService.getAccessLog(req.tenantId!, req.params.id);

@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { formatInTimeZone } from 'date-fns-tz';
 import { CalendarClock, Loader2 } from 'lucide-react';
 
 interface Appointment {
@@ -71,7 +72,12 @@ export default function SchoolNurseDashboard() {
         status: mediate.status,
         location: mediate.location,
         notes: mediate.notes,
-        scheduled_at: mediate.scheduled_at ? new Date(mediate.scheduled_at).toISOString() : null,
+        scheduled_at: mediate.scheduled_at ? (() => {
+          const [date, time] = mediate.scheduled_at.split('T');
+          const [year, month, day] = date.split('-').map(Number);
+          const [hour, minute] = time.split(':').map(Number);
+          return new Date(Date.UTC(year, month - 1, day, hour, minute)).toISOString();
+        })() : null,
       },
     });
     setSaving(false);
@@ -111,7 +117,7 @@ export default function SchoolNurseDashboard() {
                   <div className="space-y-1">
                     <p className="text-sm font-medium">Siswa ID: {a.student_id?.slice(0, 8) ?? '-'}</p>
                     <p className="text-xs text-muted-foreground">
-                      {a.scheduled_at ? format(new Date(a.scheduled_at), 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}
+                      {a.scheduled_at ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}
                     </p>
                     {a.location && <p className="text-xs text-muted-foreground capitalize">Lokasi: {a.location}</p>}
                     <div className="flex gap-2 flex-wrap">

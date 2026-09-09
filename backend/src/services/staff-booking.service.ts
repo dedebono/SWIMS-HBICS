@@ -105,13 +105,15 @@ export async function bookStaffCounseling(
   }
 
   // Gender rule: a male staff member may only book a male counselor.
+  // Skip the check if the counselor's gender is not set (null).
   if (staffUser.gender.toLowerCase() === 'male') {
-    const { rows: c } = await queryWithTenant<{ gender: string }>(
+    const { rows: c } = await queryWithTenant<{ gender: string | null }>(
       tenantId,
       `SELECT gender FROM users WHERE tenant_id = $1 AND user_id = $2`,
       [tenantId, slot.professional_id],
     );
-    if ((c[0]?.gender ?? '').toLowerCase() !== 'male') {
+    const counselorGender = c[0]?.gender;
+    if (counselorGender !== null && counselorGender.toLowerCase() !== 'male') {
       const err: any = new Error('Aturan: staff laki-laki hanya dapat memilih konselor laki-laki.');
       err.statusCode = 422;
       throw err;

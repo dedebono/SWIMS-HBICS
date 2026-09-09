@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { id } from "date-fns/locale";
 import { CalendarClock, Loader2, Plus } from "lucide-react";
 import { AppointmentPicker, type AvailabilitySlot } from "@/components/ui/appointment-picker";
@@ -237,7 +237,7 @@ export default function PersonalDashboardPage() {
                   {selectedSlot && (
                     <p className="text-sm text-primary font-medium">
                       <CalendarClock className="inline h-4 w-4 mr-1" />
-                      {format(new Date(selectedSlot.slot_start), "dd MMM yyyy HH:mm", { locale: id })}
+                      {formatInTimeZone(new Date(selectedSlot.slot_start), "Asia/Jakarta", "dd MMM yyyy HH:mm", { locale: id })}
                     </p>
                   )}
                 </div>
@@ -309,7 +309,7 @@ export default function PersonalDashboardPage() {
                     <p className="text-sm font-medium">Konseling Personal</p>
                     <p className="text-xs text-muted-foreground">
                       {a.scheduled_at
-                        ? format(new Date(a.scheduled_at), "dd MMM yyyy HH:mm", { locale: id })
+                        ? formatInTimeZone(new Date(a.scheduled_at), "Asia/Jakarta", "dd MMM yyyy HH:mm", { locale: id })
                         : "Belum dijadwalkan"}
                     </p>
                     {a.location && (

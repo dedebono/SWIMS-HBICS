@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format, isSameDay } from "date-fns";
 import { id } from "date-fns/locale";
 import { useState } from "react";
+import { formatInTimeZone } from "date-fns-tz";
 
 export interface AvailabilitySlot {
   slot_id: string;
@@ -92,7 +93,7 @@ export function AppointmentPicker({
                     </p>
                   )}
                   {slotsForDate.map(({ slot_id, slot_start }) => {
-                    const time = format(new Date(slot_start), "HH:mm");
+                    const time = formatInTimeZone(new Date(slot_start), "Asia/Jakarta", "HH:mm", { locale: id });
                     return (
                       <Button
                         key={slot_id}

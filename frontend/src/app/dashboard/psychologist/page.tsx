@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
-import { id } from "date-fns/locale";
+import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
+import { formatInTimeZone } from 'date-fns-tz';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiClient } from "@/lib/api-client";
+import { localDatetimeToUTC } from "@/lib/utils";
 import { toast } from "sonner";
 import { Calendar, Clock, User, Plus } from "lucide-react";
 
@@ -61,7 +63,10 @@ export default function PsychologistDashboard() {
   const handleAddAvailability = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = JSON.parse(localStorage.getItem('swims_user') || '{}');
-    const payload: Record<string, unknown> = { ...slotForm };
+    const payload: Record<string, unknown> = {
+      slot_start: localDatetimeToUTC(slotForm.slot_start),
+      slot_end: localDatetimeToUTC(slotForm.slot_end),
+    };
     if (repeatEnabled) {
       payload.repeat_pattern = repeatPattern;
       payload.repeat_weeks = repeatWeeks;
@@ -197,7 +202,7 @@ export default function PsychologistDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium capitalize">{a.type === 'student' ? 'Siswa' : 'Personal'}</p>
-                      <p className="text-xs text-muted-foreground">{a.scheduled_at ? format(new Date(a.scheduled_at), 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}</p>
+                      <p className="text-xs text-muted-foreground">{a.scheduled_at ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}</p>
                       {a.location && <p className="text-xs text-muted-foreground capitalize">{a.location}</p>}
                       <Badge className={`mt-1 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
                     </div>

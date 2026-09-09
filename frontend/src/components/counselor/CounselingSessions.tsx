@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { formatInTimeZone } from "date-fns-tz";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,7 +170,7 @@ export default function CounselingSessions() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {a.scheduled_at
-                        ? format(new Date(a.scheduled_at), "dd MMM yyyy HH:mm", { locale: idLocale })
+                        ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', "dd MMM yyyy HH:mm", { locale: idLocale })
                         : "Belum dijadwalkan"}
                       {a.location ? ` • ${a.location}` : ""}
                     </p>

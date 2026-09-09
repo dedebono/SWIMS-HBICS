@@ -122,39 +122,6 @@ router.patch(
   }),
 );
 
-// ─── AVAILABILITY ────────────────────────────────────────────────────────────
-
-router.get(
-  '/availability/:professionalId',
-  checkPermission('availability', 'read'),
-  asyncHandler(async (req, res) => {
-    const items = await appointmentService.listAvailability(req.tenantId, req.params.professionalId);
-    sendSuccess(res, items);
-  }),
-);
-
-router.post(
-  '/availability',
-  checkPermission('availability', 'create'),
-  asyncHandler(async (req, res) => {
-    const item = await appointmentService.createAvailabilitySlot(req.tenantId, {
-      ...req.body,
-      professional_id: req.userId,
-    });
-    sendCreated(res, item);
-  }),
-);
-
-router.patch(
-  '/availability/:slotId',
-  checkPermission('availability', 'update'),
-  asyncHandler(async (req, res) => {
-    const item = await appointmentService.updateAvailabilitySlot(req.tenantId, req.params.slotId, req.body);
-    if (!item) return res.status(404).json({ message: 'Not found' });
-    sendSuccess(res, item);
-  }),
-);
-
 router.get(
   '/appointments/counselors',
   checkPermission('appointments', 'read'),

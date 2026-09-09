@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { formatInTimeZone } from "date-fns-tz";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,7 @@ export default function ApprovalsPage() {
                 {r.appointment_type ? ` • ${r.appointment_type === "student" ? "Siswa" : "Personal"}` : ""}
                 {r.created_for ? ` • ${r.created_for}` : ""}
                 {r.scheduled_at
-                  ? ` • ${format(new Date(r.scheduled_at), "dd MMM yyyy HH:mm", { locale: idLocale })}`
+                  ? ` • ${formatInTimeZone(new Date(r.scheduled_at), 'Asia/Jakarta', "dd MMM yyyy HH:mm", { locale: idLocale })}`
                   : ""}
               </CardDescription>
             </CardHeader>

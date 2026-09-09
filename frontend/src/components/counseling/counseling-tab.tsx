@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { formatInTimeZone } from 'date-fns-tz';
 import { CalendarClock, Send, FileText } from 'lucide-react';
 
 interface Question {
@@ -206,7 +207,7 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
             <div className="space-y-2">
               <Badge variant="outline" className="text-[11px]">Sudah dikirim</Badge>
               <p className="text-xs text-muted-foreground">
-                {submission?.submitted_at ? `Dikirim pada ${format(new Date(submission.submitted_at), 'dd MMM yyyy HH:mm', { locale: id })}` : ''}
+                {submission?.submitted_at ? `Dikirim pada ${formatInTimeZone(new Date(submission.submitted_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id })}` : ''}
               </p>
               {submission?.recommendation && (
                 <p className="text-sm">Rekomendasi sistem: <span className="font-medium capitalize">{submission.recommendation}</span></p>
@@ -315,7 +316,7 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
                   <div>
                     <p className="text-sm font-medium capitalize">{a.type === 'student' ? 'Siswa' : 'Personal'}</p>
                     <p className="text-xs text-muted-foreground">
-                      {a.scheduled_at ? format(new Date(a.scheduled_at), 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}
+                      {a.scheduled_at ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}
                     </p>
                     {a.location && <p className="text-xs text-muted-foreground">{a.location}</p>}
                     <Badge className={`mt-1 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
