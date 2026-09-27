@@ -35,6 +35,7 @@ import availabilityRoutes from './api/availability.routes.js';
 import referralsRoutes from './api/referrals.routes.js';
 import counselingBookingRoutes from './api/counseling-booking.routes.js';
 import employeeCounselingRoutes from './api/employee-counseling.routes.js';
+import psychologistReferralRouter from './api/psychologist-referral.routes.js';
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ app.get('/api/health', (_req, res) => {
 // Public Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/public/psychologist-referral', psychologistReferralRouter);
 
 // Protected Routes
 app.use('/api/cases', casesRoutes);
