@@ -44,6 +44,45 @@ export async function submitCounselingQuisioner(
       ],
     );
     appointmentId = rows[0]?.appointment_id ?? null;
+
+    // If professional recommendation: create referral token + send WAHA notification
+    if (appointmentId) {
+      // Get student + parent info + tenant slug
+      const { rows: studentRows } = await queryWithTenant<any>(
+        tenantId,
+        `SELECT s.full_name as student_name, s.parent_phone, s.parent_name, t.slug as tenant_slug
+         FROM students s
+         JOIN tenants t ON t.tenant_id = s.tenant_id
+         WHERE s.student_id = $1`,
+        [data.student_id],
+      );
+      const student = studentRows[0];
+      if (student?.parent_phone) {
+        try {
+          const { createReferralToken, sendReferralNotification } = await import('./psychologist-referral.service.js');
+          const baseUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
+          const { token } = await createReferralToken(tenantId, {
+            appointmentId,
+            studentId: data.student_id,
+            parentPhone: student.parent_phone,
+            parentName: student.parent_name ?? undefined,
+            caseId: data.caseId,
+            studentName: student.student_name,
+          });
+          const referralLink = `${baseUrl}/quisioner/psychologist-referral?t=${student.tenant_slug}&token=${token}`;
+          await sendReferralNotification(
+            tenantId,
+            student.parent_phone,
+            student.parent_name ?? 'Bapak/Ibu',
+            student.student_name,
+            referralLink,
+          );
+        } catch (err) {
+          console.error('[counseling] Failed to send referral notification:', err);
+          // Non-fatal: don't fail the quisioner submission
+        }
+      }
+    }
   } else {
     const { rows } = await queryWithTenant<AppointmentRow>(
       tenantId,
