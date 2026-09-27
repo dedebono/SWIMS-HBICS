@@ -416,3 +416,36 @@ export interface AvailabilitySlotRow {
   updated_at: string;
   deleted_at: string | null;
 }
+
+export interface ParentReferralTokenRow {
+  token_id: string;
+  tenant_id: string;
+  appointment_id: string | null;
+  student_id: string;
+  parent_phone: string;
+  parent_name: string | null;
+  token: string;
+  token_expires_at: string;
+  choice_status: 'pending' | 'school_psychologist' | 'private_psychologist' |
+                 'psychologist_selected' | 'payment_pending' |
+                 'payment_confirmed' | 'schedule_confirmed' | 'expired';
+  selected_psychologist_id: string | null;
+  payment_amount: number | null;
+  payment_confirmed_at: string | null;
+  payment_notes: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SchoolPsychologistRow {
+  psychologist_id: string;
+  tenant_id: string;
+  full_name: string;
+  expertise: string;
+  photo_url: string | null;
+  consultation_fee: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
