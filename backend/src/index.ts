@@ -36,6 +36,7 @@ import referralsRoutes from './api/referrals.routes.js';
 import counselingBookingRoutes from './api/counseling-booking.routes.js';
 import employeeCounselingRoutes from './api/employee-counseling.routes.js';
 import psychologistReferralRouter from './api/psychologist-referral.routes.js';
+import psychologistsAdminRouter from './api/admin/psychologists.routes.js';
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ app.use('/api/alerts', alertsRoutes);
 app.use('/api/counselor', counselorRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin', adminSettingsRoutes);
+app.use('/api/admin/psychologists', psychologistsAdminRouter);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/guidebook', guidebookRoutes);
