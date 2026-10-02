@@ -18,11 +18,6 @@ interface TokenPair {
   refreshToken: string;
 }
 
-export interface CaptchaData {
-  id: string;
-  question: string;
-}
-
 interface LoginResult {
   tokens: TokenPair;
   user: {
@@ -144,39 +139,6 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
-/**
- * Generate a simple math captcha.
- */
-export async function generateCaptcha(): Promise<CaptchaData> {
-  const num1 = Math.floor(Math.random() * 10) + 1;
-  const num2 = Math.floor(Math.random() * 10) + 1;
-  const answer = (num1 + num2).toString();
-  const id = uuidv4();
-  
-  await redis.set(`captcha:${id}`, answer, 'EX', 300); // 5 minutes expiry
-  
-  return { id, question: `What is ${num1} + ${num2}?` };
-}
-
-/**
- * Verify the provided captcha answer.
- */
-export async function verifyCaptcha(id: string, answer: string): Promise<void> {
-  const key = `captcha:${id}`;
-  const stored = await redis.get(key);
-  
-  if (!stored) {
-    throw new UnauthorizedError('Captcha expired or invalid');
-  }
-  
-  // Clean up right away to prevent replay attacks
-  await redis.del(key);
-  
-  if (stored !== answer.trim()) {
-    throw new UnauthorizedError('Incorrect captcha answer');
-  }
-}
-
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 async function generateTokenPair(
@@ -203,54 +165,11 @@ async function generateTokenPair(
   return { accessToken, refreshToken };
 }
 
-// ─── Cookie helpers for httpOnly refresh token storage ──────────────────────────
-
-/**
- * Build Set-Cookie header value for refresh token.
- * httpOnly: cannot be read by client-side JS (XSS protection)
- * secure: HTTPS only in production
- * sameSite: strict to prevent CSRF
- */
-export function buildRefreshCookie(token: string): string {
-  const secure = env.NODE_ENV === 'production';
-  const maxAge = 7 * 24 * 60 * 60; // 7 days in seconds
-  return [
-    `refresh_token=${encodeURIComponent(token)}`,
-    'Path=/api/auth',
-    `Max-Age=${maxAge}`,
-    'HttpOnly',
-    secure ? 'Secure' : '',
-    'SameSite=Strict',
-  ]
-    .filter(Boolean)
-    .join('; ');
-}
-
-/**
- * Build Set-Cookie header to clear the refresh token (logout).
- */
-export function buildClearRefreshCookie(): string {
-  return [
-    'refresh_token=',
-    'Path=/api/auth',
-    'Max-Age=0',
-    'HttpOnly',
-    env.NODE_ENV === 'production' ? 'Secure' : '',
-    'SameSite=Strict',
-  ]
-    .filter(Boolean)
-    .join('; ');
-}
-
 export default {
   login,
   refreshAccessToken,
   revokeAllTokens,
   hashPassword,
-  generateCaptcha,
-  verifyCaptcha,
-  buildRefreshCookie,
-  buildClearRefreshCookie,
 };
 
 export const authService = {
@@ -258,8 +177,4 @@ export const authService = {
   refreshAccessToken,
   revokeAllTokens,
   hashPassword,
-  generateCaptcha,
-  verifyCaptcha,
-  buildRefreshCookie,
-  buildClearRefreshCookie,
 };

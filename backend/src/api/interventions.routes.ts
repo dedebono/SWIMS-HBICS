@@ -17,7 +17,6 @@ const createInterventionSchema = z.object({
   type: z.string().min(1),
   description: z.string().min(1),
   scheduled_at: z.string().datetime().optional(),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 const updateInterventionSchema = z.object({
@@ -28,7 +27,6 @@ const updateInterventionSchema = z.object({
   completed_at: z.string().datetime().optional(),
   outcome: z.string().optional(),
   effectiveness: z.number().min(1).max(5).optional(),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 // ─── POST /api/cases/:caseId/interventions ───────────────────────────────────

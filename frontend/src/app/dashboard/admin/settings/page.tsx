@@ -101,7 +101,12 @@ export default function AdminSettingsPage() {
       setTestingAi(true);
       const res = await apiClient<any>("/admin/ai/check-connection", {
         method: "POST",
-        body: aiSettings,
+        body: {
+          ai: {
+            aiApiUrl: aiSettings.apiUrl,
+            aiApiKey: aiSettings.apiKey,
+          },
+        },
       });
 
       if (res.success) {

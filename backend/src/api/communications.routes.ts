@@ -13,17 +13,16 @@ router.use(authenticate, setTenantContext);
 
 const createCommunicationSchema = z.object({
   message: z.string().min(1),
-  channel: z.enum(['PHONE', 'EMAIL', 'IN_PERSON', 'APP', 'INTERNAL']).optional(),
+  channel: z.enum(['PHONE', 'EMAIL', 'IN_PERSON', 'APP']).optional(),
   contact_name: z.string().min(1),
   contact_role: z.string().min(1),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 // ─── POST /api/cases/:caseId/communications ────────────────────────────────
 
 router.post(
   '/cases/:caseId/communications',
-  checkPermission('cases', 'create'), // Creating a new communication record
+  checkPermission('cases', 'update'), // Using cases update since it's part of the case
   asyncHandler(async (req, res) => {
     const body = createCommunicationSchema.parse(req.body);
     const created = await communicationsService.createCommunication(

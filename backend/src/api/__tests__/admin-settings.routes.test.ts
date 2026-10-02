@@ -30,7 +30,7 @@ describe('Admin Settings Routes', () => {
       const token = generateTestToken('tenant-123', 'user-123', 'IT_ADMIN');
 
       const mockSettings = {
-        ai: { enabled: true, apiUrl: 'http://localhost:11434/api/generate' },
+        ai: { aiEnabled: true, aiApiUrl: 'http://localhost:11434/api/generate' },
         storage: { storageProvider: 's3' }
       };
 
@@ -95,21 +95,21 @@ describe('Admin Settings Routes', () => {
       const token = generateTestToken('tenant-123', 'user-123', 'IT_ADMIN');
 
       const currentSettings = {
-        ai: { enabled: false, apiUrl: 'http://old-url' },
+        ai: { aiEnabled: false, aiApiUrl: 'http://old-url' },
         storage: { storageProvider: 's3' }
       };
 
       const updates = {
         ai: {
-          enabled: true,
-          apiUrl: 'http://localhost:11434/api/generate',
-          apiKey: 'new-key'
+          aiEnabled: true,
+          aiApiUrl: 'http://localhost:11434/api/generate',
+          aiApiKey: 'new-key'
         }
       };
 
       const expectedSettings = {
         ...currentSettings,
-        ai: { enabled: true, apiUrl: 'http://localhost:11434/api/generate', apiKey: 'new-key' }
+        ai: { aiEnabled: true, aiApiUrl: 'http://localhost:11434/api/generate', aiApiKey: 'new-key' }
       };
 
       mockClient.query.mockImplementation((queryStr: string, values: any) => {
@@ -196,7 +196,7 @@ describe('Admin Settings Routes', () => {
       const res = await request(app)
         .patch('/api/admin/settings')
         .set('Authorization', `Bearer ${token}`)
-        .send({ ai: { enabled: true } });
+        .send({ ai: { aiEnabled: true } });
 
       expect(res.status).toBe(500);
       expect(res.body.success).toBe(false);
@@ -208,7 +208,7 @@ describe('Admin Settings Routes', () => {
       const res = await request(app)
         .patch('/api/admin/settings')
         .set('Authorization', `Bearer ${token}`)
-        .send({ ai: { enabled: true } });
+        .send({ ai: { aiEnabled: true } });
 
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
@@ -229,8 +229,8 @@ describe('Admin Settings Routes', () => {
         .post('/api/admin/ai/check-connection')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          apiUrl: 'http://localhost:11434/api/generate',
-          apiKey: 'test-key'
+          aiApiUrl: 'http://localhost:11434/api/generate',
+          aiApiKey: 'test-key'
         });
 
       expect(res.status).toBe(200);
@@ -248,19 +248,22 @@ describe('Admin Settings Routes', () => {
     it('should return error if AI connection fails', async () => {
       const token = generateTestToken('tenant-123', 'user-123', 'IT_ADMIN');
 
-      global.fetch = vi.fn().mockRejectedValue(new Error('Network Error'));
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        statusText: 'Bad Request'
+      });
 
       const res = await request(app)
         .post('/api/admin/ai/check-connection')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          apiUrl: 'http://localhost:11434/api/generate',
-          apiKey: 'test-key'
+          aiApiUrl: 'http://localhost:11434/api/generate',
+          aiApiKey: 'test-key'
         });
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
-      expect(res.body.error.message).toContain('Network Error');
+      expect(res.body.error.message).toContain('Failed to connect');
     });
 
     it('should prevent non-IT_ADMIN from testing AI connection', async () => {
@@ -270,8 +273,8 @@ describe('Admin Settings Routes', () => {
         .post('/api/admin/ai/check-connection')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          apiUrl: 'http://localhost:11434/api/generate',
-          apiKey: 'test-key'
+          aiApiUrl: 'http://localhost:11434/api/generate',
+          aiApiKey: 'test-key'
         });
 
       expect(res.status).toBe(403);

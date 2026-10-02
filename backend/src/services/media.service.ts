@@ -39,33 +39,15 @@ export async function createPresignedUpload(
 ): Promise<{ uploadUrl: string; asset: MediaAssetRow }> {
   const assetId = uuidv4();
   const fileExtension = input.file_name.split('.').pop();
-  
-  // Fetch tenant settings to check storage provider
-  const { rows: tenantRows } = await queryWithTenant<{ settings: any }>(
-    tenantId,
-    `SELECT settings FROM tenants WHERE tenant_id = $1`,
-    [tenantId]
-  );
-  
-  const settings = tenantRows[0]?.settings || {};
-  const isLocal = settings.storage?.storageProvider === 'local' || !settings.storage?.storageProvider;
+  const storageKey = `${tenantId}/${assetId}.${fileExtension}`;
 
-  let uploadUrl = '';
-  let storageKey = '';
+  const command = new PutObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: storageKey,
+    ContentType: input.mime_type,
+  });
 
-  if (isLocal) {
-    storageKey = `uploads/${tenantId}/${assetId}.${fileExtension}`;
-    // Use relative URL so the browser uploads to the same origin as the API (no hardcoded localhost).
-    uploadUrl = `/api/media/upload/local?assetId=${assetId}&tenantId=${tenantId}`;
-  } else {
-    storageKey = `${tenantId}/${assetId}.${fileExtension}`;
-    const command = new PutObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: storageKey,
-      ContentType: input.mime_type,
-    });
-    uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-  }
+  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
   // Store metadata in DB (not linked to case/incident yet)
   const { rows } = await queryWithTenant<MediaAssetRow>(
@@ -205,22 +187,18 @@ export async function getAssetDownloadUrl(
     }
     const asset = rows[0]!;
     
-    // Check if it's local storage by looking at the storage_key
-    const objectKey = asset.redaction_status === 'REDACTED' && asset.redacted_key
-      ? asset.redacted_key
-      : asset.storage_key;
+    // Choose redacted_key if available, else storage_key
+    const objectKey =
+      asset.redaction_status === 'REDACTED' && asset.redacted_key
+        ? asset.redacted_key
+        : asset.storage_key;
 
-    let url = '';
-    if (objectKey.startsWith('uploads/')) {
-      // Use relative URL so the browser downloads from the same origin as the API.
-      url = `/api/media/download/local?assetId=${assetId}&tenantId=${tenantId}`;
-    } else {
-      const command = new GetObjectCommand({
-        Bucket: env.S3_BUCKET,
-        Key: objectKey,
-      });
-      url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-    }
+    const command = new GetObjectCommand({
+      Bucket: env.S3_BUCKET,
+      Key: objectKey,
+    });
+
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
     // Mark access log in JSONB list of accesses
     const accessLogEntry = {

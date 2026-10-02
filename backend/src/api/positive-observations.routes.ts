@@ -17,7 +17,6 @@ const createObservationSchema = z.object({
   category: z.string().min(1),
   description: z.string().min(1),
   observed_at: z.string().datetime(),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 // ─── POST /api/students/:studentId/observations ──────────────────────────────

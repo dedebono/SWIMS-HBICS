@@ -54,6 +54,8 @@ export default function QuisionerAdminPage() {
   const [loading, setLoading] = useState(true);
   const [threshold, setThreshold] = useState<number | null>(null);
   const [thresholdLoading, setThresholdLoading] = useState(true);
+  const [target, setTarget] = useState<'student' | 'staff'>('student');
+  const [targetLoading, setTargetLoading] = useState(true);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [answersMap, setAnswersMap] = useState<Record<string, Answer[]>>({});
 
@@ -104,9 +106,27 @@ export default function QuisionerAdminPage() {
 
   const fetchThreshold = async () => {
     setThresholdLoading(true);
-    const res = await apiClient<{ threshold: number }>('/quisioner/threshold');
-    if (res.success && res.data) setThreshold(res.data.threshold);
+    const res = await apiClient<{ threshold: number; target: 'student' | 'staff' }>('/quisioner/settings');
+    if (res.success && res.data) {
+      setThreshold(res.data.threshold);
+      setTarget(res.data.target ?? 'student');
+    }
     setThresholdLoading(false);
+  };
+
+  const handleSaveTarget = async (val: 'student' | 'staff') => {
+    setTargetLoading(true);
+    const res = await apiClient('/quisioner/settings', {
+      method: 'PATCH',
+      body: { target: val },
+    });
+    if (res.success) {
+      setTarget(val);
+      toast.success('Mode quisioner disimpan');
+    } else {
+      toast.error(res.error ?? 'Gagal menyimpan');
+    }
+    setTargetLoading(false);
   };
 
   const fetchSlug = async () => {
@@ -336,6 +356,36 @@ export default function QuisionerAdminPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Penggunaan Quisioner</CardTitle>
+          <CardDescription>Pilih apakah quisioner untuk alur siswa (kasus) atau staff (karyawan).</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Select
+              value={target}
+              onValueChange={(v) => handleSaveTarget(v as 'student' | 'staff')}
+              disabled={targetLoading}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="student">Siswa — alur kasus konseling</SelectItem>
+                <SelectItem value="staff">Staff — quisioner karyawan (NIK)</SelectItem>
+              </SelectContent>
+            </Select>
+            {targetLoading && <span className="text-xs text-muted-foreground">Menyimpan...</span>}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {target === 'student'
+              ? 'Quisioner ditampilkan di tab konseling siswa (alur kasus).'
+              : 'Quisioner karyawan (login NIK) diaktifkan. Staff scan QR di bawah untuk mengisi.'}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>QR Code Booking Konseling (Guru &amp; Staff)</CardTitle>
           <CardDescription>
             Guru/staff scan QR ini untuk langsung booking janji temu konseling dengan konselor (tanpa login).
@@ -344,22 +394,24 @@ export default function QuisionerAdminPage() {
         <CardContent className="space-y-4">
           {slug && (
             <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">Scan QR ini untuk membuka laman booking konseling:</p>
+              <p className="text-sm text-muted-foreground">
+                Scan QR ini untuk membuka{' '}
+                {target === 'staff' ? 'laman booking staff (NIK):' : 'laman booking konseling:'}
+              </p>
               <QRCodeSVG
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/book?t=${slug}`}
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}${target === 'staff' ? '/book/staff' : '/quisioner/book'}?t=${slug}`}
                 size={180}
               />
               <div className="flex items-center gap-2">
                 <code className="text-xs break-all rounded bg-muted px-2 py-1">
-                  {typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/book?t={slug}
+                  {typeof window !== 'undefined' ? window.location.origin : ''}{target === 'staff' ? '/book/staff' : '/quisioner/book'}?t={slug}
                 </code>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    navigator.clipboard?.writeText(
-                      `${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/book?t=${slug}`,
-                    );
+                    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}${target === 'staff' ? '/book/staff' : '/quisioner/book'}?t=${slug}`;
+                    navigator.clipboard?.writeText(url);
                     toast.success('Link disalin');
                   }}
                 >

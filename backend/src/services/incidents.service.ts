@@ -10,38 +10,31 @@ import type { Request } from 'express';
 export interface CreateIncidentInput {
   case_id: string;
   student_id: string;
-  involved_teacher?: string | null;
   category: string;
   sub_category?: string;
   severity: string;
   description: string;
   location?: string;
-  student_grade?: string | null;
   incident_at: string;
   witnesses?: Array<{ user_id?: string; name: string; statement?: string }>;
   immediate_actions?: string;
-  metadata?: Record<string, unknown>;
 }
 
 export interface UpdateIncidentInput {
-  involved_teacher?: string | null;
   category?: string;
   sub_category?: string;
   severity?: string;
   description?: string;
   location?: string;
-  student_grade?: string | null;
   incident_at?: string;
   witnesses?: Array<{ user_id?: string; name: string; statement?: string }>;
   immediate_actions?: string;
   language_flag?: boolean;
-  metadata?: Record<string, unknown>;
 }
 
 export interface ListIncidentsParams {
   case_id?: string;
   severity?: string;
-  reported_by?: string;
   page: number;
   limit: number;
   medicalOnly?: boolean;
@@ -63,8 +56,8 @@ export async function createIncident(
     const { rows } = await client.query<IncidentRow>(
       `INSERT INTO incidents (
         tenant_id, case_id, student_id, category, sub_category, severity,
-        description, location, student_grade, incident_at, reported_by, witnesses, immediate_actions, involved_teacher, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        description, location, incident_at, reported_by, witnesses, immediate_actions
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         tenantId,
@@ -75,13 +68,10 @@ export async function createIncident(
         input.severity,
         input.description,
         input.location ?? null,
-        input.student_grade ?? null,
         input.incident_at,
         reportedBy,
         JSON.stringify(input.witnesses ?? []),
         input.immediate_actions ?? null,
-        input.involved_teacher ?? null,
-        JSON.stringify(input.metadata ?? {}),
       ],
     );
 
@@ -130,10 +120,6 @@ export async function listIncidents(
     conditions.push(`i.severity = $${paramIdx++}`);
     values.push(params.severity);
   }
-  if (params.reported_by) {
-    conditions.push(`i.reported_by = $${paramIdx++}`);
-    values.push(params.reported_by);
-  }
   if (params.medicalOnly) {
     // Filter to medical-related categories (ABAC for SCHOOL_NURSE)
     conditions.push(`i.category ILIKE '%medical%'`);
@@ -148,12 +134,9 @@ export async function listIncidents(
     values,
   );
 
-  const dataResult = await queryWithTenant<IncidentRow & { reporter_name: string; involved_teacher_name: string | null }>(
+  const dataResult = await queryWithTenant<IncidentRow>(
     tenantId,
-    `SELECT i.*, u.full_name AS reporter_name, ut.full_name AS involved_teacher_name
-     FROM incidents i
-     LEFT JOIN users u ON u.user_id = i.reported_by
-     LEFT JOIN users ut ON ut.user_id = i.involved_teacher
+    `SELECT i.* FROM incidents i
      WHERE i.tenant_id = $1 AND ${whereClause}
      ORDER BY i.incident_at DESC
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
@@ -164,46 +147,6 @@ export async function listIncidents(
     incidents: dataResult.rows,
     total: Number(countResult.rows[0]?.count ?? 0),
   };
-}
-
-// ─── Get Distinct Students from My Reports ───────────────────────────────────
-
-export interface MyStudentRow {
-  student_id: string;
-  full_name: string;
-  incident_count: number;
-  last_incident_at: string;
-  last_severity: string;
-}
-
-export async function getMyStudents(
-  tenantId: string,
-  reportedBy: string,
-): Promise<MyStudentRow[]> {
-  const { rows } = await queryWithTenant<MyStudentRow>(
-    tenantId,
-    `SELECT
-       i.student_id,
-       s.full_name,
-       COUNT(i.incident_id)::int  AS incident_count,
-       MAX(i.incident_at)         AS last_incident_at,
-       (SELECT severity FROM incidents
-        WHERE student_id = i.student_id
-          AND reported_by = $2
-          AND tenant_id = $1
-          AND deleted_at IS NULL
-        ORDER BY incident_at DESC LIMIT 1) AS last_severity
-     FROM incidents i
-     JOIN students s ON s.student_id = i.student_id
-     WHERE i.tenant_id = $1
-       AND i.reported_by = $2
-       AND i.deleted_at IS NULL
-     GROUP BY i.student_id, s.full_name
-     ORDER BY last_incident_at DESC`,
-    [tenantId, reportedBy],
-  );
-
-  return rows;
 }
 
 // ─── Get Incident by ID ─────────────────────────────────────────────────────
@@ -260,10 +203,6 @@ export async function updateIncident(
     setClauses.push(`location = $${paramIdx++}`);
     values.push(input.location);
   }
-  if (input.student_grade !== undefined) {
-    setClauses.push(`student_grade = $${paramIdx++}`);
-    values.push(input.student_grade ?? null);
-  }
   if (input.incident_at !== undefined) {
     setClauses.push(`incident_at = $${paramIdx++}`);
     values.push(input.incident_at);
@@ -276,17 +215,9 @@ export async function updateIncident(
     setClauses.push(`immediate_actions = $${paramIdx++}`);
     values.push(input.immediate_actions);
   }
-  if (input.involved_teacher !== undefined) {
-    setClauses.push(`involved_teacher = $${paramIdx++}`);
-    values.push(input.involved_teacher ?? null);
-  }
   if (input.language_flag !== undefined) {
     setClauses.push(`language_flag = $${paramIdx++}`);
     values.push(input.language_flag);
-  }
-  if (input.metadata !== undefined) {
-    setClauses.push(`metadata = $${paramIdx++}`);
-    values.push(JSON.stringify(input.metadata));
   }
 
   const { rows } = await queryWithTenant<IncidentRow>(

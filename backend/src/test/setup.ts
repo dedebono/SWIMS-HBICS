@@ -170,3 +170,17 @@ vi.mock('node-cron', () => {
   };
 });
 
+// ── Mock role-permissions.service.js ──────────────────────────────────────────
+// Returns the full PERMISSIONS matrix for tenant-123 so checkPermission() passes.
+// This fixes 45 pre-existing test failures where getTenantPermissionMatrix()
+// returned { rows: [] } because pool.connect() mock doesn't know about
+// role_permissions table seeded data.
+const { PERMISSIONS } = await import('@swims/shared');
+vi.mock('./services/role-permissions.service.js', () => ({
+  getTenantPermissionMatrix: vi.fn().mockImplementation(async (tenantId: string) => {
+    // For test tenant, return the real PERMISSIONS matrix so all role checks pass
+    return PERMISSIONS;
+  }),
+  ensureSeeded: vi.fn().mockResolvedValue(undefined),
+}));
+

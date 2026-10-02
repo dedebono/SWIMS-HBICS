@@ -126,6 +126,27 @@ router.patch(
   }),
 );
 
+// ─── SETTINGS (threshold + target) ───────────────────────────────────────────
+
+router.get(
+  '/settings',
+  checkPermission('quisioner', 'read'),
+  asyncHandler(async (req, res) => {
+    const settings = await quisionerSettingsService.getSettings(req.tenantId);
+    sendSuccess(res, settings);
+  }),
+);
+
+router.patch(
+  '/settings',
+  checkPermission('quisioner', 'update'),
+  asyncHandler(async (req, res) => {
+    const { threshold, target } = req.body as { threshold?: number; target?: 'student' | 'staff' };
+    await quisionerSettingsService.setSettings(req.tenantId, { threshold, target });
+    sendSuccess(res, await quisionerSettingsService.getSettings(req.tenantId));
+  }),
+);
+
 // ─── QUIZ SUBMISSION ─────────────────────────────────────────────────────────
 
 router.post(

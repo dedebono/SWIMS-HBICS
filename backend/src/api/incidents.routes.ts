@@ -22,32 +22,26 @@ const witnessSchema = z.object({
 
 const createIncidentSchema = z.object({
   student_id: z.string().uuid(),
-  involved_teacher: z.string().uuid().nullable().optional(),
   category: z.string().min(1),
   sub_category: z.string().optional(),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
   description: z.string().min(1),
   location: z.string().optional(),
-  student_grade: z.string().max(50).optional(),
   incident_at: z.string().datetime(),
   witnesses: z.array(witnessSchema).optional(),
   immediate_actions: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 const updateIncidentSchema = z.object({
-  involved_teacher: z.string().uuid().nullable().optional(),
   category: z.string().min(1).optional(),
   sub_category: z.string().optional(),
   severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   description: z.string().min(1).optional(),
   location: z.string().optional(),
-  student_grade: z.string().max(50).optional(),
   incident_at: z.string().datetime().optional(),
   witnesses: z.array(witnessSchema).optional(),
   immediate_actions: z.string().optional(),
   language_flag: z.boolean().optional(),
-  metadata: z.record(z.unknown()).optional(),
 });
 
 const listIncidentsSchema = z.object({
@@ -55,35 +49,6 @@ const listIncidentsSchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(20),
 });
-
-// ─── GET /api/incidents/my-reports ───────────────────────────────────────────
-// Returns all incidents reported by the currently authenticated user,
-// including the student name/ID for each incident.
-
-router.get(
-  '/incidents/my-reports',
-  checkPermission('incidents', 'read'),
-  asyncHandler(async (req, res) => {
-    const query = listIncidentsSchema.parse(req.query);
-    const { incidents, total } = await incidentsService.listIncidents(req.tenantId, {
-      ...query,
-      reported_by: req.userId,   // ← scoped to this teacher's reports
-    });
-    sendPaginated(res, incidents, total, query.page, query.limit);
-  }),
-);
-
-// ─── GET /api/incidents/my-students ──────────────────────────────────────────
-// Returns distinct students from incidents reported by the logged-in user.
-
-router.get(
-  '/incidents/my-students',
-  checkPermission('incidents', 'read'),
-  asyncHandler(async (req, res) => {
-    const students = await incidentsService.getMyStudents(req.tenantId, req.userId);
-    sendSuccess(res, students);
-  }),
-);
 
 // ─── POST /api/cases/:caseId/incidents ───────────────────────────────────────
 

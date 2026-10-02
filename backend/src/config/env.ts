@@ -16,7 +16,7 @@ const envSchema = z.object({
   // JWT
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
-  JWT_ACCESS_EXPIRY: z.string().default('8h'),
+  JWT_ACCESS_EXPIRY: z.string().default('15m'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
 
   // Encryption
@@ -33,9 +33,6 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
-
-  // CORS
-  ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -52,7 +49,7 @@ function loadEnv(): Env {
         REDIS_URL: 'redis://localhost:6379',
         JWT_SECRET: 'test_jwt_secret_12345678901234567890',
         JWT_REFRESH_SECRET: 'test_refresh_secret_12345678901234567890',
-        JWT_ACCESS_EXPIRY: '8h',
+        JWT_ACCESS_EXPIRY: '15m',
         JWT_REFRESH_EXPIRY: '7d',
         ENCRYPTION_KEY: 'test_encryption_key_123456789012345678901234567890123456789012345678901234567890',
         S3_ENDPOINT: 'http://localhost:9000',
@@ -63,7 +60,6 @@ function loadEnv(): Env {
         PORT: 4000,
         NODE_ENV: 'test',
         FRONTEND_URL: 'http://localhost:3000',
-        ALLOWED_ORIGINS: 'http://localhost:3000',
       } as Env;
     }
     console.error('❌ Invalid environment variables:');

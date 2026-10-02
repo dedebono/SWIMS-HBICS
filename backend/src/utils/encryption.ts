@@ -1,6 +1,14 @@
 import crypto from 'node:crypto';
 import { env } from '../config/env.js';
 
+/**
+ * One-way SHA-256 hash of a national ID (NIK).
+ * Used for storing/querying NIK without keeping the plaintext in the DB.
+ */
+export function hashNationalId(nik: string): string {
+  return crypto.createHash('sha256').update(nik.trim().toLowerCase()).digest('hex');
+}
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16; // 128 bits
 const AUTH_TAG_LENGTH = 16; // 128 bits
@@ -55,16 +63,4 @@ export function decryptField(encryptedValue: string): string {
  */
 export function redactField(_value: string): string {
   return '***REDACTED***';
-}
-
-/**
- * Deterministic hash of a national_id for duplicate checking.
- * Uses SHA-256 on the plaintext + a pepper prefix from ENCRYPTION_KEY.
- * This is one-way and NOT a decryption risk — it's only used for fast lookups.
- */
-export function hashNationalId(nationalId: string): string {
-  const pepper = env.ENCRYPTION_KEY.slice(0, 32);
-  const hmac = crypto.createHmac('sha256', pepper);
-  hmac.update(nationalId.normalize('NFKC').toLowerCase().replace(/\s+/g, ''));
-  return hmac.digest('hex');
 }

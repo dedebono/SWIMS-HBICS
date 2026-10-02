@@ -35,24 +35,27 @@ export async function setTenantContext(req: Request, _res: Response, next: NextF
 }
 
 /**
- * Middleware for the anonymous (no-login) staff quisioner public page.
+ * Middleware for anonymous (no-login) public pages.
  * Resolves the tenant from a `?t=<slug>` query param (the QR link encodes it),
  * so the backend can scope queries via RLS without a JWT.
  */
 export async function setTenantFromSlug(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
-    const slug = (req.query.t as string) || (req.body && (req.body as Record<string, unknown>).tenant);
+    const slug = req.query.t || (req.body && (req.body as Record<string, unknown>)['tenant']);
     if (!slug || typeof slug !== 'string') {
       return next(new Error('tenant slug required'));
     }
+
     const { rows } = await pool.query<{ tenant_id: string }>(
       'SELECT tenant_id FROM tenants WHERE slug = $1 AND deleted_at IS NULL',
       [slug],
     );
+
     if (rows.length === 0) {
       return next(new Error('tenant not found'));
     }
-    (req as Request & { tenantId?: string }).tenantId = rows[0]!.tenant_id;
+
+    (req as unknown as Record<string, unknown>)['tenantId'] = rows[0]!.tenant_id;
     next();
   } catch (err) {
     next(err);

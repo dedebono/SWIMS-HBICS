@@ -1,35 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error-handler.middleware.js';
+import { loginRateLimiter } from '../middleware/rate-limit.middleware.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import * as authService from '../services/auth.service.js';
+import { createCaptcha, verifyCaptcha } from '../services/captcha.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
-import { RateLimitError } from '../utils/errors.js';
 
 const router = Router();
-
-// ─── Login Rate limiting ─────────────────────────────────────────────────────
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 min
-
-function checkLoginRateLimit(ip: string): void {
-  const now = Date.now();
-  const entry = loginAttempts.get(ip);
-  if (entry && now < entry.resetAt) {
-    if (entry.count >= MAX_LOGIN_ATTEMPTS) {
-      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-      throw new RateLimitError(retryAfter);
-    }
-    entry.count++;
-  } else {
-    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-  }
-}
-
-export function clearLoginRateLimit(ip: string): void {
-  loginAttempts.delete(ip);
-}
 
 // ─── Validation Schemas ──────────────────────────────────────────────────────
 
@@ -41,29 +19,23 @@ const loginSchema = z.object({
   captcha_answer: z.string().min(1),
 });
 
-const refreshBodySchema = z.object({
-  refresh_token: z.string().min(1).optional(),
+const refreshSchema = z.object({
+  refresh_token: z.string().min(1),
 });
-
-// ─── GET /api/auth/captcha ───────────────────────────────────────────────────
-
-router.get('/captcha', asyncHandler(async (req, res) => {
-  const captcha = await authService.generateCaptcha();
-  sendSuccess(res, captcha);
-}));
 
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 
 router.post(
   '/login',
+  loginRateLimiter,
   asyncHandler(async (req, res) => {
-    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
-    checkLoginRateLimit(ip);
-
     const body = loginSchema.parse(req.body);
 
-    // Verify captcha before attempting login
-    await authService.verifyCaptcha(body.captcha_id, body.captcha_answer);
+    // Verify captcha
+    const captchaValid = verifyCaptcha(body.captcha_id, body.captcha_answer);
+    if (!captchaValid) {
+      return sendError(res, 'Invalid or expired captcha answer. Please try again.', 400);
+    }
 
     const result = await authService.login(
       body.email,
@@ -72,16 +44,21 @@ router.post(
       req.ip,
     );
 
-    // Clear rate limit on successful login
-    clearLoginRateLimit(ip);
-
-    // Set httpOnly cookie for refresh token (XSS protection)
-    res.setHeader('Set-Cookie', authService.buildRefreshCookie(result.tokens.refreshToken));
-
     sendSuccess(res, {
       access_token: result.tokens.accessToken,
+      refresh_token: result.tokens.refreshToken,
       user: result.user,
     });
+  }),
+);
+
+// ─── GET /api/auth/captcha ───────────────────────────────────────────────────
+
+router.get(
+  '/captcha',
+  asyncHandler(async (req, res) => {
+    const captcha = createCaptcha();
+    sendSuccess(res, captcha);
   }),
 );
 
@@ -90,29 +67,12 @@ router.post(
 router.post(
   '/refresh',
   asyncHandler(async (req, res) => {
-    // Prefer body param (for API clients), fall back to httpOnly cookie (for browsers)
-    const parsed = refreshBodySchema.safeParse(req.body);
-    let refreshToken = parsed.success ? (parsed.data as { refresh_token?: string }).refresh_token : undefined;
-
-    if (!refreshToken && req.headers.cookie) {
-      const cookies = Object.fromEntries(
-        req.headers.cookie.split(';').map(c => c.trim().split('='))
-      );
-      refreshToken = cookies['refresh_token'] ? decodeURIComponent(cookies['refresh_token']) : undefined;
-    }
-
-    if (!refreshToken) {
-      sendError(res, 'Refresh token required', 400);
-      return;
-    }
-
-    const tokens = await authService.refreshAccessToken(refreshToken);
-
-    // Set httpOnly cookie for refresh token
-    res.setHeader('Set-Cookie', authService.buildRefreshCookie(tokens.refreshToken));
+    const body = refreshSchema.parse(req.body);
+    const tokens = await authService.refreshAccessToken(body.refresh_token);
 
     sendSuccess(res, {
       access_token: tokens.accessToken,
+      refresh_token: tokens.refreshToken,
     });
   }),
 );
@@ -124,10 +84,6 @@ router.post(
   authenticate,
   asyncHandler(async (req, res) => {
     await authService.revokeAllTokens(req.userId);
-
-    // Clear httpOnly refresh cookie
-    res.setHeader('Set-Cookie', authService.buildClearRefreshCookie());
-
     sendSuccess(res, { message: 'Logged out successfully' });
   }),
 );

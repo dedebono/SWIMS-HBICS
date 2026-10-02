@@ -1,16 +1,20 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/error-handler.middleware.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
-import { queryWithTenant } from '../db/pool.js';
 import { executeRightToBeForgotten } from '../services/rtbf.service.js';
-import * as adminUsersService from '../services/admin-users.service.js';
-import * as rolePermissionsService from '../services/role-permissions.service.js';
-import * as dataMigrationService from '../services/data-migration.service.js';
-import { NotFoundError } from '../utils/errors.js';
-import { sendSuccess, sendCreated } from '../utils/response.js';
+import {
+  getTenantPermissionMatrix,
+  getRolePermissions,
+  setRolePermissions,
+  resetRolePermissions,
+} from '../services/role-permissions.service.js';
+import { sendSuccess, sendError } from '../utils/response.js';
+import { pool } from '../db/pool.js';
+import type { UserRow } from '@swims/shared';
 
 const router = Router();
 
@@ -24,241 +28,255 @@ const rtbfSchema = z.object({
 
 router.post(
   '/rtbf-request',
-  checkPermission('admin', 'manage'),
   asyncHandler(async (req, res) => {
+    // strict check: caller must be IT_ADMIN
+    if (req.userRole !== 'IT_ADMIN') {
+      res.status(403).json({ success: false, error: { message: "Only IT_ADMIN can execute RTBF" }});
+      return;
+    }
+
     const body = rtbfSchema.parse(req.body);
+
     const result = await executeRightToBeForgotten(
       req.tenantId,
       body.student_id,
       req.userId,
       req
     );
+
     sendSuccess(res, result);
   }),
 );
 
-// ─── USER DIRECTORY MANAGEMENT ───────────────────────────────────────────────
-
-const userSchema = z.object({
-  full_name: z.string().min(2),
-  email: z.string().email(),
-  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER', 'PERSONAL', 'PSYCHOLOGIST']),
-  national_id: z.string().optional(),
-  gender: z.string().optional(),
-  password: z.string().min(8).optional(),
-});
-
-// Lenient wrapper: accept any array of rows (up to 1000), validate each row
-// individually so invalid rows can be skipped instead of failing the whole upload.
-const bulkUserSchema = z.object({
-  users: z.array(z.record(z.any())).min(1).max(1000)
-});
-
+// ─── GET /api/admin/users ─────────────────────────────────────────────────────
 router.get(
   '/users',
   checkPermission('admin', 'read'),
   asyncHandler(async (req, res) => {
-    console.log(`[Admin Users] GET /users — tenantId: ${req.tenantId}, role: ${req.userRole}`);
-    const result = await adminUsersService.getAllUsers(req.tenantId);
-    sendSuccess(res, result);
+    const tenantId = (req as any).tenantId;
+
+    // UNION: staff from users table + students from students table
+    const { rows } = await pool.query<UserRow & { type: string; gender: string | null }>(
+      `SELECT user_id as id, full_name, email, role,
+              is_active, created_at, national_id,
+              CASE WHEN role = 'STUDENT' THEN 'STUDENT' ELSE 'STAFF' END as type,
+              gender
+       FROM users
+       WHERE tenant_id = $1 AND deleted_at IS NULL
+       UNION ALL
+       SELECT student_id as id, full_name,
+              NULL as email, 'STUDENT' as role,
+              true as is_active, created_at, national_id,
+              'STUDENT' as type,
+              gender
+       FROM students
+       WHERE tenant_id = $1 AND deleted_at IS NULL
+       ORDER BY full_name ASC`,
+      [tenantId],
+    );
+    sendSuccess(res, rows);
   }),
 );
+
+// ─── POST /api/admin/users ───────────────────────────────────────────────────
+const createUserSchema = z.object({
+  full_name: z.string().min(1),
+  email: z.string().email().optional(),
+  role: z.string(),
+  password: z.string().min(6).optional(),
+  national_id: z.string().optional(),
+  gender: z.string().optional(),
+  type: z.enum(['STAFF', 'STUDENT']).default('STAFF'),
+});
 
 router.post(
   '/users',
   checkPermission('admin', 'create'),
   asyncHandler(async (req, res) => {
-    const body = userSchema.parse(req.body);
-    const result = await adminUsersService.createUser(req.tenantId, body);
-    sendCreated(res, result);
+    const tenantId = (req as any).tenantId;
+    const userId = (req as any).userId;
+    const body = createUserSchema.parse(req.body);
+    const passwordHash = body.password ? await bcrypt.hash(body.password, 12) : null;
+
+    const { rows } = await pool.query<UserRow>(
+      `INSERT INTO users (tenant_id, full_name, email, password_hash, role, national_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
+       RETURNING user_id as id, full_name, email, role, is_active, created_at, national_id, 'STAFF' as type`,
+      [tenantId, body.full_name, body.email || null, passwordHash, body.role, body.national_id || null],
+    );
+    sendSuccess(res, rows[0], undefined, 201);
   }),
 );
 
+// ─── PUT /api/admin/users/:id ────────────────────────────────────────────────
+const updateUserSchema = z.object({
+  full_name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  role: z.string().optional(),
+  is_active: z.boolean().optional(),
+  password: z.string().min(6).optional(),
+  gender: z.string().optional(),
+  phone_number: z.string().optional(),
+});
+
+router.put(
+  '/users/:id',
+  checkPermission('admin', 'update'),
+  asyncHandler(async (req, res) => {
+    const tenantId = (req as any).tenantId;
+    const { id } = req.params;
+    const body = updateUserSchema.parse(req.body);
+
+    const sets: string[] = [];
+    const vals: any[] = [];
+    let idx = 1;
+    if (body.full_name !== undefined) { sets.push(`full_name = $${idx++}`); vals.push(body.full_name); }
+    if (body.email !== undefined) { sets.push(`email = $${idx++}`); vals.push(body.email); }
+    if (body.role !== undefined) { sets.push(`role = $${idx++}`); vals.push(body.role); }
+    if (body.is_active !== undefined) { sets.push(`is_active = $${idx++}`); vals.push(body.is_active); }
+    if (body.password) { sets.push(`password_hash = $${idx++}`); vals.push(await bcrypt.hash(body.password, 12)); }
+    if (body.gender !== undefined) { sets.push(`gender = $${idx++}`); vals.push(body.gender); }
+    if (body.phone_number !== undefined) { sets.push(`phone_number = $${idx++}`); vals.push(body.phone_number); }
+
+    if (sets.length === 0) {
+      sendError(res, 'No fields to update', 400);
+      return;
+    }
+
+    vals.push(id, tenantId);
+    const { rows } = await pool.query<UserRow & { id: string }>(
+      `UPDATE users SET ${sets.join(', ')} WHERE user_id = $${idx++} AND tenant_id = $${idx} AND deleted_at IS NULL
+       RETURNING user_id as id, full_name, email, role, is_active, created_at, national_id`,
+      vals,
+    );
+    if (!rows[0]) { sendError(res, 'User not found', 404); return; }
+    sendSuccess(res, rows[0]);
+  }),
+);
+
+// ─── DELETE /api/admin/users/:id ────────────────────────────────────────────
+router.delete(
+  '/users/:id',
+  checkPermission('admin', 'delete'),
+  asyncHandler(async (req, res) => {
+    const tenantId = (req as any).tenantId;
+    const { id } = req.params;
+    await pool.query(
+      `UPDATE users SET deleted_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      [id, tenantId],
+    );
+    sendSuccess(res, { deleted: true });
+  }),
+);
+
+// ─── POST /api/admin/users/bulk ──────────────────────────────────────────────
 router.post(
   '/users/bulk',
   checkPermission('admin', 'create'),
   asyncHandler(async (req, res) => {
-    const body = bulkUserSchema.parse(req.body);
-
-    // Validate each row individually; skip invalid ones (bad email, missing name, etc.)
-    const validUsers: adminUsersService.CreateUserData[] = [];
-    let invalidCount = 0;
-    for (const row of body.users) {
-      const parsed = userSchema.safeParse(row);
-      if (parsed.success) {
-        validUsers.push(parsed.data);
-      } else {
-        invalidCount++;
-      }
+    const tenantId = (req as any).tenantId;
+    const userId = (req as any).userId;
+    const { users } = req.body as { users: Array<{ full_name: string; email?: string; role: string; national_id?: string }> };
+    if (!Array.isArray(users) || users.length === 0) {
+      sendError(res, 'users array is required', 400);
+      return;
     }
-
-    const result = await adminUsersService.createUsersBulk(req.tenantId, validUsers);
-    sendCreated(res, { ...result, invalid: invalidCount });
-  }),
-);
-
-const updateUserSchema = z.object({
-  full_name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
-  role: z.enum(['STUDENT', 'TEACHER', 'COUNSELOR', 'SCHOOL_HEAD', 'SCHOOL_NURSE', 'BOARD_MEMBER', 'CASE_REVIEWER', 'IT_ADMIN', 'SUBSTITUTE_TEACHER', 'PERSONAL', 'PSYCHOLOGIST']).optional(),
-  national_id: z.string().optional(),
-  phone_number: z.string().optional().nullable(),
-  is_active: z.boolean().optional(),
-  password: z.string().min(8).optional(),
-});
-
-router.put(
-  '/users/:userId',
-  checkPermission('admin', 'update'),
-  asyncHandler(async (req, res) => {
-    const { userId } = req.params as { userId: string };
-    const body = updateUserSchema.parse(req.body);
-    const result = await adminUsersService.updateUser(req.tenantId, userId, body);
-    sendSuccess(res, result);
-  }),
-);
-
-// ─── DYNAMIC ROLE PERMISSIONS (User Management) ───────────────────────────────
-// Lets admins configure, per role, which actions (create/read/update/delete and
-// admin:manage) are allowed on each resource. Stored per-tenant in role_permissions.
-
-const roleParam = z.string().min(1).max(50);
-const rolePermissionBody = z.record(z.string(), z.record(z.string(), z.boolean()));
-
-// Full matrix for the tenant
-router.get(
-  '/role-permissions',
-  checkPermission('admin', 'read'),
-  asyncHandler(async (req, res) => {
-    const matrix = await rolePermissionsService.getTenantPermissionMatrix(req.tenantId);
-    sendSuccess(res, matrix);
-  }),
-);
-
-// Single role slice
-router.get(
-  '/role-permissions/:role',
-  checkPermission('admin', 'read'),
-  asyncHandler(async (req, res) => {
-    const { role } = req.params as { role: string };
-    roleParam.parse(role);
-    const slice = await rolePermissionsService.getRolePermissions(req.tenantId, role);
-    if (!slice) {
-      throw new NotFoundError(`No permissions configured for role: ${role}`);
+    const created: any[] = [];
+    for (const u of users) {
+      const { rows } = await pool.query<UserRow & { id: string }>(
+        `INSERT INTO users (tenant_id, full_name, email, role, national_id, is_active)
+         VALUES ($1, $2, $3, $4, $5, true)
+         RETURNING user_id as id, full_name, email, role, is_active`,
+        [tenantId, u.full_name, u.email || null, u.role, u.national_id || null],
+      );
+      created.push(rows[0]);
     }
-    sendSuccess(res, slice);
+    sendSuccess(res, { created: created.length, users: created }, undefined, 201);
   }),
 );
 
-// Update a single role's permissions
-router.put(
-  '/role-permissions/:role',
-  checkPermission('admin', 'update'),
-  asyncHandler(async (req, res) => {
-    const { role } = req.params as { role: string };
-    roleParam.parse(role);
-    const body = rolePermissionBody.parse(req.body);
-    const before = await rolePermissionsService.getRolePermissions(req.tenantId, role);
-    const after = await rolePermissionsService.setRolePermissions(
-      req.tenantId,
-      role,
-      body,
-      { actorId: req.userId, before },
-    );
-    sendSuccess(res, after);
-  }),
-);
-
-// Reset a single role's permissions back to defaults
-router.post(
-  '/role-permissions/:role/reset',
-  checkPermission('admin', 'update'),
-  asyncHandler(async (req, res) => {
-    const { role } = req.params as { role: string };
-    roleParam.parse(role);
-    const before = await rolePermissionsService.getRolePermissions(req.tenantId, role);
-    const after = await rolePermissionsService.resetRolePermissions(
-      req.tenantId,
-      role,
-      { actorId: req.userId, before },
-    );
-    sendSuccess(res, after);
-  }),
-);
-
-// ─── SYSTEM SUMMARY (Admin IT overview) ───────────────────────────────
-// System/account aggregates only — no case, incident, intervention or
-// observation data is ever exposed to the IT admin.
+// ─── GET /api/admin/system-summary ───────────────────────────────────────────
 router.get(
   '/system-summary',
   checkPermission('admin', 'read'),
   asyncHandler(async (req, res) => {
-    const tid = req.tenantId;
+    const tenantId = (req as any).tenantId;
 
-    const [usersByRole, activeUsers, students] = await Promise.all([
-      queryWithTenant<{ role: string; count: number }>(
-        tid,
-        `SELECT role, COUNT(*)::int AS count
-         FROM users WHERE tenant_id = $1 AND deleted_at IS NULL
-         GROUP BY role ORDER BY count DESC`,
-        [tid],
-      ),
-      queryWithTenant<{ count: number }>(
-        tid,
-        `SELECT COUNT(*)::int AS count FROM users
-         WHERE tenant_id = $1 AND deleted_at IS NULL AND is_active = true`,
-        [tid],
-      ),
-      queryWithTenant<{ count: number }>(
-        tid,
-        `SELECT COUNT(*)::int AS count FROM students
-         WHERE tenant_id = $1 AND deleted_at IS NULL`,
-        [tid],
-      ),
-    ]);
-
-    const roleDistribution: Record<string, number> = {};
-    for (const r of usersByRole.rows) roleDistribution[r.role] = Number(r.count);
-
-    const totalUsers = Object.values(roleDistribution).reduce((a, b) => a + b, 0);
-    const active = Number(activeUsers.rows[0]?.count ?? 0);
-    const inactive = Math.max(0, totalUsers - active);
-
-    sendSuccess(res, {
-      totalUsers,
-      activeUsers: active,
-      inactiveUsers: inactive,
-      students: Number(students.rows[0]?.count ?? 0),
-      roleDistribution,
-    });
-  }),
-);
-
-// ─── DATA MIGRATION (Export / Import) ─────────────────────────────────
-// Lets the IT admin export all users, students and active cases (with their
-// related records, excluding media) for migration to a new production server,
-// and import such an export back in.
-
-router.get(
-  '/export',
-  checkPermission('admin', 'read'),
-  asyncHandler(async (req, res) => {
-    const payload = await dataMigrationService.exportData(req.tenantId);
-    const stamp = new Date().toISOString().slice(0, 10);
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="swims-export-${stamp}.json"`,
+    const userCountsResult = await pool.query<{ totalUsers: number; activeUsers: number; inactiveUsers: number }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE deleted_at IS NULL) as "totalUsers",
+         COUNT(*) FILTER (WHERE is_active = true AND deleted_at IS NULL) as "activeUsers",
+         COUNT(*) FILTER (WHERE is_active = false AND deleted_at IS NULL) as "inactiveUsers"
+       FROM users WHERE tenant_id = $1`,
+      [tenantId],
     );
-    res.json(payload);
+    const { totalUsers, activeUsers, inactiveUsers } = userCountsResult.rows[0] ?? { totalUsers: 0, activeUsers: 0, inactiveUsers: 0 };
+
+    const studentResult = await pool.query<{ students: number }>(
+      `SELECT COUNT(*) as students FROM students WHERE tenant_id = $1 AND deleted_at IS NULL`,
+      [tenantId],
+    );
+    const students = Number(studentResult.rows[0]?.students) || 0;
+
+    const { rows: roleRows } = await pool.query<{ role: string; count: string }>(
+      `SELECT role, COUNT(*) as count FROM users WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY role`,
+      [tenantId],
+    );
+    const roleDistribution: Record<string, number> = {};
+    for (const r of roleRows) roleDistribution[r.role] = parseInt(r.count, 10);
+
+    sendSuccess(res, { totalUsers, activeUsers, inactiveUsers, students, roleDistribution });
   }),
 );
 
-router.post(
-  '/import',
+// ─── GET /api/admin/role-permissions ────────────────────────────────────────
+router.get(
+  '/role-permissions',
   checkPermission('admin', 'manage'),
   asyncHandler(async (req, res) => {
-    const result = await dataMigrationService.importData(req.tenantId, req.body);
+    const tenantId = (req as any).tenantId;
+    const matrix = await getTenantPermissionMatrix(tenantId);
+    sendSuccess(res, matrix);
+  }),
+);
+
+// ─── GET /api/admin/role-permissions/:role ──────────────────────────────────
+router.get(
+  '/role-permissions/:role',
+  checkPermission('admin', 'manage'),
+  asyncHandler(async (req, res) => {
+    const tenantId = (req as any).tenantId;
+    const { role } = req.params;
+    const slice = await getRolePermissions(tenantId, role);
+    sendSuccess(res, slice);
+  }),
+);
+
+// ─── PUT /api/admin/role-permissions/:role ──────────────────────────────────
+router.put(
+  '/role-permissions/:role',
+  checkPermission('admin', 'manage'),
+  asyncHandler(async (req, res) => {
+    const tenantId = (req as any).tenantId;
+    const { role } = req.params;
+    const permissions = req.body as Record<string, Record<string, boolean>>;
+    const actorId = (req as any).userId;
+    const before = await getRolePermissions(tenantId, role);
+    const result = await setRolePermissions(tenantId, role, permissions, { actorId, before });
+    sendSuccess(res, result);
+  }),
+);
+
+// ─── POST /api/admin/role-permissions/:role/reset ───────────────────────────
+router.post(
+  '/role-permissions/:role/reset',
+  checkPermission('admin', 'manage'),
+  asyncHandler(async (req, res) => {
+    const tenantId = (req as any).tenantId;
+    const { role } = req.params;
+    const actorId = (req as any).userId;
+    const before = await getRolePermissions(tenantId, role);
+    const result = await resetRolePermissions(tenantId, role, { actorId });
     sendSuccess(res, result);
   }),
 );

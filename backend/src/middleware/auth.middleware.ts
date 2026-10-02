@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
-import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
+import { UnauthorizedError } from '../utils/errors.js';
 import type { JwtPayload } from '@swims/shared';
 
 /**
@@ -28,24 +28,20 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
     next();
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {
-      return next(new UnauthorizedError('Access token has expired'));
+      return next(new UnauthorizedError('Token expired'));
     }
-    if (err instanceof jwt.JsonWebTokenError) {
-      return next(new UnauthorizedError('Invalid access token'));
-    }
-    next(err);
+    return next(new UnauthorizedError('Invalid token'));
   }
 }
 
 /**
- * Middleware factory: require user to have one of the allowed roles.
- * Must be used AFTER authenticate().
+ * Middleware factory: require one of the given roles.
  */
 export function requireRole(...allowedRoles: string[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const role = (req as any).userRole;
     if (!role || !allowedRoles.includes(role)) {
-      return next(new ForbiddenError(`Access denied. Required role: ${allowedRoles.join(' or ')}`));
+      return next(new UnauthorizedError('Insufficient permissions'));
     }
     next();
   };

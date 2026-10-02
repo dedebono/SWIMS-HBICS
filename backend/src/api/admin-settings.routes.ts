@@ -8,18 +8,21 @@ import { sendSuccess } from '../utils/response.js';
 
 const router = Router();
 
+/** Fetch with 10s timeout */
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
+}
+
 router.use(authenticate, setTenantContext);
 
 const settingsSchema = z.object({
   ai: z.object({
-    enabled: z.boolean().optional(),
-    provider: z.string().optional(),
-    apiUrl: z.string().optional(),
-    apiKey: z.string().optional(),
-    model: z.string().optional(),
-  }).passthrough().optional(),
+    aiEnabled: z.boolean().optional(),
+    aiApiUrl: z.string().optional(),
+    aiApiKey: z.string().optional(),
+  }).optional(),
   storage: z.object({
-    storageProvider: z.enum(['s3', 'firebase', 'cloudflare_r2', 'google_drive', 'local']),
+    storageProvider: z.enum(['s3', 'firebase', 'cloudflare_r2', 'google_drive']),
     firebaseApiKey: z.string().optional(),
     firebaseProjectId: z.string().optional(),
     firebaseStorageBucket: z.string().optional(),
@@ -30,26 +33,15 @@ const settingsSchema = z.object({
     gdriveClientId: z.string().optional(),
     gdriveClientSecret: z.string().optional(),
     gdriveRefreshToken: z.string().optional(),
-    gdriveFolderId: z.string().optional(),
-    provider: z.string().optional() // Allow the frontend's raw provider field
-  }).passthrough().optional(),
-  waha: z.object({
-    url: z.string().optional(),
-    session: z.string().optional(),
-    apiKey: z.string().optional(),
-  }).passthrough().optional(),
-  email: z.object({
-    host: z.string().optional(),
-    port: z.coerce.number().optional(),
-    secure: z.boolean().optional(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).passthrough().optional(),
+    gdriveFolderId: z.string().optional()
+  }).optional()
 });
 
 const checkAiSchema = z.object({
-  apiUrl: z.string().url(),
-  apiKey: z.string().optional()
+  ai: z.object({
+    aiApiUrl: z.string().url(),
+    aiApiKey: z.string()
+  })
 });
 
 // Middleware to enforce IT_ADMIN
@@ -93,10 +85,12 @@ router.patch(
       const newSettings = {
         ...currentSettings,
         ...updates,
-        ai: { ...currentSettings.ai, ...updates.ai },
-        storage: { ...currentSettings.storage, ...updates.storage },
-        waha: { ...currentSettings.waha, ...updates.waha },
-        email: { ...currentSettings.email, ...updates.email },
+        ai: updates.ai
+          ? { ...currentSettings.ai, ...Object.fromEntries(Object.entries(updates.ai).filter(([, v]) => v !== undefined)) }
+          : currentSettings.ai,
+        storage: updates.storage
+          ? { ...currentSettings.storage, ...Object.fromEntries(Object.entries(updates.storage).filter(([, v]) => v !== undefined)) }
+          : currentSettings.storage
       };
 
       await client.query('UPDATE tenants SET settings = $1 WHERE tenant_id = $2', [JSON.stringify(newSettings), req.tenantId]);
@@ -119,23 +113,39 @@ router.post(
   requireItAdmin,
   asyncHandler(async (req, res) => {
     const body = checkAiSchema.parse(req.body);
+    const { aiApiUrl, aiApiKey } = body.ai;
+
+    // Normalise: strip trailing /v1 (user might enter "https://api.openai.com/v1" already)
+    const baseUrl = aiApiUrl.replace(/\/v1\/?$/, '');
 
     try {
-      // Very basic connection ping. Works for OpenAI-compatible endpoints like LMStudio/Ollama
-      const pingResponse = await fetch(body.apiUrl, {
-        method: 'GET', // Or a minimal POST request depending on the provider, but many expose a health or models endpoint
+      // Try /v1/models endpoint first (OpenAI-compatible standard)
+      let pingResponse = await fetchWithTimeout(`${baseUrl}/v1/models`, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${body.apiKey || ''}`,
+          'Authorization': `Bearer ${aiApiKey}`,
           'Content-Type': 'application/json'
         }
       });
 
-      // If fetch resolves (even with 404/405), the server is reachable.
-      // fetch only throws an error on network failures (e.g., ECONNREFUSED).
+      // If /v1/models returns 404, try base URL as fallback (e.g. for Ollama / LM Studio)
+      if (pingResponse.status === 404) {
+        pingResponse = await fetchWithTimeout(baseUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${aiApiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      if (!pingResponse.ok) {
+        throw new Error(`HTTP ${pingResponse.status}: ${pingResponse.statusText}`);
+      }
 
       sendSuccess(res, { connected: true, message: 'AI connection successful' });
     } catch (error: any) {
-      res.status(400).json({ success: false, error: { message: error.message || 'Connection failed' } });
+      res.status(400).json({ success: false, error: { message: error.message || 'Connection failed. Please check the URL and API key.' } });
     }
   })
 );

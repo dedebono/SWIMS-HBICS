@@ -58,20 +58,11 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    image: alpine:latest
     container_name: swims_minio
-    restart: unless-stopped
-    mem_limit: 512m
-    mem_reservation: 256m
-    environment:
-      MINIO_ROOT_USER: swims_minio
-      MINIO_ROOT_PASSWORD: swims_minio_password
-    command: server /data --console-address ":9001"
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    volumes:
-      - miniodata:/data
+    restart: "no"
+    command: ["sh", "-c", "echo 'minio bypassed' && sleep infinity"]
+    profiles: ["skip"]
 
   backend:
     build:
@@ -82,13 +73,13 @@ services:
     mem_limit: 768m
     mem_reservation: 384m
     # We mount the volumes to allow hot-reloading from host
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/frontend/node_modules
-      - /app/backend/node_modules
-      - /app/shared/node_modules
-    command: sh -c "npm run migrate && npm run dev:backend"
+    # volumes:
+    #   - .:/app
+    #   - /app/node_modules
+    #   - /app/frontend/node_modules
+    #   - /app/backend/node_modules
+    #   - /app/shared/node_modules
+    command: sh -c "npm run migrate && npm run build --workspace=shared && npx tsx backend/src/server.ts"
     ports:
       - '4000:4000'
     environment:
@@ -110,7 +101,6 @@ services:
     depends_on:
       - pgbouncer
       - redis
-      - minio
 
   frontend:
     # Production build is baked into the image at build time (see ./Dockerfile).

@@ -33,7 +33,6 @@ export interface ListCasesParams {
   page: number;
   limit: number;
   medicalOnly?: boolean;
-  teacher_id?: string;
 }
 
 // ─── Create Case ─────────────────────────────────────────────────────────────
@@ -127,23 +126,6 @@ export async function listCases(
   if (params.medicalOnly) {
     conditions.push(`c.case_type = 'MEDICAL'`);
   }
-  if (params.teacher_id) {
-    const teacherParam = `$${paramIdx++}`;
-    const tenantParam = `$${paramIdx++}`;
-    conditions.push(`(EXISTS (
-      SELECT 1 FROM incidents i
-      WHERE i.case_id = c.case_id
-      AND i.reported_by = ${teacherParam}
-      AND i.deleted_at IS NULL
-    ) OR EXISTS (
-      SELECT 1 FROM case_shares cs
-      WHERE cs.case_id = c.case_id
-      AND cs.shared_with = ${teacherParam}
-      AND cs.tenant_id = ${tenantParam}
-    ))`);
-    values.push(params.teacher_id);
-    values.push(tenantId);
-  }
 
   const whereClause = conditions.join(' AND ');
   const offset = (params.page - 1) * params.limit;
@@ -156,12 +138,9 @@ export async function listCases(
   );
 
   // Fetch page
-  const dataResult = await queryWithTenant<CaseRow & { student_name: string, reported_by_name: string }>(
+  const dataResult = await queryWithTenant<CaseRow>(
     tenantId,
-    `SELECT c.*, s.full_name as student_name, u.full_name as reported_by_name 
-     FROM cases c
-     JOIN students s ON s.student_id = c.student_id
-     LEFT JOIN users u ON c.created_by = u.user_id
+    `SELECT c.* FROM cases c
      WHERE c.tenant_id = $1 AND ${whereClause}
      ORDER BY
        CASE c.risk_level WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,

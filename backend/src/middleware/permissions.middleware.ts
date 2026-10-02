@@ -3,39 +3,7 @@ import { PERMISSIONS, type Resource, type Action } from '@swims/shared';
 import type { Role } from '@swims/shared';
 import { ForbiddenError } from '../utils/errors.js';
 import { pool } from '../db/pool.js';
-import { hasSharedAccess } from '../services/case-shares.service.js';
 import { getTenantPermissionMatrix } from '../services/role-permissions.service.js';
-
-// ─── ABAC result cache (TTL: 60s) ───────────────────────────────────────────────
-// Prevents pool exhaustion when many teachers access cases simultaneously.
-// Short TTL is acceptable since class assignments don't change every minute.
-interface CacheEntry { value: boolean; expiresAt: number; }
-const abacCache = new Map<string, CacheEntry>();
-const ABAC_CACHE_TTL_MS = 60_000;
-
-function getCached(key: string): boolean | undefined {
-  const entry = abacCache.get(key);
-  if (!entry) return undefined;
-  if (Date.now() > entry.expiresAt) {
-    abacCache.delete(key);
-    return undefined;
-  }
-  return entry.value;
-}
-
-function setCached(key: string, value: boolean): void {
-  // Prune stale entries lazily (every 50 writes)
-  if (abacCache.size > 1000) {
-    const now = Date.now();
-    for (const [k, v] of abacCache) {
-      if (now > v.expiresAt) abacCache.delete(k);
-    }
-  }
-  abacCache.set(key, { value, expiresAt: Date.now() + ABAC_CACHE_TTL_MS });
-}
-
-const cacheKey = (tenantId: string, teacherId: string, studentId: string) =>
-  `${tenantId}:${teacherId}:${studentId}`;
 
 /**
  * Middleware factory: checkPermission(resource, action)
@@ -50,57 +18,44 @@ export function checkPermission(resource: Resource, action: Action) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
       const role = req.userRole as Role;
-      console.log(`[Permission Check] Starting for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
-      // ── Step 1: RBAC check (dynamic, per-tenant) ───────────────────────
-      // Permission matrix is loaded from the role_permissions table. If the DB
-      // read fails, fall back to the static PERMISSIONS matrix so the system
-      // never fully locks out on a transient DB error.
-      const tenantId = req.tenantId;
-      let rolePerms: Record<string, Record<string, boolean>>;
-      if (!tenantId) {
-        rolePerms = (PERMISSIONS as unknown as Record<string, Record<string, Record<string, boolean>>>)[role] ?? {};
-      } else {
-        try {
-          const matrix = await getTenantPermissionMatrix(tenantId);
-          rolePerms = matrix[role] ?? {};
-        } catch (err) {
-          console.error(`[RBAC Error] Failed to load dynamic matrix, using static fallback:`, err);
-          rolePerms = (PERMISSIONS as unknown as Record<string, Record<string, Record<string, boolean>>>)[role] ?? {};
-        }
-      }
-
-      if (!rolePerms || Object.keys(rolePerms).length === 0) {
-        console.error(`[RBAC Error] Unknown role or no permissions for role: ${role}`);
+      // ── Step 1: RBAC check ──────────────────────────────────────────────
+      const rolePerms = PERMISSIONS[role];
+      if (!rolePerms) {
         return next(new ForbiddenError(`Unknown role: ${role}`));
       }
 
       const resourcePerms = rolePerms[resource];
-      console.log(`[Permission Check] rolePerms[${resource}]: `, resourcePerms);
       if (!resourcePerms) {
-        console.error(`[RBAC Error] No permissions defined for resource: ${resource} for role: ${role}`);
         return next(new ForbiddenError(`No permissions defined for resource: ${resource}`));
       }
 
       if (!resourcePerms[action]) {
-        console.error(`[RBAC Error] Role '${role}' is not allowed to '${action}' on '${resource}'`);
-        return next(new ForbiddenError(
-          `Role '${role}' is not allowed to '${action}' on '${resource}'`,
-        ));
+        // The 'manage' action is not in the static CRUD matrix — check DB dynamic permissions
+        if (action === 'manage' && req.tenantId) {
+          const matrix = await getTenantPermissionMatrix(req.tenantId as string);
+          const roleDbPerms = matrix[role as string];
+          const resourceDbPerms = roleDbPerms?.[resource as string];
+          if (!resourceDbPerms?.manage) {
+            return next(new ForbiddenError(
+              `Role '${role}' is not allowed to '${action}' on '${resource}'`,
+            ));
+          }
+        } else {
+          return next(new ForbiddenError(
+            `Role '${role}' is not allowed to '${action}' on '${resource}'`,
+          ));
+        }
       }
-      console.log(`[Permission Check] RBAC passed for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
       // ── Step 2: ABAC contextual checks ──────────────────────────────────
       await enforceAbac(req, role, resource, action);
-      console.log(`[Permission Check] ABAC passed for Role: ${role}, Resource: ${resource}, Action: ${action}`);
 
       next();
     } catch (err) {
       if (err instanceof ForbiddenError) {
-        console.error(`[Permission Error] Forbidden: ${err.message}. Role: ${req.userRole}, Resource: ${resource}, Action: ${action}`);
         return next(err);
       }
-      console.error(`[Permission Error] Unexpected error: ${err}. Role: ${req.userRole}, Resource: ${resource}, Action: ${action}`);
       next(err);
     }
   };
@@ -121,27 +76,7 @@ async function enforceAbac(
 
   switch (role) {
     case 'TEACHER': {
-      // Teachers may generally only access records for students in their assigned class,
-      // EXCEPT when reporting an incident (creating cases/incidents) or looking up basic student info.
-      if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
-
-      // NOTE: req.path may not reliably include '/timeline' depending on how the route is mounted.
-      // Use originalUrl as a safer check so teacher access to the timeline endpoint doesn't 403.
-      const isStudentTimelineRoute =
-        (req.originalUrl ?? req.path ?? '').includes('/timeline');
-
-      // Allow general student reads, but require ABAC for timelines as well.
-      // (If this breaks again, we can refine by checking exact pattern `/students/:id/timeline`.)
-      if (resource === 'students' && _action === 'read' && !isStudentTimelineRoute) break;
-
-      if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break; // allow listing cases (service filters by teacher_id)
-
-      // Allow access if teacher has been shared this case
-      if (resource === 'cases' && _action === 'read' && req.params['caseId']) {
-        const allowed = await hasSharedAccess(tenantId, String(req.params['caseId']), userId);
-        if (allowed) break; // teacher has shared access — allow
-      }
-
+      // Teachers may only access records for students in their assigned class
       const studentId = extractStudentId(req);
       if (studentId) {
         const allowed = await isStudentInTeacherClass(tenantId, userId, studentId);
@@ -153,15 +88,7 @@ async function enforceAbac(
     }
 
     case 'SUBSTITUTE_TEACHER': {
-      // Same exceptions as teacher
-      if (_action === 'create' && (resource === 'incidents' || resource === 'cases')) break;
-
-      const isStudentTimelineRoute =
-        (req.originalUrl ?? req.path ?? '').includes('/timeline');
-
-      if (resource === 'students' && _action === 'read' && !isStudentTimelineRoute) break;
-      if (resource === 'cases' && _action === 'read' && !req.params['caseId']) break;
-
+      // Same as teacher but only during active substitution period
       const studentId = extractStudentId(req);
       if (studentId) {
         const allowed = await isStudentInSubstituteClass(tenantId, userId, studentId);
@@ -207,8 +134,10 @@ async function enforceAbac(
     }
 
     case 'IT_ADMIN': {
-      // No specific ABAC rules for IT_ADMIN for /admin/* routes.
-      // RBAC matrix already defines their access.
+      // Blocked from reading case descriptions and incident narratives
+      if (resource === 'cases' || resource === 'incidents') {
+        (req as unknown as Record<string, unknown>)['abacRedactNarratives'] = true;
+      }
       break;
     }
   }
@@ -233,13 +162,9 @@ async function isStudentInTeacherClass(
   teacherUserId: string,
   studentId: string,
 ): Promise<boolean> {
-  const key = `teacher:${cacheKey(tenantId, teacherUserId, studentId)}`;
-  const cached = getCached(key);
-  if (cached !== undefined) return cached;
-
   const client = await pool.connect();
   try {
-    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
+    await client.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
     const { rows } = await client.query<{ count: string }>(
       `SELECT COUNT(*) as count
        FROM teacher_class_assignments tca
@@ -253,9 +178,7 @@ async function isStudentInTeacherClass(
          AND seh.graduated_at IS NULL`,
       [tenantId, teacherUserId, studentId],
     );
-    const allowed = Number(rows[0]?.count ?? 0) > 0;
-    setCached(key, allowed);
-    return allowed;
+    return Number(rows[0]?.count ?? 0) > 0;
   } finally {
     client.release();
   }
@@ -269,13 +192,9 @@ async function isStudentInSubstituteClass(
   substituteUserId: string,
   studentId: string,
 ): Promise<boolean> {
-  const key = `sub:${cacheKey(tenantId, substituteUserId, studentId)}`;
-  const cached = getCached(key);
-  if (cached !== undefined) return cached;
-
   const client = await pool.connect();
   try {
-    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
+    await client.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
     const { rows } = await client.query<{ count: string }>(
       `SELECT COUNT(*) as count
        FROM substitution_schedule ss
@@ -289,9 +208,7 @@ async function isStudentInSubstituteClass(
          AND seh.graduated_at IS NULL`,
       [tenantId, substituteUserId, studentId],
     );
-    const allowed = Number(rows[0]?.count ?? 0) > 0;
-    setCached(key, allowed);
-    return allowed;
+    return Number(rows[0]?.count ?? 0) > 0;
   } finally {
     client.release();
   }

@@ -5,16 +5,11 @@ import bcrypt from 'bcryptjs';
 import { pool, getClientWithTenant } from '../../db/pool.js';
 import * as authService from '../../services/auth.service.js';
 import { UnauthorizedError, NotFoundError } from '../../utils/errors.js';
+import { createCaptcha, verifyCaptcha } from '../../services/captcha.service.js';
 
-vi.mock('../../services/auth.service.js', () => ({
-  login: vi.fn(),
-  refreshAccessToken: vi.fn(),
-  revokeAllTokens: vi.fn(),
-  verifyCaptcha: vi.fn(),
-
-  // Used by auth.routes.ts to set cookies
-  buildRefreshCookie: vi.fn(() => 'refresh-cookie'),
-  buildClearRefreshCookie: vi.fn(() => 'clear-refresh-cookie'),
+vi.mock('../../services/captcha.service.js', () => ({
+  createCaptcha: vi.fn(() => ({ id: 'captcha-123', question: 'What is 1 + 1?' })),
+  verifyCaptcha: vi.fn(() => true),
 }));
 
 vi.mock('bcryptjs', () => ({
@@ -98,13 +93,14 @@ describe('Auth Routes', () => {
           email: 'teacher@test.com',
           password: 'CorrectPassword123!',
           tenant_slug: 'test-academy',
-          captcha_id: 'mock-captcha',
-          captcha_answer: 'mock-answer'
+          captcha_id: 'captcha-123',
+          captcha_answer: '2',
         });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveProperty('access_token');
+      expect(res.body.data).toHaveProperty('refresh_token');
     });
 
     it('should return 401 for incorrect password', async () => {
@@ -135,8 +131,8 @@ describe('Auth Routes', () => {
           email: 'teacher@test.com',
           password: 'WrongPassword!!!',
           tenant_slug: 'test-academy',
-          captcha_id: 'mock-captcha',
-          captcha_answer: 'mock-answer'
+          captcha_id: 'captcha-123',
+          captcha_answer: '2',
         });
 
       expect(res.status).toBe(401);
@@ -159,8 +155,8 @@ describe('Auth Routes', () => {
           email: 'teacher@test.com',
           password: 'Password123!',
           tenant_slug: 'non-existent',
-          captcha_id: 'mock-captcha',
-          captcha_answer: 'mock-answer'
+          captcha_id: 'captcha-123',
+          captcha_answer: '2',
         });
 
       expect(res.status).toBe(404);
@@ -184,6 +180,7 @@ describe('Auth Routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data).toHaveProperty('access_token');
+      expect(res.body.data).toHaveProperty('refresh_token');
     });
 
     it('should return 401 for invalid refresh token', async () => {
