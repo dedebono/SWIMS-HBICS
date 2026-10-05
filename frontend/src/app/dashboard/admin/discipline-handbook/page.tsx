@@ -243,19 +243,27 @@ export default function AdminDisciplineHandbookPage() {
                         const grpKey = `${node.category.id}-grp-${grp.group.id}`;
                         return (
                           <div key={grpKey} className="rounded-lg border overflow-hidden">
-                            <button
-                              className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/50 hover:bg-muted/80 transition-colors"
-                              onClick={() => toggle(grpKey)}
-                            >
-                              <div className="flex items-center gap-2.5 text-left">
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 hover:bg-muted/80 transition-colors">
+                              <button
+                                className="flex items-center gap-2.5 text-left flex-1"
+                                onClick={() => toggle(grpKey)}
+                              >
+                                {expanded.has(grpKey)
+                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                                }
                                 <span className="text-sm font-medium">{grp.group.group_name}</span>
                                 <Badge variant="outline" className="text-xs font-medium">{grp.behaviors.length} butir</Badge>
-                              </div>
-                              {expanded.has(grpKey)
-                                ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                                : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                              }
-                            </button>
+                              </button>
+                              <Button size="icon" variant="ghost" className="h-5 w-5 text-red-500 hover:text-red-600 shrink-0" onClick={() => {
+                                const msg = grp.behaviors.length > 0
+                                  ? `Hapus kelompok "${grp.group.group_name}" beserta ${grp.behaviors.length} perilaku di dalamnya?`
+                                  : `Hapus kelompok "${grp.group.group_name}"?`;
+                                if (confirm(msg)) doDelete("/discipline-handbook/groups", grp.group.id, grp.group.group_name);
+                              }}>
+                                <Trash2 className="h-2.5 w-2.5" />
+                              </Button>
+                            </div>
 
                             {expanded.has(grpKey) && (
                               <div className="border-t">
