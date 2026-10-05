@@ -12,6 +12,7 @@ CREATE TABLE discipline_categories (
   impact_victim         TEXT,
   impact_perpetrator    TEXT,
   impact_school        TEXT,
+  characteristics       TEXT,
   created_at            TIMESTAMPTZ DEFAULT now(),
   updated_at            TIMESTAMPTZ DEFAULT now()
 );

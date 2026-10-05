@@ -21,6 +21,7 @@ interface CounselorAppt {
   location: string | null;
   notes: string | null;
   created_for: string;
+  created_for_name?: string | null;
   student_id?: string | null;
 }
 
@@ -166,7 +167,7 @@ export default function CounselingSessions() {
                   <div>
                     <p className="text-sm font-medium capitalize">
                       {a.type === "student" ? "Siswa" : "Personal (Guru/Staf)"}
-                      {a.created_for ? ` • ${a.created_for}` : ""}
+                      {a.created_for_name ? ` • ${a.created_for_name}` : a.created_for ? ` • ${a.created_for}` : ""}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {a.scheduled_at

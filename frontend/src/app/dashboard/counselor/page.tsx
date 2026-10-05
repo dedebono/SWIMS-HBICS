@@ -21,8 +21,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { apiClient } from "@/lib/api-client";
 import { localDatetimeToUTC, formatLocalTime, formatLocalTimeOnly } from "@/lib/utils";
 import { toast } from "sonner";
-import CounselingSessions from "@/components/counselor/CounselingSessions";
 import { AppointmentPicker } from "@/components/ui/appointment-picker";
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -475,8 +475,6 @@ export default function CounselorDashboardPage() {
           </div>
         </CardContent>
       </Card>
-
-      <CounselingSessions />
 
       <Dialog open={!!selectedBookedSlot} onOpenChange={(open) => { if (!open) { setSelectedBookedSlot(null); setBookedAppointment(null); } }}>
         <DialogContent>

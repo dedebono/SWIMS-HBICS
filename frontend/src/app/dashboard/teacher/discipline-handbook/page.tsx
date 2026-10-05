@@ -16,6 +16,7 @@ import {
 
 interface Category {
   id: number; name: string; general_description: string | null;
+  characteristics: string | null;
   impact_victim: string | null; impact_perpetrator: string | null; impact_school: string | null;
 }
 interface EducationLevel {

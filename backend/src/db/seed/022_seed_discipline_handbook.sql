@@ -12,28 +12,32 @@ INSERT INTO discipline_education_levels (code, name, sort_order) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- 2. Categories (4 Tingkatan)
-INSERT INTO discipline_categories (id, name, general_description, impact_victim, impact_perpetrator, impact_school)
+INSERT INTO discipline_categories (id, name, general_description, characteristics, impact_victim, impact_perpetrator, impact_school)
 VALUES
 (1, 'Pelanggaran Ringan',
  'Pelanggaran yang bersifat minor, sering tidak disengaja atau merupakan bagian dari proses perkembangan anak. Contoh: lupa membawa alat tulis, terlambat masuk kelas beberapa menit, bermain-main saat pelajaran berlangsung.',
+ 'Bersifat minor dan tidak disengaja • Belum menimbulkan dampak serius bagi diri sendiri, orang lain, maupun lingkungan sekolah • Umum terjadi karena kelalaian, kurangnya disiplin, atau kebiasaan yang belum terbentuk • Tidak menimbulkan kerusakan atau kerugian serius terhadap fasilitas, keamanan, atau kesejahteraan • Umumnya berskala kecil dan tanpa perencanaan',
  'Korban mungkin merasa terganggu tapi dampak minimal. Biasanya tidak ada dampak fisik/psikologis serius.',
  'Anak belajar tentang aturan dan konsekuensi. Bisa merasa malu atau perlu memperbaiki diri.',
  'Gangguan ringan terhadap ketertiban kelas. Bisa ditangani oleh guru kelas tanpa eskalasi.'),
 
 (2, 'Pelanggaran Sedang',
  'Pelanggaran yang sudah disengaja dan berulang, mengganggu proses belajar mengajar, atau melibatkan konflik antar siswa.',
+ 'Sudah disengaja dan dilakukan secara berulang • Mengganggu proses belajar mengajar secara aktif • Melibatkan konflik antar siswa • Bersifat verbal, fisik ringan, sosial, atau relasional • Menunjukkan pola perilaku yang semakin kuat setelah diperingatkan • Bisa melibatkan penyalahgunaan fasilitas atau media digital secara ringan',
  'Korban merasa tidak aman atau tersinggung. Bisa mengalami penurunan konsentrasi atau rasa tidak nyaman.',
  'Mendapat konsekuensi lebih serius. Perlu refleksi dan bimbingan untuk memahami dampak perbuatannya.',
  'Membutuhkan perhatian guru BK. Bisa mengganggu suasana kelas jika tidak ditangani.'),
 
 (3, 'Pelanggaran Berat',
  'Pelanggaran serius yang berpotensi membahayakan, merusak properti sekolah, atau melibatkan ketidakjujuran akademik.',
+ 'Menyebabkan kerusakan atau kerugian nyata terhadap fasilitas sekolah • Berpotensi membahayakan keselamatan warga sekolah • Ada niat jahat yang jelas dan disengaja • Berulang secara pola yang sistematis • Melibatkan ketidakjujuran akademik secara serius • Bisa melibatkan kekerasan fisik ringan atau intimidasi',
  'Korban mengalami dampak psikologis atau fisik yang signifikan. Bisa kehilangan rasa aman di sekolah.',
  'Dapat dikenakan sanksi berat hingga skorsing. Memerlukan intervensi intensif dan bantuan konseling.',
  'Membutuhkan koordinasi dengan orang tua dan possibly pihak eksternal. Reputation sekolah bisa terancam.'),
 
 (4, 'Pelanggaran Sangat Berat',
  'Pelanggaran ekstrem yang mengancam keselamatan, melibatkan kekerasan serius, penyalahgunaan zat, atau tindakan kriminal.',
+ 'Mengancam keselamatan jiwa atau fisik secara serius • Dilakukan dengan rencana dan kesengajaan penuh • Melibatkan senjata, bahan berbahaya, atau zat terlarang • Bersifat kriminal dan melanggar hukum • Berpotensi menyebabkan trauma jangka panjang pada korban • Menyebarluaskan dampak negatif secara luas',
  'Korban bisa mengalami trauma berat, cedera fisik, atau dampak psikologis jangka panjang.',
  '面临最严格的纪律处分，包括开除。必须接受专业辅导和可能的法律后果。',
  'Kondisi darurat yang memerlukan koordinasi dengan kepala sekolah, orang tua, dan potentially pihak berwajib.')

@@ -7,6 +7,7 @@ export interface DisciplineCategory {
   id: number;
   name: string;
   general_description: string | null;
+  characteristics: string | null;
   impact_victim: string | null;
   impact_perpetrator: string | null;
   impact_school: string | null;
@@ -91,9 +92,9 @@ export async function createCategory(
 ): Promise<DisciplineCategory> {
   const { rows } = await queryWithTenant<DisciplineCategory>(
     tenantId,
-    `INSERT INTO discipline_categories (name, general_description, impact_victim, impact_perpetrator, impact_school)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [input.name, input.general_description, input.impact_victim, input.impact_perpetrator, input.impact_school],
+    `INSERT INTO discipline_categories (name, general_description, characteristics, impact_victim, impact_perpetrator, impact_school)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [input.name, input.general_description, input.characteristics, input.impact_victim, input.impact_perpetrator, input.impact_school],
   );
   return rows[0]!;
 }
@@ -110,6 +111,7 @@ export async function updateCategory(
     let i = 1;
     if (input.name !== undefined)          { sets.push(`name = $${i++}`);          values.push(input.name); }
     if (input.general_description !== undefined) { sets.push(`general_description = $${i++}`); values.push(input.general_description); }
+    if (input.characteristics !== undefined) { sets.push(`characteristics = $${i++}`); values.push(input.characteristics); }
     if (input.impact_victim !== undefined) { sets.push(`impact_victim = $${i++}`);   values.push(input.impact_victim); }
     if (input.impact_perpetrator !== undefined) { sets.push(`impact_perpetrator = $${i++}`); values.push(input.impact_perpetrator); }
     if (input.impact_school !== undefined) { sets.push(`impact_school = $${i++}`);  values.push(input.impact_school); }
@@ -239,12 +241,14 @@ export async function createBehaviorDetail(
   tenantId: string,
   input: Omit<DisciplineBehaviorDetail, 'id'>
 ): Promise<DisciplineBehaviorDetail> {
+  console.log('[DEBUG] createBehaviorDetail called:', { tenantId, input });
   const { rows } = await queryWithTenant<DisciplineBehaviorDetail>(
     tenantId,
     `INSERT INTO discipline_behavior_details (group_id, behavior_text)
      VALUES ($1, $2) RETURNING *`,
     [input.group_id, input.behavior_text],
   );
+  console.log('[DEBUG] createBehaviorDetail result:', rows[0]);
   return rows[0]!;
 }
 
@@ -551,7 +555,7 @@ export async function searchBehaviors(tenantId: string, params: SearchParams): P
     `SELECT
        bd.id as behavior_id, bd.behavior_text, bd.group_id,
        bg.category_id, bg.group_name,
-       bc.name as category_name, bc.general_description,
+       bc.name as category_name, bc.general_description, bc.characteristics as category_characteristics,
        el.id as level_id, el.code as level_code, el.name as level_name, el.sort_order as level_sort_order
      FROM discipline_behavior_details bd
      JOIN discipline_behavior_groups bg ON bg.id = bd.group_id
@@ -574,6 +578,7 @@ export async function searchBehaviors(tenantId: string, params: SearchParams): P
           id: r.category_id,
           name: r.category_name,
           general_description: r.general_description ?? null,
+          characteristics: r.category_characteristics ?? null,
           impact_victim: null, impact_perpetrator: null, impact_school: null,
         },
         levels: [],
@@ -624,13 +629,10 @@ export async function getFullHandbook(tenantId: string, levelId?: number): Promi
   const groupsParams: unknown[] = levelId ? [tenantId, levelId] : [];
   const { rows: groups } = await queryWithTenant<DisciplineBehaviorGroup>(
     tenantId,
-    `SELECT DISTINCT bg.*
+    `SELECT bg.*
      FROM discipline_behavior_groups bg
      JOIN discipline_categories bc ON bc.id = bg.category_id
-     WHERE EXISTS (SELECT 1 FROM discipline_behavior_details bd WHERE bd.group_id = bg.id)
-     ${levelCondition}
      ORDER BY bg.id`,
-    groupsParams,
   );
 
   const behaviorParams: unknown[] = levelId ? [tenantId, levelId] : [];

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Eye, AlertTriangle, Clock, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import CounselingSessions from '@/components/counselor/CounselingSessions';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 
@@ -148,6 +149,8 @@ export default function EmployeeCounselingCounselorPage() {
           )}
         </CardContent>
       </Card>
+
+      <CounselingSessions />
     </div>
   );
 }

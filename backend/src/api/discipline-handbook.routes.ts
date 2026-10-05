@@ -147,7 +147,11 @@ router.post('/behaviors',
   requireRole('IT_ADMIN', 'COUNSELOR'),
   asyncHandler(async (req: Request, res) => {
     const tenantId = (req as any).tenantId;
-    const created = await service.createBehaviorDetail(tenantId, req.body);
+    const { level_ids, ...behaviorData } = req.body as { level_ids?: number[]; group_id: number; behavior_text: string };
+    const created = await service.createBehaviorDetail(tenantId, behaviorData);
+    if (level_ids && level_ids.length > 0) {
+      await service.setBehaviorLevels(tenantId, created.id, level_ids);
+    }
     sendSuccess(res, created, 201);
   })
 );

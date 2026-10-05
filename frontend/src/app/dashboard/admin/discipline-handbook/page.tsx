@@ -20,7 +20,7 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface Category { id: number; name: string; general_description: string | null; impact_victim: string | null; impact_perpetrator: string | null; impact_school: string | null; }
+interface Category { id: number; name: string; general_description: string | null; characteristics: string | null; impact_victim: string | null; impact_perpetrator: string | null; impact_school: string | null; }
 interface EducationLevel { id: number; code: string; name: string; sort_order: number; }
 interface BehaviorGroup { id: number; category_id: number; group_name: string; description: string | null; }
 interface BehaviorDetail { id: number; group_id: number; behavior_text: string; }
@@ -321,7 +321,8 @@ export default function AdminDisciplineHandbookPage() {
                             <span className={`font-semibold text-sm ${colors.text}`}>{c.name}</span>
                             <Badge variant="outline" className="text-[10px] font-mono">#{c.id}</Badge>
                           </div>
-                          {c.general_description && <p className={`text-xs mb-2 ${colors.desc}`}>{c.general_description}</p>}
+                          {c.general_description && <p className={`text-xs mb-1 ${colors.desc}`}>{c.general_description}</p>}
+                          {c.characteristics && <p className={`text-[10px] mb-2 italic ${colors.desc}`}>📋 {c.characteristics}</p>}
                           <div className="flex gap-2 flex-wrap">
                             <Badge className={`text-xs font-medium ${colors.badge}`}>{groupCount} kelompok</Badge>
                             <Badge className={`text-xs font-medium ${colors.badge}`}>{behaviorCount} perilaku</Badge>
@@ -619,14 +620,14 @@ export default function AdminDisciplineHandbookPage() {
             if (dlg.data?.id) {
               doPost("/discipline-handbook/behaviors", { ...body, id: dlg.data.id }, () => doPut(`/discipline-handbook/behaviors/${dlg.data.id}/levels`, { level_ids: body.level_ids }));
             } else {
-              doPost("/discipline-handbook/behaviors", { group_id: body.group_id, behavior_text: body.behavior_text });
+              doPost("/discipline-handbook/behaviors", { group_id: body.group_id, behavior_text: body.behavior_text, level_ids: body.level_ids });
             }
           }} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={dlg.open === "add-guideline" || dlg.open === "edit-guideline"} onOpenChange={(o) => !o && closeDlg()}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit SOP" : "Tambah SOP"}</DialogTitle></DialogHeader>
           <FormGuideline data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
             if (dlg.data?.id) doPut(`/discipline-handbook/guidelines/${dlg.data.id}`, body);
@@ -663,12 +664,13 @@ export default function AdminDisciplineHandbookPage() {
 // ═══════════════════════════════════════════════════════════════════
 
 function FormCategory({ data, onSubmit }: { data?: Category; onSubmit: (b: any) => void }) {
-  const [f, setF] = useState({ name: data?.name ?? "", general_description: data?.general_description ?? "", impact_victim: data?.impact_victim ?? "", impact_perpetrator: data?.impact_perpetrator ?? "", impact_school: data?.impact_school ?? "" });
+  const [f, setF] = useState({ name: data?.name ?? "", general_description: data?.general_description ?? "", characteristics: data?.characteristics ?? "", impact_victim: data?.impact_victim ?? "", impact_perpetrator: data?.impact_perpetrator ?? "", impact_school: data?.impact_school ?? "" });
   const [saving, setSaving] = useState(false);
   return (
     <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit(f); setSaving(false); }} className="space-y-3">
       <div><Label> Nama Kategori *</Label><Input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required placeholder="contoh: Pelanggaran Ringan" /></div>
       <div><Label>Deskripsi Umum</Label><Textarea rows={2} value={f.general_description} onChange={e => setF({ ...f, general_description: e.target.value })} placeholder="Ciri-ciri utama kategori" /></div>
+      <div><Label>Ciri-ciri</Label><Textarea rows={3} value={f.characteristics} onChange={e => setF({ ...f, characteristics: e.target.value })} placeholder="Sifat atau karakteristik perilaku yang termasuk dalam kategori ini" /></div>
       <div><Label>Dampak bagi Korban</Label><Textarea rows={2} value={f.impact_victim} onChange={e => setF({ ...f, impact_victim: e.target.value })} /></div>
       <div><Label>Dampak bagi Pelaku</Label><Textarea rows={2} value={f.impact_perpetrator} onChange={e => setF({ ...f, impact_perpetrator: e.target.value })} /></div>
       <div><Label>Dampak bagi Sekolah</Label><Textarea rows={2} value={f.impact_school} onChange={e => setF({ ...f, impact_school: e.target.value })} /></div>
@@ -753,12 +755,12 @@ function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: a
 }
 
 function FormGuideline({ data, categories, levels, onSubmit }: { data?: HandlingGuideline; categories: Category[]; levels: EducationLevel[]; onSubmit: (b: any) => void }) {
-  const [f, setF] = useState({ category_id: data ? String(data.category_id) : "", level_id: data ? String(data.level_id) : "", target_type: data?.target_type ?? "Identifikasi Awal", step_number: data?.step_number ?? 1, guideline_text: data?.guideline_text ?? "" });
+  const [f, setF] = useState({ category_id: data ? String(data.category_id) : "", level_id: data ? String(data.level_id) : "", target_type: data?.target_type ?? "A. Identifikasi dan Klasifikasi", step_number: data?.step_number ?? 1, guideline_text: data?.guideline_text ?? "" });
   const [saving, setSaving] = useState(false);
-  const TARGET_TYPES = ["Identifikasi Awal", "Penanganan Pelaku", "Penanganan Korban", "Kolaborasi Orang Tua", "Koordinasi"];
+  const TARGET_TYPES = ["A. Identifikasi dan Klasifikasi", "B. Penanganan Terlapor", "C. Penanganan Korban", "D. Penanganan Lingkungan", "E. Penyusunan Kesimpulan"];
   return (
     <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id), step_number: Number(f.step_number) }); setSaving(false); }} className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div><Label>Kategori *</Label>
           <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
             <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
@@ -771,15 +773,13 @@ function FormGuideline({ data, categories, levels, onSubmit }: { data?: Handling
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Tahap *</Label>
-          <Select value={f.target_type} onValueChange={v => setF({ ...f, target_type: v ?? "Identifikasi Awal" })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TARGET_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
         <div><Label>No. Langkah *</Label><Input type="number" min={1} value={f.step_number} onChange={e => setF({ ...f, step_number: Number(e.target.value) })} /></div>
+      </div>
+      <div><Label>Tahap *</Label>
+        <Select value={f.target_type} onValueChange={v => setF({ ...f, target_type: v ?? "A. Identifikasi dan Klasifikasi" })}>
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>{TARGET_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+        </Select>
       </div>
       <div><Label>Isi Langkah *</Label><Textarea rows={4} value={f.guideline_text} onChange={e => setF({ ...f, guideline_text: e.target.value })} required placeholder="Detail langkah penanganan…" /></div>
       <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>

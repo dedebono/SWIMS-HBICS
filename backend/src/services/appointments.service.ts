@@ -9,20 +9,23 @@ export async function listAppointments(tenantId: string, filters?: {
   psychologist_id?: string;
   status?: string;
   type?: 'student' | 'personal';
-}): Promise<AppointmentRow[]> {
-  let sql = `SELECT * FROM appointments WHERE tenant_id = $1 AND deleted_at IS NULL`;
+}): Promise<(AppointmentRow & { created_for_name?: string })[]> {
+  let sql = `SELECT a.*, u.full_name as created_for_name
+    FROM appointments a
+    LEFT JOIN users u ON a.created_for = u.user_id AND a.type = 'personal'
+    WHERE a.tenant_id = $1 AND a.deleted_at IS NULL`;
   const params: unknown[] = [tenantId];
   let p = 2;
 
-  if (filters?.created_for) { sql += ` AND created_for = $${p++}`; params.push(filters.created_for); }
-  if (filters?.counselor_id) { sql += ` AND counselor_id = $${p++}`; params.push(filters.counselor_id); }
-  if (filters?.psychologist_id) { sql += ` AND psychologist_id = $${p++}`; params.push(filters.psychologist_id); }
-  if (filters?.status) { sql += ` AND status = $${p++}`; params.push(filters.status); }
-  if (filters?.type) { sql += ` AND type = $${p++}`; params.push(filters.type); }
+  if (filters?.created_for) { sql += ` AND a.created_for = $${p++}`; params.push(filters.created_for); }
+  if (filters?.counselor_id) { sql += ` AND a.counselor_id = $${p++}`; params.push(filters.counselor_id); }
+  if (filters?.psychologist_id) { sql += ` AND a.psychologist_id = $${p++}`; params.push(filters.psychologist_id); }
+  if (filters?.status) { sql += ` AND a.status = $${p++}`; params.push(filters.status); }
+  if (filters?.type) { sql += ` AND a.type = $${p++}`; params.push(filters.type); }
 
-  sql += ` ORDER BY created_at DESC LIMIT 100`;
+  sql += ` ORDER BY a.created_at DESC LIMIT 100`;
 
-  const { rows } = await queryWithTenant<AppointmentRow>(tenantId, sql, params);
+  const { rows } = await queryWithTenant<AppointmentRow & { created_for_name?: string }>(tenantId, sql, params);
   return rows;
 }
 
