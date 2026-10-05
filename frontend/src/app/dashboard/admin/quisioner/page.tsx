@@ -391,35 +391,74 @@ export default function QuisionerAdminPage() {
             Guru/staff scan QR ini untuk langsung booking janji temu konseling dengan konselor (tanpa login).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {slug && (
-            <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
-              <p className="text-sm text-muted-foreground">
-                Scan QR ini untuk membuka{' '}
-                {target === 'staff' ? 'laman booking staff (NIK):' : 'laman booking konseling:'}
+        <CardContent className="space-y-6">
+          {/* ── Link 1: Direct booking (tanpa quisioner) ── */}
+          <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">Booking Langsung (tanpa quisioner)</p>
+              <p className="text-xs text-muted-foreground">
+                Staff masukkan NIK → langsung pilih konselor sesuai gender.
               </p>
-              <QRCodeSVG
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}${target === 'staff' ? '/book/staff' : '/quisioner/book'}?t=${slug}`}
-                size={180}
-              />
-              <div className="flex items-center gap-2">
-                <code className="text-xs break-all rounded bg-muted px-2 py-1">
-                  {typeof window !== 'undefined' ? window.location.origin : ''}{target === 'staff' ? '/book/staff' : '/quisioner/book'}?t={slug}
-                </code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}${target === 'staff' ? '/book/staff' : '/quisioner/book'}?t=${slug}`;
-                    navigator.clipboard?.writeText(url);
-                    toast.success('Link disalin');
-                  }}
-                >
-                  Salin Link
-                </Button>
-              </div>
             </div>
-          )}
+            {slug && (
+              <>
+                <QRCodeSVG
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/book/staff?t=${slug}`}
+                  size={160}
+                />
+                <div className="flex items-center gap-2">
+                  <code className="text-xs break-all rounded bg-muted px-2 py-1">
+                    {typeof window !== 'undefined' ? window.location.origin : ''}/book/staff?t={slug}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/book/staff?t=${slug}`;
+                      navigator.clipboard?.writeText(url);
+                      toast.success('Link disalin');
+                    }}
+                  >
+                    Salin
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Link 2: Quisioner staff (employee counseling) ── */}
+          <div className="flex flex-col items-start gap-3 rounded-lg border p-4 border-blue-200 bg-blue-50/50">
+            <div>
+              <p className="text-sm font-medium">Quisioner Konseling Karyawan</p>
+              <p className="text-xs text-muted-foreground">
+                Staff isi quisioner → counselor/psikolog tindak lanjuti.
+              </p>
+            </div>
+            {slug && (
+              <>
+                <QRCodeSVG
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/employee-counseling?t=${slug}`}
+                  size={160}
+                />
+                <div className="flex items-center gap-2">
+                  <code className="text-xs break-all rounded bg-muted px-2 py-1">
+                    {typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/employee-counseling?t={slug}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/employee-counseling?t=${slug}`;
+                      navigator.clipboard?.writeText(url);
+                      toast.success('Link disalin');
+                    }}
+                  >
+                    Salin
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
 

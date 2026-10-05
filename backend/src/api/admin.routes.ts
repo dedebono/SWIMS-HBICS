@@ -14,6 +14,7 @@ import {
 } from '../services/role-permissions.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { pool } from '../db/pool.js';
+import { hashNationalId, encryptField, decryptField } from '../utils/encryption.js';
 import type { UserRow } from '@swims/shared';
 
 const router = Router();
@@ -74,6 +75,12 @@ router.get(
        ORDER BY full_name ASC`,
       [tenantId],
     );
+    // Decrypt national_id values for frontend
+    for (const row of rows as any[]) {
+      if (row.national_id) {
+        try { row.national_id = decryptField(row.national_id); } catch { /* keep encrypted */ }
+      }
+    }
     sendSuccess(res, rows);
   }),
 );
@@ -117,6 +124,7 @@ const updateUserSchema = z.object({
   password: z.string().min(6).optional(),
   gender: z.string().optional(),
   phone_number: z.string().optional(),
+  national_id: z.string().optional(),
 });
 
 router.put(
@@ -137,6 +145,10 @@ router.put(
     if (body.password) { sets.push(`password_hash = $${idx++}`); vals.push(await bcrypt.hash(body.password, 12)); }
     if (body.gender !== undefined) { sets.push(`gender = $${idx++}`); vals.push(body.gender); }
     if (body.phone_number !== undefined) { sets.push(`phone_number = $${idx++}`); vals.push(body.phone_number); }
+    if (body.national_id !== undefined) {
+      sets.push(`national_id = $${idx++}`); vals.push(body.national_id ? encryptField(body.national_id) : null);
+      sets.push(`national_id_hash = $${idx++}`); vals.push(body.national_id ? hashNationalId(body.national_id) : null);
+    }
 
     if (sets.length === 0) {
       sendError(res, 'No fields to update', 400);
@@ -150,7 +162,12 @@ router.put(
       vals,
     );
     if (!rows[0]) { sendError(res, 'User not found', 404); return; }
-    sendSuccess(res, rows[0]);
+    const row = rows[0] as any;
+    // Decrypt national_id for frontend consumption
+    if (row.national_id) {
+      try { row.national_id = decryptField(row.national_id); } catch { /* keep encrypted if decryption fails */ }
+    }
+    sendSuccess(res, row);
   }),
 );
 

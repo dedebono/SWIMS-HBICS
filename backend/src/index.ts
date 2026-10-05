@@ -80,6 +80,9 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/case-shares', caseSharesRoutes);
+// Public booking routes — mounted BEFORE catch-all so they take precedence
+app.use('/api/counseling', counselingBookingRoutes);
+// Legacy mount (kept for other consumers)
 app.use('/api/counseling-booking', counselingBookingRoutes);
 app.use('/api/discipline-handbook', disciplineHandbookRoutes);
 app.use('/api/employee-counseling', employeeCounselingRoutes);

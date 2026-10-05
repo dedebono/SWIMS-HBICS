@@ -63,6 +63,7 @@ export default function AdminUsersPage() {
     password: "",
     gender: "",
     phone_number: "",
+    national_id: "",
   });
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
@@ -161,13 +162,14 @@ export default function AdminUsersPage() {
       password: "",
       gender: user.gender || "",
       phone_number: user.phone_number || "",
+      national_id: user.national_id || "",
     });
     setIsEditSubmitting(false);
   };
 
   const closeEditDialog = () => {
     setEditUser(null);
-    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "", gender: "", phone_number: "" });
+    setEditForm({ full_name: "", email: "", role: "", is_active: true, password: "", gender: "", phone_number: "", national_id: "" });
   };
 
   const handleEditSubmit = async () => {
@@ -192,6 +194,8 @@ export default function AdminUsersPage() {
         // Students: allow phone number to be set/updated here (used for WAHA notifications)
         body.phone_number = editForm.phone_number || null;
       }
+      // NIK — sent for all user types (required for staff booking)
+      body.national_id = editForm.national_id || null;
       if (editForm.password) body.password = editForm.password;
 
       const res = await apiClient(`/admin/users/${editUser.id}`, {
@@ -691,6 +695,16 @@ export default function AdminUsersPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>NIK / National ID *</Label>
+                  <Input
+                    value={editForm.national_id}
+                    onChange={e => setEditForm({ ...editForm, national_id: e.target.value })}
+                    placeholder="e.g. 1234567890123456"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Required for staff booking via QR code.</p>
+                </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -720,9 +734,19 @@ export default function AdminUsersPage() {
                     type="tel"
                     value={editForm.phone_number}
                     onChange={e => setEditForm({ ...editForm, phone_number: e.target.value })}
-                    placeholder="e.g., +6281234567890"
+                    placeholder="e.g., +628****7890"
                   />
                   <p className="text-xs text-muted-foreground">Include country code (e.g., +62 for Indonesia). Used for WhatsApp appointment notifications.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>NIK / National ID *</Label>
+                  <Input
+                    value={editForm.national_id}
+                    onChange={e => setEditForm({ ...editForm, national_id: e.target.value })}
+                    placeholder="e.g. 1234567890123456"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Required for staff booking via QR code.</p>
                 </div>
               </>
             )}

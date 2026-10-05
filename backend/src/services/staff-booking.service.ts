@@ -3,16 +3,17 @@ import { hashNationalId } from '../utils/encryption.js';
 import { createAppointment, confirmAppointment, updateAvailabilitySlot } from './appointments.service.js';
 import { sendNotificationToUser } from './notifications.service.js';
 
-export async function verifyNik(tenantId: string, nik: string): Promise<{ valid: boolean; staff_name?: string }> {
+export async function verifyNik(tenantId: string, nik: string): Promise<{ valid: boolean; staff_name?: string; gender?: string }> {
   if (!nik || !nik.trim()) return { valid: false };
   const hash = hashNationalId(nik);
-  const { rows } = await queryWithTenant<{ user_id: string; full_name: string }>(
+  const { rows } = await queryWithTenant<{ user_id: string; full_name: string; gender: string }>(
     tenantId,
-    `SELECT user_id, full_name FROM users
+    `SELECT user_id, full_name, gender FROM users
      WHERE tenant_id = $1 AND national_id_hash = $2 AND role = 'PERSONAL' AND is_active = true`,
     [tenantId, hash],
   );
-  return rows[0] ? { valid: true, staff_name: rows[0].full_name } : { valid: false };
+  if (!rows[0]) return { valid: false };
+  return { valid: true, staff_name: rows[0].full_name, gender: rows[0].gender || undefined };
 }
 
 export interface CounselorSlot {

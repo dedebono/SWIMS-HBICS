@@ -53,6 +53,7 @@ interface FormData {
 
 interface EmployeeCounselingWizardProps {
   onSubmitted?: (submissionId: string) => void;
+  tenantSlug?: string;
 }
 
 const EMPTY: FormData = {
@@ -326,7 +327,7 @@ function SectionF({ data, on }: { data: FormData; on: (d: FormData) => void }) {
 }
 
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
-export function EmployeeCounselingWizard({ onSubmitted }: EmployeeCounselingWizardProps) {
+export function EmployeeCounselingWizard({ onSubmitted, tenantSlug }: EmployeeCounselingWizardProps) {
   const [step, setStep] = useState(0); // 0-5 (A-F)
   const [form, setForm] = useState<FormData>(EMPTY);
   const [submitting, setSubmitting] = useState(false);
@@ -382,7 +383,7 @@ export function EmployeeCounselingWizard({ onSubmitted }: EmployeeCounselingWiza
       },
       is_high_priority: isHighPriority,
     };
-    const res = await apiClient<{ submission_id: string }>('/employee-counseling/public/submit', { method: 'POST', body: payload });
+    const res = await apiClient<{ submission_id: string }>(`/api/employee-counseling/employee-counseling/submit${tenantSlug ? `?t=${tenantSlug}` : ''}`, { method: 'POST', body: payload });
     setSubmitting(false);
     if (res.success && res.data) {
       setSubmissionId(res.data.submission_id);

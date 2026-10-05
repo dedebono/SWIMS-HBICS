@@ -27,11 +27,8 @@ export async function listAppointments(tenantId: string, filters?: {
 }
 
 export async function getAppointment(tenantId: string, appointmentId: string): Promise<AppointmentRow | null> {
-  const { rows } = await queryWithTenant<AppointmentRow>(
-    tenantId,
-    `SELECT * FROM appointments WHERE tenant_id = $1 AND appointment_id = $2 AND deleted_at IS NULL`,
-    [tenantId, appointmentId],
-  );
+  const sql = `SELECT * FROM appointments WHERE tenant_id = $1 AND appointment_id = $2 AND deleted_at IS NULL`;
+  const { rows } = await queryWithTenant<AppointmentRow>(tenantId, sql, [tenantId, appointmentId]);
   return rows[0] ?? null;
 }
 

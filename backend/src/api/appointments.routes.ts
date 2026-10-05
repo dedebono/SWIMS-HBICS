@@ -28,7 +28,7 @@ const mediateSchema = z.object({
 // ─── APPOINTMENTS ────────────────────────────────────────────────────────────
 
 router.get(
-  '/appointments',
+  '/',
   checkPermission('appointments', 'read'),
   asyncHandler(async (req, res) => {
     const items = await appointmentService.listAppointments(req.tenantId, {
@@ -42,8 +42,50 @@ router.get(
   }),
 );
 
+// Reschedule — MUST be before /:appointmentId
+router.patch(
+  '/:appointmentId/reschedule',
+  checkPermission('appointments', 'update'),
+  asyncHandler(async (req, res) => {
+    const { new_slot_id, old_slot_id } = req.body as { new_slot_id: string; old_slot_id: string };
+    const appointment = await appointmentService.getAppointment(req.tenantId, req.params.appointmentId);
+    if (!appointment) return res.status(404).json({ message: 'Appointment tidak ditemukan' });
+
+    const { rows: newSlots } = await (require('../db/pool').queryWithTenant as any)(
+      req.tenantId,
+      `SELECT * FROM availability_slots WHERE slot_id = $1 AND deleted_at IS NULL`,
+      [new_slot_id],
+    );
+    const newSlot = newSlots[0];
+    if (!newSlot) return res.status(404).json({ message: 'Slot baru tidak ditemukan' });
+    if (!newSlot.is_available || newSlot.appointment_id) {
+      return res.status(409).json({ message: 'Slot sudah terisi' });
+    }
+
+    await (require('../db/pool').queryWithTenant as any)(
+      req.tenantId,
+      `UPDATE appointments SET scheduled_at = $1, updated_at = now() WHERE appointment_id = $2 AND tenant_id = $3 AND deleted_at IS NULL`,
+      [newSlot.slot_start, req.params.appointmentId, req.tenantId],
+    );
+
+    await (require('../db/pool').queryWithTenant as any)(
+      req.tenantId,
+      `UPDATE availability_slots SET is_available = true, appointment_id = NULL, updated_at = now() WHERE slot_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      [old_slot_id, req.tenantId],
+    );
+
+    await (require('../db/pool').queryWithTenant as any)(
+      req.tenantId,
+      `UPDATE availability_slots SET is_available = false, appointment_id = $1, updated_at = now() WHERE slot_id = $2 AND tenant_id = $3 AND deleted_at IS NULL`,
+      [req.params.appointmentId, new_slot_id, req.tenantId],
+    );
+
+    sendSuccess(res, { appointment_id: req.params.appointmentId, new_slot_id, new_scheduled_at: newSlot.slot_start });
+  }),
+);
+
 router.get(
-  '/appointments/:appointmentId',
+  '/:appointmentId',
   checkPermission('appointments', 'read'),
   asyncHandler(async (req, res) => {
     const item = await appointmentService.getAppointment(req.tenantId, req.params.appointmentId);
@@ -53,7 +95,7 @@ router.get(
 );
 
 router.post(
-  '/appointments',
+  '/',
   checkPermission('appointments', 'create'),
   asyncHandler(async (req, res) => {
     const item = await appointmentService.createAppointment(req.tenantId, {
@@ -66,7 +108,7 @@ router.post(
 
 // Personal staff appointment
 router.post(
-  '/appointments/personal',
+  '/personal',
   checkPermission('appointments', 'create'),
   asyncHandler(async (req, res) => {
     const body = createPersonalSchema.parse(req.body);
@@ -79,7 +121,7 @@ router.post(
 );
 
 router.patch(
-  '/appointments/:appointmentId/status',
+  '/:appointmentId/status',
   checkPermission('appointments', 'update'),
   asyncHandler(async (req, res) => {
     const { status, notes } = req.body as { status: string; notes?: string };
@@ -90,7 +132,7 @@ router.patch(
 );
 
 router.post(
-  '/appointments/:appointmentId/confirm',
+  '/:appointmentId/confirm',
   checkPermission('appointments', 'update'),
   asyncHandler(async (req, res) => {
     const { scheduled_at } = req.body as { scheduled_at: string };
@@ -101,7 +143,7 @@ router.post(
 );
 
 router.patch(
-  '/appointments/:appointmentId/notes',
+  '/:appointmentId/notes',
   checkPermission('appointments', 'update'),
   asyncHandler(async (req, res) => {
     const { notes } = req.body as { notes: string };
@@ -112,7 +154,7 @@ router.patch(
 );
 
 router.patch(
-  '/appointments/:appointmentId/mediate',
+  '/:appointmentId/mediate',
   checkPermission('appointments', 'update'),
   asyncHandler(async (req, res) => {
     const body = mediateSchema.parse(req.body);
@@ -123,7 +165,7 @@ router.patch(
 );
 
 router.get(
-  '/appointments/counselors',
+  '/counselors',
   checkPermission('appointments', 'read'),
   asyncHandler(async (req, res) => {
     const { rows } = await (require('../db/pool').queryWithTenant as any)(

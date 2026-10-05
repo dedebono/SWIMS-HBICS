@@ -41,10 +41,9 @@ function BookingInner() {
   const [step, setStep] = useState<Step>('loading');
   const [message, setMessage] = useState('');
   const [counselors, setCounselors] = useState<Counselor[]>([]);
-  const [fullName, setFullName] = useState('');
   const [nik, setNik] = useState('');
   const [staffName, setStaffName] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | ''>('');
+  const [gender, setGender] = useState<string>('');
   const [selectedCounselor, setSelectedCounselor] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -68,22 +67,18 @@ function BookingInner() {
     })();
   }, [slug]);
 
-  // Counselors with at least one open slot; male staff only see male counselors.
+  // Counselors with at least one open slot, filtered by staff's own gender
   const visibleCounselors = counselors
     .filter((c) => c.slots.length > 0)
-    .filter((c) => gender !== 'male' || c.gender.toLowerCase() === 'male');
+    .filter((c) => !gender || !c.gender || c.gender.toLowerCase() === gender);
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) {
-      toast.error('Masukkan Nama Lengkap.');
-      return;
-    }
     if (!nik.trim()) {
       toast.error('Masukkan NIK.');
       return;
     }
-    const res = await apiClient<{ valid: boolean; staff_name?: string }>(
+    const res = await apiClient<{ valid: boolean; staff_name?: string; gender?: string }>(
       `/counseling/booking/verify?t=${encodeURIComponent(slug)}`,
       { method: 'POST', body: { nik } },
     );
@@ -91,20 +86,14 @@ function BookingInner() {
       toast.error('NIK tidak terdaftar sebagai staff.');
       return;
     }
-    setStaffName(res.data.staff_name || fullName);
-    setStep('gender');
-  };
-
-  const handleGenderNext = () => {
-    if (!gender) {
-      toast.error('Pilih jenis kelamin.');
-      return;
-    }
-    if (visibleCounselors.length === 0) {
+    const staffGender = res.data.gender?.toLowerCase() || '';
+    setStaffName(res.data.staff_name || '');
+    setGender(staffGender);
+    if (staffGender && counselors.filter(c => c.slots.length > 0 && c.gender.toLowerCase() === staffGender).length === 0) {
       setStep('noflex');
-      return;
+    } else {
+      setStep('schedule');
     }
-    setStep('schedule');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,7 +106,7 @@ function BookingInner() {
     try {
       const res = await apiClient<{ appointment_id: string; scheduled_at: string }>(
         `/counseling/booking/submit?t=${encodeURIComponent(slug)}`,
-        { method: 'POST', body: { nik, full_name: fullName, gender, slot_id: selectedSlot } },
+        { method: 'POST', body: { nik, full_name: staffName, gender, slot_id: selectedSlot } },
       );
       if (!res.success || !res.data) {
         toast.error(res.error || 'Gagal membooking janji temu.');
@@ -166,20 +155,10 @@ function BookingInner() {
           <Card>
             <CardHeader>
               <CardTitle>Identitas Anda</CardTitle>
-              <CardDescription>Masukkan Nama Lengkap dan NIK (Nomor Induk Karyawan).</CardDescription>
+              <CardDescription>Masukkan NIK (Nomor Induk Karyawan) Anda.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleVerify} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nama Lengkap</Label>
-                  <Input
-                    id="name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Nama Lengkap"
-                    autoFocus
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="nik">NIK</Label>
                   <Input
@@ -187,6 +166,7 @@ function BookingInner() {
                     value={nik}
                     onChange={(e) => setNik(e.target.value)}
                     placeholder="Nomor Induk Karyawan"
+                    autoFocus
                   />
                 </div>
                 <Button type="submit" className="w-full">
@@ -197,38 +177,12 @@ function BookingInner() {
           </Card>
         )}
 
-        {step === 'gender' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Pilih Jenis Kelamin</CardTitle>
-              <CardDescription>Halo {staffName}, pilih jenis kelamin Anda.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setGender('male')}
-                  className={`rounded-lg border p-4 text-center ${gender === 'male' ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
-                >
-                  Laki-laki
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGender('female')}
-                  className={`rounded-lg border p-4 text-center ${gender === 'female' ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
-                >
-                  Perempuan
-                </button>
-              </div>
-              <Button className="w-full" onClick={handleGenderNext}>
-                Lanjut
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
         {step === 'schedule' && (
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="text-center">
+              <p className="text-sm font-medium">{staffName}</p>
+              <p className="text-xs text-muted-foreground capitalize">Konselor {gender === 'male' ? 'Laki-laki' : gender === 'female' ? 'Perempuan' : ''} tersedia:</p>
+            </div>
             {visibleCounselors.map((c) => (
               <Card key={c.user_id}>
                 <CardHeader>

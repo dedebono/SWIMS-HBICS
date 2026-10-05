@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiClient } from "@/lib/api-client";
 import { localDatetimeToUTC, formatLocalTime, formatLocalTimeOnly } from "@/lib/utils";
 import { toast } from "sonner";
@@ -167,6 +167,13 @@ export default function CounselorDashboardPage() {
   const [selectedBookedSlot, setSelectedBookedSlot] = useState<{ slot_id: string; slot_start: string; slot_end: string; appointment_id: string } | null>(null);
   const [bookedAppointment, setBookedAppointment] = useState<any | null>(null);
   const [loadingAppointment, setLoadingAppointment] = useState(false);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveSlot, setMoveSlot] = useState<AvailabilitySlot | null>(null);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [moveTargetSlotId, setMoveTargetSlotId] = useState<string>('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [slotToDelete, setSlotToDelete] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -220,6 +227,32 @@ export default function CounselorDashboardPage() {
     } else {
       toast.error(res.error ?? 'Gagal menambah slot');
     }
+  };
+
+  const confirmMoveSlot = async () => {
+    if (!moveSlot || !moveTargetSlotId) { toast.error('Pilih slot tujuan terlebih dahulu.'); return; }
+    setMoveLoading(true);
+    const res = await apiClient(`/appointments/${moveSlot.appointment_id}/reschedule`, {
+      method: 'PATCH',
+      body: { new_slot_id: moveTargetSlotId, old_slot_id: moveSlot.slot_id },
+    });
+    setMoveLoading(false);
+    setMoveDialogOpen(false);
+    setMoveSlot(null);
+    setMoveTargetSlotId('');
+    if (res.success) { toast.success('Appointment dipindahkan.'); fetchDashboard(); }
+    else { toast.error(res.error ?? 'Gagal memindahkan appointment.'); }
+  };
+
+  const confirmDeleteSlot = async () => {
+    if (!slotToDelete) return;
+    setDeleteLoading(true);
+    const res = await apiClient(`/availability/${slotToDelete}`, { method: 'DELETE' });
+    setDeleteLoading(false);
+    setDeleteDialogOpen(false);
+    setSlotToDelete(null);
+    if (res.success) { toast.success('Slot dihapus'); fetchDashboard(); }
+    else { toast.error('Gagal menghapus slot'); }
   };
 
   useEffect(() => {
@@ -411,34 +444,34 @@ export default function CounselorDashboardPage() {
             </div>
           )}
 
-          {/* List view of slots */}
-          <div className="space-y-2">
-            {availability.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Belum ada slot tersedia.</p>
-            ) : (
-              availability
-                .slice()
-                .sort((a, b) => new Date(a.slot_start).getTime() - new Date(b.slot_start).getTime())
-                .map((s) => (
-                  <div key={s.slot_id} className="flex items-center justify-between border rounded p-3 text-sm">
-                    <span>
-                      {formatLocalTime(s.slot_start)} – {formatLocalTimeOnly(s.slot_end)}
-                    </span>
-                    {s.appointment_id ? (
-                      <button
-                        onClick={() => handleSlotClick(s)}
-                        className="bg-gray-100 text-gray-600 text-[10px] px-2 py-1 rounded cursor-pointer hover:bg-gray-200 transition-colors"
-                      >
-                        Terisi
-                      </button>
-                    ) : s.is_available ? (
-                      <Badge className="bg-green-100 text-green-700 text-[10px]">Tersedia</Badge>
-                    ) : (
-                      <Badge className="bg-gray-100 text-gray-600 text-[10px]">Nonaktif</Badge>
-                    )}
+          {/* Grid view of slots */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {availability
+              .slice()
+              .sort((a, b) => new Date(a.slot_start).getTime() - new Date(b.slot_start).getTime())
+              .map((s) => (
+                <div key={s.slot_id} className="flex flex-col justify-between border rounded p-2 text-xs">
+                  <div>
+                    <p className="font-medium">
+                      {formatLocalTime(s.slot_start).split(',')[0]}
+                    </p>
+                    <p className="text-muted-foreground text-[10px]">
+                      {formatLocalTime(s.slot_start).split(', ')[1]} – {formatLocalTimeOnly(s.slot_end)}
+                    </p>
                   </div>
-                ))
-            )}
+                  <Badge className={`mt-1 text-[10px] justify-center ${s.appointment_id ? 'bg-red-100 text-red-800' : s.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                    {s.appointment_id ? 'Dipesan' : s.is_available ? 'Tersedia' : 'Nonaktif'}
+                  </Badge>
+                  {s.appointment_id ? (
+                    <div className="flex gap-1 mt-1">
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-1 flex-1" onClick={() => handleSlotClick(s)}>Lihat</Button>
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-1 flex-1 text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => { setMoveSlot(s); setMoveDialogOpen(true); }}>Pindahkan</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="destructive" className="h-6 text-[10px] mt-1 w-full" onClick={() => { setSlotToDelete(s.slot_id); setDeleteDialogOpen(true); }}>Hapus</Button>
+                  )}
+                </div>
+              ))}
           </div>
         </CardContent>
       </Card>
@@ -472,6 +505,74 @@ export default function CounselorDashboardPage() {
           ) : (
             <p className="text-sm text-muted-foreground py-4 text-center">Detail tidak tersedia.</p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Move Slot */}
+      <Dialog open={moveDialogOpen} onOpenChange={(open) => { if (!open) { setMoveDialogOpen(false); setMoveTargetSlotId(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pindahkan Appointment</DialogTitle>
+            <DialogDescription className="text-xs">
+              Pilih slot kosong baru untuk memindahkan appointment ini.
+            </DialogDescription>
+          </DialogHeader>
+          {moveSlot && (
+            <div className="space-y-3">
+              <div className="border rounded p-3 text-sm">
+                <p className="font-medium text-xs text-muted-foreground mb-1">Slot lama:</p>
+                <p className="font-medium">{formatLocalTime(moveSlot.slot_start).split(', ')[0]}</p>
+                <p className="text-muted-foreground text-xs">
+                  {formatLocalTime(moveSlot.slot_start).split(', ')[1]} – {formatLocalTimeOnly(moveSlot.slot_end)}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Pilih slot kosong baru:</Label>
+                <select
+                  className="border rounded w-full p-2 text-sm"
+                  value={moveTargetSlotId}
+                  onChange={(e) => setMoveTargetSlotId(e.target.value)}
+                >
+                  <option value="">-- Pilih Slot --</option>
+                  {availability
+                    .filter(s => s.is_available && !s.appointment_id && s.slot_id !== moveSlot?.slot_id)
+                    .sort((a, b) => new Date(a.slot_start).getTime() - new Date(b.slot_start).getTime())
+                    .map(s => (
+                      <option key={s.slot_id} value={s.slot_id}>
+                        {formatLocalTime(s.slot_start).split(', ')[0]} {formatLocalTime(s.slot_start).split(', ')[1]} – {formatLocalTimeOnly(s.slot_end)}
+                      </option>
+                    ))}
+                </select>
+                {availability.filter(s => s.is_available && !s.appointment_id && s.slot_id !== moveSlot?.slot_id).length === 0 && (
+                  <p className="text-xs text-muted-foreground">Tidak ada slot kosong tersedia.</p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setMoveDialogOpen(false); setMoveTargetSlotId(''); }} disabled={moveLoading}>Batal</Button>
+            <Button size="sm" onClick={confirmMoveSlot} disabled={moveLoading || !moveTargetSlotId}>
+              {moveLoading ? 'Memproses...' : 'Pindahkan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Delete Slot */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus Slot</DialogTitle>
+            <DialogDescription className="text-xs">
+              Slot yang dihapus tidak dapat dikembalikan. Slot dengan appointment aktif tidak bisa dihapus.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>Batal</Button>
+            <Button size="sm" variant="destructive" onClick={confirmDeleteSlot} disabled={deleteLoading}>
+              {deleteLoading ? 'Menghapus...' : 'Hapus'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

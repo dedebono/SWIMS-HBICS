@@ -8,16 +8,17 @@ import { verifyNik } from '../services/staff-booking.service.js';
 const router = Router();
 
 // ── PUBLIC (anonymous, identified by tenant slug in ?t=) ─────────────────────
-router.get('/counseling/booking/config', setTenantFromSlug, asyncHandler(async (req, res) => {
+// GET /api/counseling/booking/config
+router.get('/booking/config', setTenantFromSlug, asyncHandler(async (req, res) => {
   sendSuccess(res, await bookingService.listCounselorAvailability((req as any).tenantId));
 }));
 
-router.post('/counseling/booking/verify', setTenantFromSlug, asyncHandler(async (req, res) => {
+router.post('/booking/verify', setTenantFromSlug, asyncHandler(async (req, res) => {
   const { nik } = req.body as { nik: string };
   sendSuccess(res, await verifyNik((req as any).tenantId, nik));
 }));
 
-router.post('/counseling/booking/submit', setTenantFromSlug, asyncHandler(async (req, res) => {
+router.post('/booking/submit', setTenantFromSlug, asyncHandler(async (req, res) => {
   const { nik, full_name, gender, slot_id } = req.body as {
     nik: string;
     full_name: string;

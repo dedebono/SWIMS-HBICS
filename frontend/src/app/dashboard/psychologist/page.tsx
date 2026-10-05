@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiClient } from "@/lib/api-client";
 import { localDatetimeToUTC } from "@/lib/utils";
 import { toast } from "sonner";
@@ -47,6 +48,17 @@ export default function PsychologistDashboard() {
   const [repeatWeeks, setRepeatWeeks] = useState<1 | 2 | 3 | 4>(1);
   const [noteForm, setNoteForm] = useState<Record<string, string>>({});
   const [savingNote, setSavingNote] = useState<string | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewingAppointment, setViewingAppointment] = useState<Appointment | null>(null);
+  const [viewingSlot, setViewingSlot] = useState<AvailabilitySlot | null>(null);
+  const [apptLoading, setApptLoading] = useState(false);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveSlot, setMoveSlot] = useState<AvailabilitySlot | null>(null);
+  const [moveLoading, setMoveLoading] = useState(false);
+  const [moveTargetSlotId, setMoveTargetSlotId] = useState<string>('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [slotToDelete, setSlotToDelete] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -97,6 +109,56 @@ export default function PsychologistDashboard() {
     setSavingNote(null);
     if (res.success) { toast.success('Catatan disimpan'); fetchData(); }
     else { toast.error(res.error ?? 'Gagal'); }
+  };
+
+  const handleViewAppointment = async (appointmentId: string) => {
+    setApptLoading(true);
+    const res = await apiClient<Appointment>(`/appointments/${appointmentId}`);
+    setApptLoading(false);
+    if (res.success && res.data) {
+      setViewingAppointment(res.data);
+      const slot = availability.find(a => a.appointment_id === appointmentId);
+      setViewingSlot(slot ?? null);
+      setViewDialogOpen(true);
+    } else {
+      toast.error('Gagal memuat detail appointment');
+    }
+  };
+
+  const handleMoveSlot = async (slot: AvailabilitySlot) => {
+    setMoveSlot(slot);
+    setMoveDialogOpen(true);
+  };
+
+  const confirmMoveSlot = async () => {
+    if (!moveSlot || !moveTargetSlotId) { toast.error('Pilih slot tujuan terlebih dahulu.'); return; }
+    setMoveLoading(true);
+    const res = await apiClient(`/appointments/${moveSlot.appointment_id}/reschedule`, {
+      method: 'PATCH',
+      body: { new_slot_id: moveTargetSlotId, old_slot_id: moveSlot.slot_id },
+    });
+    setMoveLoading(false);
+    setMoveDialogOpen(false);
+    setMoveSlot(null);
+    setMoveTargetSlotId('');
+    if (res.success) { toast.success('Appointment dipindahkan.'); fetchData(); }
+    else { toast.error(res.error ?? 'Gagal memindahkan appointment.'); }
+  };
+
+  const handleDeleteSlot = (slotId: string) => {
+    setSlotToDelete(slotId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteSlot = async () => {
+    if (!slotToDelete) return;
+    setDeleteLoading(true);
+    const res = await apiClient(`/availability/${slotToDelete}`, { method: 'DELETE' });
+    setDeleteLoading(false);
+    setDeleteDialogOpen(false);
+    setSlotToDelete(null);
+    if (res.success) { toast.success('Slot dihapus'); fetchData(); }
+    else { toast.error('Gagal menghapus slot'); }
   };
 
   const statusColor = (s: string) => {
@@ -189,6 +251,45 @@ export default function PsychologistDashboard() {
         </CardContent>
       </Card>
 
+      {/* Availability Slots List */}
+      <Card className="glass">
+        <CardHeader>
+          <CardTitle>Daftar Ketersediaan</CardTitle>
+          <CardDescription>Slot yang Anda tambahkan.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? <p className="text-sm text-muted-foreground">Memuat...</p> : availability.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada slot. Tambahkan di atas.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {availability.map(a => (
+                <div key={a.slot_id} className="flex flex-col justify-between border rounded p-2 text-xs">
+                  <div>
+                    <p className="font-medium">
+                      {formatInTimeZone(new Date(a.slot_start), 'Asia/Jakarta', 'dd MMM', { locale: id })}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {formatInTimeZone(new Date(a.slot_start), 'Asia/Jakarta', 'HH:mm')} – {formatInTimeZone(new Date(a.slot_end), 'Asia/Jakarta', 'HH:mm')}
+                    </p>
+                  </div>
+                  <Badge className={`mt-1 text-[10px] justify-center ${a.appointment_id ? 'bg-red-100 text-red-800' : a.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                    {a.appointment_id ? 'Dipesan' : a.is_available ? 'Tersedia' : 'Tdk tersedia'}
+                  </Badge>
+                  {a.appointment_id ? (
+                    <div className="flex gap-1 mt-1">
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-1 flex-1" onClick={() => handleViewAppointment(a.appointment_id!)}>Lihat</Button>
+                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-1 flex-1 text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => handleMoveSlot(a)}>Pindahkan</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="destructive" className="h-6 text-[10px] mt-1 w-full" onClick={() => handleDeleteSlot(a.slot_id)}>Hapus</Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Appointments List */}
       <Card className="glass">
         <CardHeader>
@@ -232,6 +333,124 @@ export default function PsychologistDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog: View Appointment Detail */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Detail Appointment</DialogTitle>
+          </DialogHeader>
+          {apptLoading ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Memuat...</p>
+          ) : viewingAppointment ? (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-muted-foreground text-xs">Tipe</p>
+                  <p className="font-medium">{viewingAppointment.type === 'student' ? 'Siswa' : 'Personal'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Status</p>
+                  <Badge className={`text-[10px] ${statusColor(viewingAppointment.status)}`}>{viewingAppointment.status}</Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Jadwal</p>
+                  <p className="font-medium">
+                    {viewingSlot
+                      ? formatInTimeZone(new Date(viewingSlot.slot_start), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id })
+                      : viewingAppointment.scheduled_at
+                        ? formatInTimeZone(new Date(viewingAppointment.scheduled_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id })
+                        : 'Belum dijadwalkan'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Lokasi</p>
+                  <p className="font-medium capitalize">{viewingAppointment.location ?? '-'}</p>
+                </div>
+              </div>
+              {viewingAppointment.notes && (
+                <div>
+                  <p className="text-muted-foreground text-xs">Catatan</p>
+                  <p className="border rounded p-2 mt-1 text-xs bg-muted/50">{viewingAppointment.notes}</p>
+                </div>
+              )}
+            </div>
+          ) : null}
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setViewDialogOpen(false)}>Tutup</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Move / Relocate Slot */}
+      <Dialog open={moveDialogOpen} onOpenChange={(open) => { if (!open) { setMoveDialogOpen(false); setMoveTargetSlotId(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pindahkan Appointment</DialogTitle>
+            <DialogDescription className="text-xs">
+              Pilih slot kosong baru untuk memindahkan appointment ini.
+            </DialogDescription>
+          </DialogHeader>
+          {moveSlot && (
+            <div className="space-y-3">
+              <div className="border rounded p-3 text-sm">
+                <p className="font-medium text-xs text-muted-foreground mb-1">Slot lama:</p>
+                <p className="font-medium">
+                  {formatInTimeZone(new Date(moveSlot.slot_start), 'Asia/Jakarta', 'dd MMM yyyy', { locale: id })}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {formatInTimeZone(new Date(moveSlot.slot_start), 'Asia/Jakarta', 'HH:mm')} – {formatInTimeZone(new Date(moveSlot.slot_end), 'Asia/Jakarta', 'HH:mm')}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Pilih slot kosong baru:</Label>
+                <select
+                  className="border rounded w-full p-2 text-sm"
+                  value={moveTargetSlotId}
+                  onChange={(e) => setMoveTargetSlotId(e.target.value)}
+                >
+                  <option value="">-- Pilih Slot --</option>
+                  {availability
+                    .filter(s => s.is_available && !s.appointment_id && s.slot_id !== moveSlot?.slot_id)
+                    .sort((a, b) => new Date(a.slot_start).getTime() - new Date(b.slot_start).getTime())
+                    .map(s => (
+                      <option key={s.slot_id} value={s.slot_id}>
+                        {formatInTimeZone(new Date(s.slot_start), 'Asia/Jakarta', 'dd MMM', { locale: id })} {formatInTimeZone(new Date(s.slot_start), 'Asia/Jakarta', 'HH:mm')} – {formatInTimeZone(new Date(s.slot_end), 'Asia/Jakarta', 'HH:mm')}
+                      </option>
+                    ))}
+                </select>
+                {availability.filter(s => s.is_available && !s.appointment_id && s.slot_id !== moveSlot?.slot_id).length === 0 && (
+                  <p className="text-xs text-muted-foreground">Tidak ada slot kosong tersedia.</p>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setMoveDialogOpen(false); setMoveTargetSlotId(''); }} disabled={moveLoading}>Batal</Button>
+            <Button size="sm" variant="default" onClick={confirmMoveSlot} disabled={moveLoading || !moveTargetSlotId}>
+              {moveLoading ? 'Memproses...' : 'Pindahkan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Delete Slot */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus Slot</DialogTitle>
+            <DialogDescription className="text-xs">
+              Slot yang dihapus tidak dapat dikembalikan. Slot dengan appointment aktif tidak bisa dihapus.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading}>Batal</Button>
+            <Button size="sm" variant="destructive" onClick={confirmDeleteSlot} disabled={deleteLoading}>
+              {deleteLoading ? 'Menghapus...' : 'Hapus'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
