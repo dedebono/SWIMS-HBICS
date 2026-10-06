@@ -22,7 +22,7 @@ const settingsSchema = z.object({
     aiApiKey: z.string().optional(),
   }).optional(),
   storage: z.object({
-    storageProvider: z.enum(['s3', 'firebase', 'cloudflare_r2', 'google_drive']),
+    storageProvider: z.enum(['local', 's3', 'firebase', 'cloudflare_r2', 'google_drive']),
     firebaseApiKey: z.string().optional(),
     firebaseProjectId: z.string().optional(),
     firebaseStorageBucket: z.string().optional(),
