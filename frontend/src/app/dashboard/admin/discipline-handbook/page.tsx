@@ -13,7 +13,7 @@ import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
-  BookOpen, Plus, Pencil, Trash2, RefreshCw, Save, ChevronDown, ChevronRight,
+  BookOpen, Plus, Pencil, Trash2, RefreshCw, Save, ChevronDown, ChevronRight, ChevronUp,
   Layers, Scale, GraduationCap, FileText, AlertTriangle, FolderOpen, Users,
   ExternalLink, X
 } from "lucide-react";
@@ -146,7 +146,9 @@ export default function AdminDisciplineHandbookPage() {
   const levelCode = (id: number) => levels.find(l => l.id === id)?.code ?? `?`;
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [catCollapsed, setCatCollapsed] = useState<Set<number>>(new Set());
   const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  const toggleCat = (id: number) => setCatCollapsed(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -216,15 +218,21 @@ export default function AdminDisciplineHandbookPage() {
                 <div key={node.category.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg}`}>
                   {/* Category header */}
                   <div className="flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
+                    <button
+                      className="flex items-center gap-2.5 text-left flex-1"
+                      onClick={() => toggleCat(node.category.id)}
+                    >
+                      {catCollapsed.has(node.category.id)
+                        ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                      }
                       <div>
                         <span className={`font-semibold text-sm ${colors.text}`}>{node.category.name}</span>
                         {node.category.general_description && (
                           <p className={`text-xs mt-0.5 ${colors.desc}`}>{node.category.general_description}</p>
                         )}
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-3">
                       <div className="flex gap-1.5 flex-wrap justify-end">
                         <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>{node.groups.length} kelompok</Badge>
@@ -236,9 +244,29 @@ export default function AdminDisciplineHandbookPage() {
                     </div>
                   </div>
 
-                  {/* Groups */}
-                  {node.groups.length > 0 && (
+                  {/* Groups — collapsible per category */}
+                  {!catCollapsed.has(node.category.id) && (
                     <div className="border-t px-4 py-3 space-y-2">
+                      <div className="flex justify-end">
+                        {(() => {
+                          const grpKeys = node.groups.map(g => `${node.category.id}-grp-${g.group.id}`);
+                          const allOpen = grpKeys.every(k => expanded.has(k));
+                          return (
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                              onClick={() => setExpanded(prev => {
+                                const n = new Set(prev);
+                                if (allOpen) grpKeys.forEach(k => n.delete(k));
+                                else grpKeys.forEach(k => n.add(k));
+                                return n;
+                              })}
+                            >
+                              {allOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              {allOpen ? "Hide All" : "Show All"}
+                            </button>
+                          );
+                        })()}
+                      </div>
                       {node.groups.map(grp => {
                         const grpKey = `${node.category.id}-grp-${grp.group.id}`;
                         return (
