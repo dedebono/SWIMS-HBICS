@@ -284,4 +284,19 @@ router.delete('/documents/:id',
   })
 );
 
+// ─── EXPORT / IMPORT ──────────────────────────────────────────────────────
+// GET /api/discipline-handbook/export - Export all handbook data as JSON
+router.get('/export', asyncHandler(async (req: Request, res) => {
+  const { tenantId } = req as any;
+  const data = await service.exportHandbookData(tenantId);
+  sendSuccess(res, data);
+}));
+
+// POST /api/discipline-handbook/import - Import handbook data from JSON
+router.post('/import', asyncHandler(async (req: Request, res) => {
+  const { tenantId } = req as any;
+  const result = await service.importHandbookData(tenantId, req.body);
+  sendSuccess(res, result);
+}));
+
 export default router;

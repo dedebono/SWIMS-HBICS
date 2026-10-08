@@ -58,14 +58,17 @@ export async function getDormantCases(
   tenantId: string,
 ): Promise<CaseRow[]> {
   // Fetch cases where no action has been taken in 5+ days (updated_at)
+  // LEFT JOIN students so the UI can render "Case <Student Name> #<id>".
   const { rows } = await queryWithTenant<CaseRow>(
     tenantId,
-    `SELECT * FROM cases 
-     WHERE tenant_id = $1 
-       AND status != 'CLOSED' 
-       AND deleted_at IS NULL 
-       AND updated_at < now() - INTERVAL '5 days'
-     ORDER BY updated_at ASC
+    `SELECT c.*, s.full_name AS student_name
+     FROM cases c
+     LEFT JOIN students s ON c.student_id = s.student_id
+     WHERE c.tenant_id = $1
+       AND c.status != 'CLOSED'
+       AND c.deleted_at IS NULL
+       AND c.updated_at < now() - INTERVAL '5 days'
+     ORDER BY c.updated_at ASC
      LIMIT 5`,
     [tenantId]
   );

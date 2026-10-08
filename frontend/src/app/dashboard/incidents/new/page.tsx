@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
@@ -55,6 +55,54 @@ interface StudentSearchResult {
   metadata: any;
 }
 
+/** A "Kelompok" from the Discipline Handbook, joined with its classification. */
+interface HandbookGroup {
+  id: number;
+  group_name: string;
+  category_id: number;
+  category_name?: string | null;
+}
+
+/** Maps the handbook classification to the incident Classification scale.
+ *  Pelanggaran Ringan → Minor, Sedang → Moderate, Berat → Major,
+ *  Sangat Berat → Severe. Unknown categories fall back to Moderate. */
+const CLASSIFICATION_BY_CATEGORY: Record<number, string> = {
+  1: 'Minor',      // Pelanggaran Ringan
+  2: 'Moderate',   // Pelanggaran Sedang
+  3: 'Major',      // Pelanggaran Berat
+  4: 'Severe',     // Pelanggaran Sangat Berat
+};
+
+/** Reverse map: Classification label → the DB severity value stored on incidents. */
+const DB_SEVERITY_BY_CLASSIFICATION: Record<string, string> = {
+  Minor: 'LOW',
+  Moderate: 'MEDIUM',
+  Major: 'HIGH',
+  Severe: 'CRITICAL',
+};
+
+/**
+ * Base UI's <SelectValue> renders the raw item `value` in the trigger, NOT the
+ * <SelectItem> children. Without `items`, picking "Minor" would show "LOW".
+ * This label lookup makes the trigger display the Classification wording.
+ */
+const CLASSIFICATION_ITEMS = {
+  LOW: 'Minor',
+  MEDIUM: 'Moderate',
+  HIGH: 'Major',
+  CRITICAL: 'Severe',
+} as const;
+
+/** Structured template mirroring the on-screen guide, so the placeholder shows
+ *  reporters exactly which five parts a complete report contains. */
+const DESCRIPTION_PLACEHOLDER = [
+  'Activity at the Time of Incident: Playing basketball on the field.',
+  'Who involved: Andi (Class 8A) and Budi (Class 8B).',
+  'How it happens: Andi fell while trying to catch the ball and hit the floor.',
+  'When it happens: Sports period / 8 October 2026, 10:15 WITA.',
+  'Who saw it: Pak Hendra (Sports Teacher) and the Class 8A students.',
+].join('\n');
+
 export default function NewIncidentPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -64,6 +112,8 @@ export default function NewIncidentPage() {
   const [searchResults, setSearchResults] = useState<StudentSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [studentCases, setStudentCases] = useState<any[]>([]);
+  const [groupOptions, setGroupOptions] = useState<HandbookGroup[]>([]);
+  const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState('');
@@ -119,6 +169,71 @@ export default function NewIncidentPage() {
   const removeFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
+
+  // Load "Kelompok" (behavior groups) from the Discipline Handbook once.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient<HandbookGroup[]>('/discipline-handbook/groups');
+        if (cancelled) return;
+        if (res.success && res.data) {
+          setGroupOptions(res.data);
+        } else {
+          setGroupOptions([]);
+        }
+      } catch (err) {
+        console.error('Failed to load handbook groups:', err);
+        if (!cancelled) setGroupOptions([]);
+      } finally {
+        if (!cancelled) setIsLoadingGroups(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Selecting a Kelompok sets both the sub_category (the group name) and the
+   *  category (its handbook classification, e.g. "Pelanggaran Berat").
+   *  Classification label is derived from the category for display. */
+  const handleGroupChange = (groupName: string) => {
+    const group = groupOptions.find((g) => g.group_name === groupName);
+    if (!group) {
+      setFormData((prev) => ({ ...prev, sub_category: '', category: '' }));
+      return;
+    }
+    const categoryName =
+      group.category_name ??
+      ({ 1: 'Pelanggaran Ringan', 2: 'Pelanggaran Sedang', 3: 'Pelanggaran Berat', 4: 'Pelanggaran Sangat Berat' }[
+        group.category_id
+      ] ?? '');
+    setFormData((prev) => ({
+      ...prev,
+      // Store the readable group name (sub_category is TEXT), not the numeric id.
+      sub_category: group.group_name,
+      category: categoryName,
+      // Select the matching Classification automatically.
+      severity: DB_SEVERITY_BY_CLASSIFICATION[CLASSIFICATION_BY_CATEGORY[group.category_id] ?? 'Moderate'] ?? '',
+    }));
+  };
+
+  /** Classification label for the currently selected group. */
+  const derivedCategory = useMemo(() => {
+    const group = groupOptions.find((g) => g.group_name === formData.sub_category);
+    if (!group) return null;
+    return CLASSIFICATION_BY_CATEGORY[group.category_id] ?? 'Moderate';
+  }, [groupOptions, formData.sub_category]);
+
+  /** Label lookup for the Case Assignment select — Base UI renders the raw
+   *  value (a UUID) in the trigger unless `items` supplies the wording. */
+  const caseOptionItems = useMemo(() => {
+    const map: Record<string, string> = { NEW: '+ Create New Case (Auto-generated)' };
+    for (const c of studentCases) {
+      map[c.case_id] = `Case ${c.student_name ? `${c.student_name} ` : ''}#${c.case_id.slice(0, 8)} - ${c.case_type} (${c.status})`;
+    }
+    return map;
+  }, [studentCases]);
 
   // Debounced search effect
   useEffect(() => {
@@ -196,6 +311,9 @@ export default function NewIncidentPage() {
     }
   };
 
+  /** Auto-generated cases come from discipline-handbook groups, whose category is
+ *  now "Pelanggaran Ringan/Sedang/Berat/Sangat Berat" → all behavioural.
+ *  Kept the legacy English names so older records still map correctly. */
   const mapCategoryToCaseType = (category: string) => {
     switch (category) {
       case 'Medical': return 'MEDICAL';
@@ -367,7 +485,7 @@ export default function NewIncidentPage() {
       {step === 'identify' && (
         <Card className="glass border-border/50">
           <CardHeader>
-            <CardTitle>Step 1: Identify Student</CardTitle>
+            <CardTitle>Step 1: Reported Student</CardTitle>
             <CardDescription>
               Scan a QR code or search manually
             </CardDescription>
@@ -515,7 +633,11 @@ export default function NewIncidentPage() {
               {/* Case Selection */}
               <div className="space-y-2">
                 <Label htmlFor="case-id">Case Assignment *</Label>
-                <Select value={formData.case_id} onValueChange={(v) => updateField('case_id', v ?? '')}>
+                <Select
+                  value={formData.case_id}
+                  onValueChange={(v) => updateField('case_id', v ?? '')}
+                  items={caseOptionItems}
+                >
                   <SelectTrigger id="case-id">
                     <SelectValue placeholder="Select case assignment" />
                   </SelectTrigger>
@@ -525,7 +647,7 @@ export default function NewIncidentPage() {
                     </SelectItem>
                     {studentCases.map((c: any) => (
                       <SelectItem key={c.case_id} value={c.case_id}>
-                        {`Case #${c.case_id.split('-')[0]} - ${c.case_type} (${c.status})`}
+                        {`Case ${c.student_name ? `${c.student_name} ` : ''}#${c.case_id.slice(0, 8)} - ${c.case_type} (${c.status})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -535,70 +657,93 @@ export default function NewIncidentPage() {
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                {/* Category */}
+              {/* Vertical stack — Category (Kelompok) needs the full row width, its
+                  labels are long and were being clipped next to Classification. */}
+              <div className="space-y-4">
+                {/* Category — derived from the discipline handbook "Kelompok" */}
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category *</Label>
-                  <Select value={formData.category} onValueChange={(v) => updateField('category', v ?? '')}>
-                    <SelectTrigger id="category">
-                      <SelectValue placeholder="Select category" />
+                  <Label htmlFor="category">Category (Kelompok) *</Label>
+                  <Select
+                    value={formData.sub_category}
+                    onValueChange={(v) => handleGroupChange(v ?? '')}
+                    disabled={isLoadingGroups}
+                  >
+                    <SelectTrigger id="category" className="h-auto w-full min-h-8 whitespace-normal py-2">
+                      <SelectValue
+                        placeholder={
+                          isLoadingGroups ? 'Loading handbook groups…' : 'Select a violation group'
+                        }
+                      />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Aggression">Aggression</SelectItem>
-                      <SelectItem value="Bullying">Bullying</SelectItem>
-                      <SelectItem value="Disruption">Disruption</SelectItem>
-                      <SelectItem value="Withdrawal">Withdrawal</SelectItem>
-                      <SelectItem value="Self-Harm">Self-Harm</SelectItem>
-                      <SelectItem value="Substance">Substance</SelectItem>
-                      <SelectItem value="Attendance">Attendance</SelectItem>
-                      <SelectItem value="Medical">Medical</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                    <SelectContent className="w-[var(--anchor-width)] max-w-[min(42rem,calc(100vw-2rem))]">
+                      {groupOptions.map((g) => (
+                        <SelectItem
+                          key={g.id}
+                          value={g.group_name}
+                          className="whitespace-normal py-1.5"
+                        >
+                          {g.group_name}
+                        </SelectItem>
+                      ))}
+                      {!isLoadingGroups && groupOptions.length === 0 && (
+                        <SelectItem value="__none" disabled>
+                          No handbook groups available
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    From the Discipline Handbook. The category is set automatically from the
+                    group&apos;s classification.
+                  </p>
+                  {/* Auto-derived, read-only */}
+                  <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Classification</span>
+                    {derivedCategory ? (
+                      <span className="text-xs font-semibold text-primary">{derivedCategory}</span>
+                    ) : (
+                      <span className="text-xs italic text-muted-foreground">
+                        Select a group first
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Severity */}
+                {/* Classification (was Severity) */}
                 <div className="space-y-2">
-                  <Label htmlFor="severity">Severity *</Label>
-                  <Select value={formData.severity} onValueChange={(v) => updateField('severity', v ?? '')}>
-                    <SelectTrigger id="severity">
-                      <SelectValue placeholder="Select severity" />
+                  <Label htmlFor="severity">Classification *</Label>
+                  <Select
+                    value={formData.severity}
+                    onValueChange={(v) => updateField('severity', v ?? '')}
+                    items={CLASSIFICATION_ITEMS}
+                  >
+                    <SelectTrigger id="severity" className="w-full">
+                      <SelectValue placeholder="Select classification" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="LOW">
                         <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-low" /> Low
+                          <span className="h-2 w-2 rounded-full bg-severity-low" /> Minor
                         </span>
                       </SelectItem>
                       <SelectItem value="MEDIUM">
                         <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-medium" /> Medium
+                          <span className="h-2 w-2 rounded-full bg-severity-medium" /> Moderate
                         </span>
                       </SelectItem>
                       <SelectItem value="HIGH">
                         <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-high" /> High
+                          <span className="h-2 w-2 rounded-full bg-severity-high" /> Major
                         </span>
                       </SelectItem>
                       <SelectItem value="CRITICAL">
                         <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-critical" /> Critical
+                          <span className="h-2 w-2 rounded-full bg-severity-critical" /> Severe
                         </span>
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              {/* Sub-category */}
-              <div className="space-y-2">
-                <Label htmlFor="sub-category">Sub-category</Label>
-                <Input
-                  id="sub-category"
-                  placeholder="Optional sub-category"
-                  value={formData.sub_category}
-                  onChange={(e) => updateField('sub_category', e.target.value)}
-                />
               </div>
 
               {/* Involved Students */}
@@ -639,7 +784,7 @@ export default function NewIncidentPage() {
 
               {/* Location */}
               <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
+                <Label htmlFor="location">Incident Location</Label>
                 <Input
                   id="location"
                   placeholder="e.g. Classroom 8A, Playground, Cafeteria"
@@ -650,7 +795,7 @@ export default function NewIncidentPage() {
 
               {/* Date/Time */}
               <div className="space-y-2">
-                <Label htmlFor="incident-at">Date & Time *</Label>
+                <Label htmlFor="incident-at">Date and Time Incident *</Label>
                 <Input
                   id="incident-at"
                   type="datetime-local"
@@ -665,20 +810,49 @@ export default function NewIncidentPage() {
                 <Label htmlFor="description">Description *</Label>
                 <Textarea
                   id="description"
-                  placeholder="Describe the incident in detail. Use neutral, non-labeling language."
+                  placeholder={DESCRIPTION_PLACEHOLDER}
                   value={formData.description}
                   onChange={(e) => updateField('description', e.target.value)}
-                  rows={5}
+                  rows={10}
                   required
                 />
                 <p className="text-xs text-muted-foreground">
                   💡 Use objective, neutral language. Avoid stigmatizing terms.
                 </p>
+                {/* Structured guide so reports are complete and consistent */}
+                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
+                  <p className="mb-2 text-xs font-semibold text-foreground">
+                    Panduan penulisan (isi berurutan):
+                  </p>
+                  <ul className="space-y-2 text-xs text-muted-foreground">
+                    <li>
+                      <span className="font-medium text-foreground">Activity at the Time of Incident:</span>{' '}
+                      Playing basketball on the field / Practicing in the chemistry lab.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Who involved:</span> Andi (Class 8A) and
+                      Budi (Class 8B).
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">How it happens:</span> Explain the
+                      chronology neutrally, based on facts. Example: Andi fell while trying to catch the ball
+                      and hit the floor.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">When it happens:</span> Sports period /
+                      8 October 2026, 10:15 WITA.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Who saw it:</span> Pak Hendra (Sports
+                      Teacher) and the Class 8A students.
+                    </li>
+                  </ul>
+                </div>
               </div>
 
-              {/* Immediate Actions */}
+              {/* Actions taken so far */}
               <div className="space-y-2">
-                <Label htmlFor="immediate-actions">Immediate Actions Taken</Label>
+                <Label htmlFor="immediate-actions">Actions Taken So Far</Label>
                 <Textarea
                   id="immediate-actions"
                   placeholder="Describe any actions taken immediately after the incident..."
@@ -686,6 +860,7 @@ export default function NewIncidentPage() {
                   onChange={(e) => updateField('immediate_actions', e.target.value)}
                   rows={3}
                 />
+                <p className="text-xs text-muted-foreground">Filled in sequential order.</p>
               </div>
 
               <div className="grid gap-6 md:grid-cols-2 pt-4 border-t">

@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { classificationLabel } from '@/lib/constants';
 import {
   Select,
   SelectContent,
@@ -441,7 +442,7 @@ export default function StudentTimelinePage({
                           </span>
                           {event.severity && (
                             <Badge variant="outline" className={`text-[10px] ${severityColors[event.severity] ?? ''}`}>
-                              {event.severity}
+                              {classificationLabel(event.severity)}
                             </Badge>
                           )}
                         </div>

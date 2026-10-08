@@ -12,6 +12,23 @@ export const STATUS_COLORS: Record<string, string> = {
   CLOSED: 'bg-muted text-muted-foreground border-border',
 };
 
+// ─── Classification display (DB stores LOW/MEDIUM/HIGH/CRITICAL) ───────────────
+/** User-facing Classification scale. The incidents.severity and cases.risk_level
+ *  columns keep their LOW/MEDIUM/HIGH/CRITICAL values (DB CHECK constraints),
+ *  so every badge/filter must map through this table instead of rendering raw. */
+export const CLASSIFICATION_LABELS: Record<string, string> = {
+  LOW: 'Minor',
+  MEDIUM: 'Moderate',
+  HIGH: 'Major',
+  CRITICAL: 'Severe',
+};
+
+/** Convenience: display label, falling back to the raw value for unknown input. */
+export function classificationLabel(value: string | null | undefined): string {
+  if (!value) return '—';
+  return CLASSIFICATION_LABELS[value] ?? value;
+}
+
 export const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export type RiskLevel = typeof RISK_LEVELS[number];
 
@@ -20,3 +37,47 @@ export type CaseStatus = typeof CASE_STATUSES[number];
 
 export const COMMUNICATION_CHANNELS = ['PHONE', 'EMAIL', 'IN_PERSON', 'APP', 'INTERNAL'] as const;
 export const CONTACT_ROLES = ['PARENT', 'GUARDIAN', 'TEACHER', 'INTERNAL'] as const;
+
+// ─── Roles ────────────────────────────────────────────────────────────────────
+//
+// The frontend cannot import `@swims/shared` (no path alias, and the package's
+// `main` points at a `dist/` the frontend image never builds), so this list is
+// duplicated from `shared/types/database.ts` on purpose. Keep the two in sync —
+// `backend/src/api/__tests__/roles.test.ts` asserts the backend's `ROLE_NAMES`,
+// the permission matrix, and the `users_role_check` constraint all agree.
+
+/** Login roles — these are the values `users.role` may hold. */
+export const LOGIN_ROLES = [
+  'TEACHER',
+  'COUNSELOR',
+  'SCHOOL_NURSE',
+  'SCHOOL_HEAD',
+  'BOARD_MEMBER',
+  'IT_ADMIN',
+  'PERSONAL',
+  'PSYCHOLOGIST',
+] as const;
+export type LoginRole = typeof LOGIN_ROLES[number];
+
+/**
+ * Roles offered in the admin account form. `STUDENT` is a record in the
+ * `students` table (incident subjects) rather than a login account: it has no
+ * email/password, cannot authenticate, and has no permission matrix.
+ */
+export const ACCOUNT_ROLES = [...LOGIN_ROLES, 'STUDENT'] as const;
+export type AccountRole = typeof ACCOUNT_ROLES[number];
+
+export const ROLE_LABELS: Record<AccountRole, string> = {
+  TEACHER: 'Teacher',
+  COUNSELOR: 'Counselor',
+  SCHOOL_NURSE: 'School Nurse',
+  SCHOOL_HEAD: 'School Head',
+  BOARD_MEMBER: 'Board Member',
+  IT_ADMIN: 'IT Admin',
+  PERSONAL: 'Personal',
+  PSYCHOLOGIST: 'Psychologist',
+  STUDENT: 'Student',
+};
+
+/** Roles a staff account can be assigned to — excludes STUDENT (different table). */
+export const ASSIGNABLE_ROLES = LOGIN_ROLES;

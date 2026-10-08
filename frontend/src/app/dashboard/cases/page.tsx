@@ -31,6 +31,8 @@ import {
   X,
   Check,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,6 +48,14 @@ interface CaseRow {
   updated_at: string;
   student_name?: string;
   reported_by_name?: string;
+}
+
+/** Format a case title as "Case <Student Name> #3e7bfccd".
+ *  Falls back to the short id alone when student_name is missing (deleted
+ *  student, or a case created before the LEFT JOIN was added). */
+function caseTitle(c: { case_id: string; student_name?: string | null }): string {
+  const short = c.case_id.slice(0, 8);
+  return c.student_name ? `Case ${c.student_name} #${short}` : `Case #${short}`;
 }
 
 interface TeacherItem {
@@ -100,6 +110,10 @@ export default function CasesPage() {
   const [sharesMap, setSharesMap] = useState<Record<string, CaseShare[]>>({});
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(false);
+
+  // Group by student state
+  const [groupByStudent, setGroupByStudent] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const fetchCases = useCallback(async () => {
     setIsLoading(true);
@@ -173,6 +187,15 @@ export default function CasesPage() {
     );
   };
 
+  const toggleGroup = (studentKey: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(studentKey)) next.delete(studentKey);
+      else next.add(studentKey);
+      return next;
+    });
+  };
+
   const filteredCases = search
     ? cases.filter((c) =>
         c.case_id.toLowerCase().includes(search.toLowerCase()) ||
@@ -199,6 +222,24 @@ export default function CasesPage() {
             Report Incident
           </Button>
         </Link>
+        <Button
+          variant={groupByStudent ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => {
+            setGroupByStudent(prev => !prev);
+            if (!groupByStudent) {
+              // When enabling grouping, expand all groups
+              const allKeys = new Set<string>();
+              for (const c of filteredCases) {
+                const key = c.student_name ?? 'Unknown Student';
+                allKeys.add(key);
+              }
+              setExpandedGroups(allKeys);
+            }
+          }}
+        >
+          {groupByStudent ? '👤 Grouped by Student' : '📋 Flat View'}
+        </Button>
       </div>
 
       {/* Filters */}
@@ -252,7 +293,111 @@ export default function CasesPage() {
             </p>
           </CardContent>
         </Card>
+      ) : groupByStudent ? (
+        // Grouped by student view
+        (() => {
+          // Build groups
+          const groups: Record<string, CaseRow[]> = {};
+          for (const c of filteredCases) {
+            const key = c.student_name ?? 'Unknown Student';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(c);
+          }
+          const groupEntries = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+
+          return (
+            <div className="space-y-4">
+              {groupEntries.map(([studentName, studentCases]) => {
+                const isExpanded = expandedGroups.has(studentName);
+                const highestRisk = studentCases.reduce((best, c) => {
+                  const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+                  const o = order[c.risk_level as keyof typeof order] ?? 4;
+                  const b = order[best as keyof typeof order] ?? 4;
+                  return o < b ? c.risk_level : best;
+                }, 'LOW' as string);
+                return (
+                  <div key={studentName} className="rounded-lg border border-border/50 overflow-hidden">
+                    {/* Group header */}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(studentName)}
+                      className="w-full flex items-center gap-3 px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                    >
+                      {isExpanded
+                        ? <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />
+                        : <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
+                      }
+                      <span className="text-xl shrink-0">👤</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm truncate">{studentName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {studentCases.length} case{studentCases.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={`shrink-0 text-xs ${riskColors[highestRisk] ?? ''}`}>
+                        {highestRisk} risk
+                      </Badge>
+                    </button>
+
+                    {/* Group content */}
+                    {isExpanded && (
+                      <div className="divide-y divide-border/30">
+                        {studentCases.map((c) => {
+                          const shares = sharesMap[c.case_id] || [];
+                          return (
+                            <div key={c.case_id} className="flex items-center gap-4 p-4 hover:bg-muted/20 transition-colors">
+                              <Link href={`/dashboard/cases/${c.case_id}`} className="flex items-center gap-4 flex-1 min-w-0">
+                                <div className="text-xl shrink-0">{typeIcons[c.case_type] ?? '📋'}</div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">
+                                    {caseTitle(c)}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <Badge variant="outline" className={`text-[10px] ${statusColors[c.status] ?? ''}`}>
+                                      {c.status}
+                                    </Badge>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {c.case_type} • Opened {new Date(c.opened_date).toLocaleDateString()}
+                                      {c.reported_by_name && ` • ${c.reported_by_name}`}
+                                    </p>
+                                  </div>
+                                  {shares.length > 0 && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <Users className="w-3 h-3 text-blue-500" />
+                                      <span className="text-[10px] text-blue-500">
+                                        Shared with {shares.map(s => s.shared_with_name).join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </Link>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge variant="outline" className={`text-xs ${riskColors[c.risk_level] ?? ''}`}>
+                                  {c.risk_level}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => openShareDialog(c.case_id)}
+                                  title="Share this case"
+                                >
+                                  <Share2 className="w-4 h-4 text-muted-foreground" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()
       ) : (
+        // Flat list view
         <div className="grid gap-3">
           {filteredCases.map((c) => {
             const shares = sharesMap[c.case_id] || [];
@@ -263,11 +408,8 @@ export default function CasesPage() {
                     <div className="text-2xl shrink-0">{typeIcons[c.case_type] ?? '📋'}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">
-                        Case #{c.case_id.slice(0, 8)}
+                        {caseTitle(c)}
                       </p>
-                      {c.student_name && (
-                        <p className="text-xs text-primary font-medium">👤 {c.student_name}</p>
-                      )}
                       <div className="flex items-center gap-2 mt-0.5">
                         <Badge variant="outline" className={`text-[10px] ${statusColors[c.status] ?? ''}`}>
                           {c.status}

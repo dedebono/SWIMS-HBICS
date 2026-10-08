@@ -57,13 +57,6 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: alpine:latest
-    container_name: swims_minio
-    restart: "no"
-    command: ["sh", "-c", "echo 'minio bypassed' && sleep infinity"]
-    profiles: ["skip"]
-
   backend:
     build:
       context: .
@@ -79,7 +72,12 @@ services:
     #   - /app/frontend/node_modules
     #   - /app/backend/node_modules
     #   - /app/shared/node_modules
-    command: sh -c "npm run migrate && npm run build --workspace=shared && npx tsx backend/src/server.ts"
+    # Build @swims/shared BEFORE migrating: the migration runner imports
+    # @swims/shared/schemas, which resolves through the package "exports" map to
+    # dist/. Running migrate first only ever worked because a previous container's
+    # writable layer still held a stale dist/ — a fresh container (or `compose
+    # rm`) crash-looped with MODULE_NOT_FOUND on /app/node_modules/@swims/shared.
+    command: sh -c "npm run build --workspace=shared && npm run migrate && npx tsx backend/src/server.ts"
     ports:
       - '4000:4000'
     environment:
@@ -95,12 +93,11 @@ services:
       - S3_SECRET_KEY=swims_minio_password
       - S3_BUCKET=swims-media
       - S3_REGION=us-east-1
-      - PORT=4000
-      - NODE_ENV=development
-      - FRONTEND_URL=http://localhost:3000
     depends_on:
       - pgbouncer
       - redis
+    volumes:
+      - media_data:/app/media
 
   frontend:
     # Production build is baked into the image at build time (see ./Dockerfile).
@@ -124,4 +121,4 @@ services:
 volumes:
   pgdata:
   redisdata:
-  miniodata:
+  media_data:

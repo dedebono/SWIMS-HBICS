@@ -46,19 +46,55 @@ export const Severity = {
 } as const;
 export type Severity = (typeof Severity)[keyof typeof Severity];
 
+/**
+ * Account roles — these are the only values `users.role` may hold (mirrored by
+ * the `users_role_check` CHECK constraint, see migration 047).
+ *
+ * `STUDENT` is intentionally absent: students are records in the `students`
+ * table (incident subjects), not login accounts. They carry no email or
+ * password_hash, cannot authenticate, and have no permission matrix. Use
+ * `PERSONAL` for an individual with a self-service login.
+ */
 export const Role = {
   TEACHER: 'TEACHER',
-  SUBSTITUTE_TEACHER: 'SUBSTITUTE_TEACHER',
   COUNSELOR: 'COUNSELOR',
   SCHOOL_NURSE: 'SCHOOL_NURSE',
   SCHOOL_HEAD: 'SCHOOL_HEAD',
   BOARD_MEMBER: 'BOARD_MEMBER',
-  CASE_REVIEWER: 'CASE_REVIEWER',
   IT_ADMIN: 'IT_ADMIN',
   PERSONAL: 'PERSONAL',
   PSYCHOLOGIST: 'PSYCHOLOGIST',
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
+
+/**
+ * Runtime name lists — the single source of truth for role pickers and request
+ * validation, kept next to the `Role` union so they cannot drift.
+ *
+ * `ACCOUNT_ROLE_NAMES` additionally includes `'STUDENT'` because that is a
+ * valid choice in the admin "create account" form: it routes to the `students`
+ * table rather than `users`. `getAccountRoleTarget()` returns which table a
+ * role lands in.
+ */
+export const ROLE_NAMES = [
+  'TEACHER',
+  'COUNSELOR',
+  'SCHOOL_NURSE',
+  'SCHOOL_HEAD',
+  'BOARD_MEMBER',
+  'IT_ADMIN',
+  'PERSONAL',
+  'PSYCHOLOGIST',
+] as const;
+
+export const STUDENT = 'STUDENT' as const;
+export type AccountRole = (typeof ROLE_NAMES)[number] | typeof STUDENT;
+export const ACCOUNT_ROLE_NAMES: readonly AccountRole[] = [...ROLE_NAMES, STUDENT];
+
+/** `'students'` when the role is STUDENT, `'users'` for every login role. */
+export function getAccountRoleTarget(role: string): 'users' | 'students' {
+  return role === STUDENT ? 'students' : 'users';
+}
 
 export const AlertStatus = {
   PENDING: 'PENDING',

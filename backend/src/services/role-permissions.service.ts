@@ -266,9 +266,12 @@ export async function setRolePermissions(
   await auditLog({
     action: 'UPDATE_ROLE_PERMISSIONS',
     entityType: 'role_permissions',
-    entityId: `${tenantId}:${role}`,
-    before: actor?.before ?? null,
-    after: after ?? null,
+    // audit_logs.entity_id is a uuid column — a role name is not a uuid, so the
+    // role goes into the state payload instead. Passing `${tenantId}:${role}`
+    // here made every INSERT fail and the audit trail was silently lost.
+    entityId: undefined,
+    before: actor?.before ? { role, permissions: actor.before } : null,
+    after: after ? { role, permissions: after } : null,
     tenantId,
     actorId: actor?.actorId,
   }).catch(() => undefined);
@@ -325,9 +328,9 @@ export async function resetRolePermissions(
   await auditLog({
     action: 'RESET_ROLE_PERMISSIONS',
     entityType: 'role_permissions',
-    entityId: `${tenantId}:${role}`,
-    before: actor?.before ?? null,
-    after: after ?? null,
+    entityId: undefined,
+    before: actor?.before ? { role, permissions: actor.before } : null,
+    after: after ? { role, permissions: after } : null,
     tenantId,
     actorId: actor?.actorId,
   }).catch(() => undefined);

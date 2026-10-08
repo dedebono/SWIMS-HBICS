@@ -60,7 +60,7 @@ export function StudentProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="!w-full !max-w-[calc(100vw-2rem)] !max-h-[90vh] overflow-y-auto overflow-x-hidden p-6 sm:!p-8">
         <DialogHeader>
           <DialogTitle>Student Profile</DialogTitle>
           <DialogDescription>Overview and history for this student.</DialogDescription>
@@ -127,8 +127,8 @@ export function StudentProfileDialog({
             {/* Timeline */}
             <div>
               <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Chronological Timeline</h3>
-              <div className="rounded-md border">
-                <table className="w-full text-sm">
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full text-sm min-w-[500px]">
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="h-10 px-4 text-left font-medium">Date</th>

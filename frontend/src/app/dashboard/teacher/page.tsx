@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, FileText, Users, Plus } from 'lucide-react';
+import { classificationLabel } from '@/lib/constants';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,8 +67,8 @@ export default function TeacherDashboardPage() {
       setIsLoading(true);
       try {
         const [studentsRes, incidentsRes] = await Promise.all([
-          apiClient<MyStudent[]>('/incidents/my-students'),
-          apiClient<{ data: MyIncident[] }>('/incidents/my-reports?limit=50'),
+          apiClient<MyStudent[]>('/my-students'),
+          apiClient<{ data: MyIncident[] }>('/my-reports?limit=50'),
         ]);
 
         if (studentsRes.success && studentsRes.data) {
@@ -250,7 +251,7 @@ export default function TeacherDashboardPage() {
                           <span className="text-xs text-muted-foreground">/ {inc.sub_category}</span>
                         )}
                         <Badge variant="outline" className={`text-[10px] ${severityColors[inc.severity] ?? ''}`}>
-                          {inc.severity}
+                          {classificationLabel(inc.severity)}
                         </Badge>
                       </div>
                       {student && (

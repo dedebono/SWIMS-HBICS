@@ -284,3 +284,59 @@ export async function softDeleteIncident(
     actorId,
   });
 }
+
+// ─── List incidents reported by a specific user (teacher reports) ─────────────
+
+export async function listIncidentsByReporter(
+  tenantId: string,
+  userId: string,
+  limit: number = 50,
+): Promise<IncidentRow[]> {
+  const { rows } = await queryWithTenant<IncidentRow>(
+    tenantId,
+    `SELECT i.*
+     FROM incidents i
+     WHERE i.tenant_id = $1
+       AND i.reported_by = $2
+       AND i.deleted_at IS NULL
+     ORDER BY i.incident_at DESC
+     LIMIT $3`,
+    [tenantId, userId, limit],
+  );
+  return rows;
+}
+
+// ─── List students with incidents reported by a specific user ─────────────────
+
+export async function listStudentsByReporter(
+  tenantId: string,
+  userId: string,
+): Promise<{ student_id: string; full_name: string; incident_count: number; last_incident_at: string; last_severity: string }[]> {
+  const { rows } = await queryWithTenant<{
+    student_id: string;
+    full_name: string;
+    incident_count: string;
+    last_incident_at: string;
+    last_severity: string;
+  }>(
+    tenantId,
+    `SELECT
+       s.student_id,
+       s.full_name,
+       COUNT(i.incident_id)::int AS incident_count,
+       MAX(i.incident_at) AS last_incident_at,
+       MAX(i.severity) AS last_severity
+     FROM incidents i
+     JOIN students s ON s.student_id = i.student_id
+     WHERE i.tenant_id = $1
+       AND i.reported_by = $2
+       AND i.deleted_at IS NULL
+     GROUP BY s.student_id, s.full_name
+     ORDER BY MAX(i.incident_at) DESC`,
+    [tenantId, userId],
+  );
+  return rows.map(r => ({
+    ...r,
+    incident_count: Number(r.incident_count),
+  }));
+}

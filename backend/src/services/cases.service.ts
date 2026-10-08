@@ -140,7 +140,9 @@ export async function listCases(
   // Fetch page
   const dataResult = await queryWithTenant<CaseRow>(
     tenantId,
-    `SELECT c.* FROM cases c
+    `SELECT c.*, s.full_name AS student_name
+     FROM cases c
+     LEFT JOIN students s ON c.student_id = s.student_id
      WHERE c.tenant_id = $1 AND ${whereClause}
      ORDER BY
        CASE c.risk_level WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
@@ -160,7 +162,10 @@ export async function listCases(
 export async function getCaseById(tenantId: string, caseId: string): Promise<CaseRow> {
   const { rows } = await queryWithTenant<CaseRow>(
     tenantId,
-    `SELECT * FROM cases WHERE case_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+    `SELECT c.*, s.full_name AS student_name
+     FROM cases c
+     LEFT JOIN students s ON c.student_id = s.student_id
+     WHERE c.case_id = $1 AND c.tenant_id = $2 AND c.deleted_at IS NULL`,
     [caseId, tenantId],
   );
 

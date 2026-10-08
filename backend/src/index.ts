@@ -29,7 +29,7 @@ import insightsRoutes from './api/insights.routes.js';
 import referralRoutes from './api/psychologist-referral.routes.js';
 import appointmentsRoutes from './api/appointments.routes.js';
 import availabilityRoutes from './api/availability.routes.js';
-import caseSharesRoutes from './api/case-shares.routes.js';
+import caseSharesRoutes, { teacherRouter } from './api/case-shares.routes.js';
 import counselingBookingRoutes from './api/counseling-booking.routes.js';
 import disciplineHandbookRoutes from './api/discipline-handbook.routes.js';
 import employeeCounselingRoutes from './api/employee-counseling.routes.js';
@@ -79,7 +79,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/availability', availabilityRoutes);
-app.use('/api/case-shares', caseSharesRoutes);
+app.use('/api/cases', caseSharesRoutes);
 // Public booking routes — mounted BEFORE catch-all so they take precedence
 app.use('/api/counseling', counselingBookingRoutes);
 // Legacy mount (kept for other consumers)
@@ -92,6 +92,7 @@ app.use('/api/referrals', referralssRoutes);
 
 // Protected Root-Level Routers
 app.use('/api', incidentsRoutes);
+app.use('/api', teacherRouter);
 app.use('/api', interventionsRoutes);
 app.use('/api', consentsRoutes);
 app.use('/api', communicationsRoutes);

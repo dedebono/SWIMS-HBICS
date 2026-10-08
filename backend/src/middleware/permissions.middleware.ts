@@ -9,7 +9,10 @@ import { getTenantPermissionMatrix } from '../services/role-permissions.service.
  * Middleware factory: checkPermission(resource, action)
  *
  * Enforces two layers:
- * 1. RBAC — checks the static permissions matrix
+ * 1. RBAC — the per-tenant dynamic matrix in `role_permissions` (edited from
+ *    Admin → User Management → Role Permissions). Falls back to the static
+ *    `PERMISSIONS` matrix when the tenant has no row for that role+resource,
+ *    so a partially seeded tenant can never lock itself out.
  * 2. ABAC — applies contextual rules per role (teacher→class, nurse→medical, etc.)
  *
  * Call after authenticate and setTenantContext.
@@ -30,22 +33,17 @@ export function checkPermission(resource: Resource, action: Action) {
         return next(new ForbiddenError(`No permissions defined for resource: ${resource}`));
       }
 
-      if (!resourcePerms[action]) {
-        // The 'manage' action is not in the static CRUD matrix — check DB dynamic permissions
-        if (action === 'manage' && req.tenantId) {
-          const matrix = await getTenantPermissionMatrix(req.tenantId as string);
-          const roleDbPerms = matrix[role as string];
-          const resourceDbPerms = roleDbPerms?.[resource as string];
-          if (!resourceDbPerms?.manage) {
-            return next(new ForbiddenError(
-              `Role '${role}' is not allowed to '${action}' on '${resource}'`,
-            ));
-          }
-        } else {
-          return next(new ForbiddenError(
-            `Role '${role}' is not allowed to '${action}' on '${resource}'`,
-          ));
-        }
+      // The dynamic matrix is the source of truth when the tenant actually has a
+      // row for this role+resource+action — otherwise every toggle in the Role
+      // Permissions UI would be silently ignored. `admin.manage` only ever exists
+      // in the DB matrix, so it resolves through the same lookup.
+      const dbAllowed = await lookupDynamicPermission(req.tenantId, role, resource, action);
+      const allowed = dbAllowed ?? Boolean(resourcePerms[action]);
+
+      if (!allowed) {
+        return next(new ForbiddenError(
+          `Role '${role}' is not allowed to '${action}' on '${resource}'`,
+        ));
       }
 
       // ── Step 2: ABAC contextual checks ──────────────────────────────────
@@ -59,6 +57,28 @@ export function checkPermission(resource: Resource, action: Action) {
       next(err);
     }
   };
+}
+
+/**
+ * Read one permission from the tenant's dynamic matrix.
+ * Returns undefined when the tenant has no stored decision for it, which tells
+ * the caller to fall back to the static matrix. Never throws: a DB failure must
+ * degrade to static permissions rather than lock everyone out.
+ */
+async function lookupDynamicPermission(
+  tenantId: unknown,
+  role: string,
+  resource: string,
+  action: string,
+): Promise<boolean | undefined> {
+  if (!tenantId) return undefined;
+  try {
+    const matrix = await getTenantPermissionMatrix(tenantId as string);
+    const value = matrix[role]?.[resource]?.[action];
+    return typeof value === 'boolean' ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -77,23 +97,12 @@ async function enforceAbac(
   switch (role) {
     case 'TEACHER': {
       // Teachers may only access records for students in their assigned class
+      // Exception: incident/case creation for any student (incident reporting)
       const studentId = extractStudentId(req);
-      if (studentId) {
+      if (studentId && resource !== 'students' && !((resource === 'incidents' || resource === 'cases') && _action === 'create')) {
         const allowed = await isStudentInTeacherClass(tenantId, userId, studentId);
         if (!allowed) {
           throw new ForbiddenError('You can only access records for students in your assigned class');
-        }
-      }
-      break;
-    }
-
-    case 'SUBSTITUTE_TEACHER': {
-      // Same as teacher but only during active substitution period
-      const studentId = extractStudentId(req);
-      if (studentId) {
-        const allowed = await isStudentInSubstituteClass(tenantId, userId, studentId);
-        if (!allowed) {
-          throw new ForbiddenError('You can only access records during your active substitution period');
         }
       }
       break;
@@ -124,12 +133,6 @@ async function enforceAbac(
     case 'BOARD_MEMBER': {
       // All data must be anonymized — mark on request
       (req as unknown as Record<string, unknown>)['abacAnonymize'] = true;
-      break;
-    }
-
-    case 'CASE_REVIEWER': {
-      // Read-only for assigned cases — mark on request
-      (req as unknown as Record<string, unknown>)['abacAssignedOnly'] = true;
       break;
     }
 
@@ -164,7 +167,7 @@ async function isStudentInTeacherClass(
 ): Promise<boolean> {
   const client = await pool.connect();
   try {
-    await client.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
+    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
     const { rows } = await client.query<{ count: string }>(
       `SELECT COUNT(*) as count
        FROM teacher_class_assignments tca
@@ -177,36 +180,6 @@ async function isStudentInTeacherClass(
          AND seh.student_id = $3
          AND seh.graduated_at IS NULL`,
       [tenantId, teacherUserId, studentId],
-    );
-    return Number(rows[0]?.count ?? 0) > 0;
-  } finally {
-    client.release();
-  }
-}
-
-/**
- * Check if a student is in a class where this substitute teacher is active.
- */
-async function isStudentInSubstituteClass(
-  tenantId: string,
-  substituteUserId: string,
-  studentId: string,
-): Promise<boolean> {
-  const client = await pool.connect();
-  try {
-    await client.query(`SET LOCAL app.tenant_id = $1`, [tenantId]);
-    const { rows } = await client.query<{ count: string }>(
-      `SELECT COUNT(*) as count
-       FROM substitution_schedule ss
-       JOIN student_enrollment_history seh
-         ON seh.class_name = ss.class_name
-         AND seh.tenant_id = ss.tenant_id
-       WHERE ss.tenant_id = $1
-         AND ss.substitute_id = $2
-         AND seh.student_id = $3
-         AND CURRENT_DATE BETWEEN ss.start_date AND ss.end_date
-         AND seh.graduated_at IS NULL`,
-      [tenantId, substituteUserId, studentId],
     );
     return Number(rows[0]?.count ?? 0) > 0;
   } finally {

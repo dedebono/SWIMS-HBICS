@@ -1,12 +1,120 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createHmac, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import { existsSync } from 'fs';
+import { mkdir, writeFile, readFile } from 'fs/promises';
+import { join } from 'path';
 import { getClientWithTenant, queryWithTenant } from '../db/pool.js';
 import { auditLog } from '../utils/audit-log.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, UnauthorizedError } from '../utils/errors.js';
 import { env } from '../config/env.js';
 import type { MediaAssetRow } from '@swims/shared';
 import type { Request } from 'express';
+
+// Lazy-load sharp only when needed (avoids build errors if not installed)
+let sharp: any = null;
+async function getSharp() {
+  if (!sharp) {
+    sharp = (await import('sharp')).default;
+  }
+  return sharp;
+}
+
+const MEDIA_DIR = '/app/media';
+const DOWNLOAD_TOKEN_TTL = 60 * 60; // 1 hour
+
+// ─── Local Storage Helpers ─────────────────────────────────────────────────────
+
+async function ensureLocalDir(tenantId: string): Promise<string> {
+  const dir = join(MEDIA_DIR, tenantId);
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
+  return dir;
+}
+
+async function saveLocalFile(tenantId: string, assetId: string, fileName: string, data: Buffer): Promise<string> {
+  const dir = await ensureLocalDir(tenantId);
+  const ext = fileName.split('.').pop() || '';
+  const storageKey = `${tenantId}/${assetId}.${ext}`;
+  const filePath = join(MEDIA_DIR, storageKey);
+  await writeFile(filePath, data);
+  return storageKey;
+}
+
+async function readLocalFile(storageKey: string): Promise<{ data: Buffer; ext: string }> {
+  const filePath = join(MEDIA_DIR, storageKey);
+  const data = await readFile(filePath);
+  const ext = storageKey.split('.').pop() || '';
+  return { data, ext };
+}
+
+// ─── WebP Conversion ─────────────────────────────────────────────────────────
+
+async function convertToWebp(inputBuffer: Buffer, mimeType: string): Promise<Buffer> {
+  try {
+    const s = await getSharp();
+    let pipeline = s(inputBuffer);
+    if (mimeType === 'image/gif') {
+      pipeline = pipeline.gif();
+    } else {
+      pipeline = pipeline.rotate(); // auto-rotate based on EXIF
+    }
+    const webpBuffer = await pipeline.webp({ quality: 85 }).toBuffer();
+    return webpBuffer;
+  } catch {
+    // If conversion fails, return original
+    return inputBuffer;
+  }
+}
+
+// ─── Signed URL for Media Downloads ──────────────────────────────────────────
+
+/**
+ * Generate a short-lived signed download token for a media asset.
+ * Format: base64(urlsafe(JSON)) — contains userId, assetId, expiry, hmac
+ */
+export function generateDownloadToken(userId: string, assetId: string): string {
+  const expiry = Math.floor(Date.now() / 1000) + DOWNLOAD_TOKEN_TTL;
+  const payload = `${userId}:${assetId}:${expiry}`;
+  const hmac = createHmac('sha256', env.JWT_SECRET)
+    .update(payload)
+    .digest('base64url');
+  const token = Buffer.from(JSON.stringify({ userId, assetId, expiry, hmac })).toString('base64url');
+  return token;
+}
+
+/**
+ * Validate a download token. Returns userId if valid, throws if invalid/expired.
+ */
+export function validateDownloadToken(token: string): string {
+  let parsed: { userId: string; assetId: string; expiry: number; hmac: string };
+  try {
+    parsed = JSON.parse(Buffer.from(token, 'base64url').toString());
+  } catch {
+    throw new UnauthorizedError('Invalid download token');
+  }
+
+  const { userId, assetId, expiry, hmac } = parsed;
+  const now = Math.floor(Date.now() / 1000);
+  if (now > expiry) {
+    throw new UnauthorizedError('Download token expired');
+  }
+
+  // Verify HMAC
+  const payload = `${userId}:${assetId}:${expiry}`;
+  const expectedHmac = createHmac('sha256', env.JWT_SECRET)
+    .update(payload)
+    .digest('base64url');
+  if (hmac !== expectedHmac) {
+    throw new UnauthorizedError('Invalid download token signature');
+  }
+
+  return userId;
+}
+
+// ─── S3 Client ────────────────────────────────────────────────────────────────
 
 const s3Client = new S3Client({
   endpoint: env.S3_ENDPOINT,
@@ -15,8 +123,10 @@ const s3Client = new S3Client({
     accessKeyId: env.S3_ACCESS_KEY,
     secretAccessKey: env.S3_SECRET_KEY,
   },
-  forcePathStyle: true, // Required for MinIO
+  forcePathStyle: true,
 });
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface UploadRequestInput {
   file_name: string;
@@ -24,13 +134,68 @@ export interface UploadRequestInput {
   file_hash: string;
 }
 
+export interface DirectUploadInput {
+  file_name: string;
+  mime_type: string;
+  file_data: string; // base64 encoded
+}
+
 export interface LinkAssetInput {
   case_id?: string;
   incident_id?: string;
 }
 
-// ─── Generate Upload URL & Init Asset ────────────────────────────────────────
+// ─── Direct Upload with WebP Conversion ───────────────────────────────────────
+// Backend receives file as base64, converts to WebP, saves locally
+export async function directUploadAsset(
+  tenantId: string,
+  input: DirectUploadInput,
+  actorId: string,
+  req?: Request,
+): Promise<MediaAssetRow> {
+  const assetId = uuidv4();
+  let fileBuffer = Buffer.from(input.file_data, 'base64');
 
+  // Auto-convert to WebP for images
+  if (input.mime_type.startsWith('image/') && input.mime_type !== 'image/webp') {
+    fileBuffer = await convertToWebp(fileBuffer, input.mime_type);
+  }
+
+  const webpFileName = input.file_name.replace(/\.[^.]+$/, '.webp');
+  const storageKey = await saveLocalFile(tenantId, assetId, webpFileName, fileBuffer);
+
+  const { rows } = await queryWithTenant<MediaAssetRow>(
+    tenantId,
+    `INSERT INTO media_assets (asset_id, tenant_id, uploader_id, file_name, file_hash, mime_type, storage_key, redaction_status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'NONE')
+     RETURNING *`,
+    [
+      assetId,
+      tenantId,
+      actorId,
+      webpFileName,
+      `size:${fileBuffer.length}`,
+      'image/webp',
+      storageKey,
+    ],
+  );
+
+  const asset = rows[0]!;
+
+  await auditLog({
+    action: 'MEDIA_ASSET_CREATED',
+    entityType: 'media_assets',
+    entityId: asset.asset_id,
+    after: asset as unknown as Record<string, unknown>,
+    req,
+    tenantId,
+    actorId,
+  });
+
+  return asset;
+}
+
+// ─── Presigned Upload URL (S3/MinIO) ─────────────────────────────────────────
 export async function createPresignedUpload(
   tenantId: string,
   input: UploadRequestInput,
@@ -47,9 +212,10 @@ export async function createPresignedUpload(
     ContentType: input.mime_type,
   });
 
-  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  let uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  // Replace http:// with https:// to avoid Mixed Content when browser uploads
+  uploadUrl = uploadUrl.replace('http://', 'https://');
 
-  // Store metadata in DB (not linked to case/incident yet)
   const { rows } = await queryWithTenant<MediaAssetRow>(
     tenantId,
     `INSERT INTO media_assets (asset_id, tenant_id, uploader_id, file_name, file_hash, mime_type, storage_key)
@@ -82,7 +248,6 @@ export async function createPresignedUpload(
 }
 
 // ─── Link Asset ─────────────────────────────────────────────────────────────
-
 export async function linkAsset(
   tenantId: string,
   assetId: string,
@@ -128,14 +293,12 @@ export async function linkAsset(
 }
 
 // ─── Trigger Redaction ───────────────────────────────────────────────────────
-
 export async function triggerRedaction(
   tenantId: string,
   assetId: string,
   actorId: string,
   req?: Request,
 ): Promise<MediaAssetRow> {
-  // Update status to PENDING
   const { rows } = await queryWithTenant<MediaAssetRow>(
     tenantId,
     `UPDATE media_assets SET redaction_status = 'PENDING', updated_at = now()
@@ -160,18 +323,14 @@ export async function triggerRedaction(
     actorId,
   });
 
-  // (This is where you'd trigger a background worker, AWS Rekognition, etc.)
-  // For MVP Phase 2, we leave it locally flagged as PENDING in DB.
-
   return updated;
 }
 
-// ─── Get Metadata & Download URL ─────────────────────────────────────────────
-
+// ─── Get Metadata & Signed Download URL ─────────────────────────────────────
 export async function getAssetDownloadUrl(
   tenantId: string,
   assetId: string,
-  actorId: string, // Needed for tracking access logs
+  actorId: string,
   req?: Request,
 ): Promise<{ url: string; asset: MediaAssetRow }> {
   const client = await getClientWithTenant(tenantId);
@@ -186,29 +345,19 @@ export async function getAssetDownloadUrl(
       throw new NotFoundError('MediaAsset', assetId);
     }
     const asset = rows[0]!;
-    
-    // Choose redacted_key if available, else storage_key
-    const objectKey =
-      asset.redaction_status === 'REDACTED' && asset.redacted_key
-        ? asset.redacted_key
-        : asset.storage_key;
 
-    const command = new GetObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: objectKey,
-    });
+    // Generate a signed token that embeds userId + assetId (HMAC-protected, time-limited)
+    const token = generateDownloadToken(actorId, assetId);
+    const url = `/api/media/${assetId}/download?token=${token}`;
 
-    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-
-    // Mark access log in JSONB list of accesses
     const accessLogEntry = {
       accessed_at: new Date().toISOString(),
       actor_id: actorId,
       ip: req?.ip,
     };
-    
+
     await client.query(
-      `UPDATE media_assets 
+      `UPDATE media_assets
        SET access_logs = access_logs || $1::jsonb
        WHERE asset_id = $2 AND tenant_id = $3`,
       [JSON.stringify([accessLogEntry]), assetId, tenantId]
@@ -224,18 +373,50 @@ export async function getAssetDownloadUrl(
   }
 }
 
-// ─── List Assets ─────────────────────────────────────────────────────────────
+// ─── Get Object from Local Storage ──────────────────────────────────────────
+export async function getAssetObject(
+  tenantId: string,
+  assetId: string,
+): Promise<{ Body: Buffer; ContentType: string; file_name: string }> {
+  const { rows } = await queryWithTenant<MediaAssetRow>(
+    tenantId,
+    `SELECT * FROM media_assets WHERE asset_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+    [assetId, tenantId]
+  );
 
+  if (rows.length === 0) {
+    throw new NotFoundError('MediaAsset', assetId);
+  }
+
+  const asset = rows[0]!;
+  const { data } = await readLocalFile(asset.storage_key);
+
+  return {
+    Body: data,
+    ContentType: asset.mime_type,
+    file_name: asset.file_name,
+  };
+}
+
+// ─── List Assets for Case ─────────────────────────────────────────────────────
 export async function listAssetsForCase(
   tenantId: string,
   caseId: string,
-): Promise<MediaAssetRow[]> {
+  actorId: string,
+): Promise<Array<MediaAssetRow & { url: string }>> {
   const { rows } = await queryWithTenant<MediaAssetRow>(
     tenantId,
-    `SELECT * FROM media_assets 
+    `SELECT * FROM media_assets
      WHERE case_id = $1 AND tenant_id = $2 AND deleted_at IS NULL
      ORDER BY created_at DESC`,
     [caseId, tenantId]
   );
-  return rows;
+
+  // Return assets with pre-signed download URLs
+  return Promise.all(
+    rows.map(async (asset) => {
+      const token = generateDownloadToken(actorId, asset.asset_id);
+      return { ...asset, url: `/api/media/${asset.asset_id}/download?token=${token}` };
+    })
+  );
 }

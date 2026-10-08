@@ -107,7 +107,7 @@ const navItems = [
     roles: ['IT_ADMIN'],
   },
   {
-    label: 'Cases',
+    label: 'Student Cases',
     href: '/dashboard/cases',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -119,7 +119,7 @@ const navItems = [
     roles: ['TEACHER', 'SUBSTITUTE_TEACHER', 'COUNSELOR', 'SCHOOL_NURSE', 'SCHOOL_HEAD', 'CASE_REVIEWER', 'PERSONAL', 'PSYCHOLOGIST'],
   },
   {
-    label: 'New Incident',
+    label: 'Report Incident',
     href: '/dashboard/incidents/new',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -163,8 +163,8 @@ export function Sidebar({ currentPath, userRole, onNavigate }: SidebarProps) {
       'Dashboard': 'nav.dashboard',
       'User Management': 'nav.user_management',
       'Settings': 'nav.settings',
-      'Cases': 'nav.cases',
-      'New Incident': 'nav.new_incident',
+      'Student Cases': 'nav.cases',
+      'Report Incident': 'nav.new_incident',
       'Audit Logs': 'nav.audit_logs',
     };
     return t(keys[label] || label);

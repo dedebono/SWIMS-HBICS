@@ -93,13 +93,8 @@ function CaseSummaryCard({ item }: { item: CaseSummaryResult }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-base">{typeIcons[item.case_type] ?? "📋"}</span>
           <span className="text-sm font-semibold">
-            Case #{item.case_id.slice(0, 8)}
+            Case {item.student_name ? `${item.student_name} ` : ''}#{item.case_id.slice(0, 8)}
           </span>
-          {item.student_name && (
-            <span className="text-xs text-primary font-medium">
-              👤 {item.student_name}
-            </span>
-          )}
           <Badge
             variant="outline"
             className={`text-[10px] ${riskColors[item.risk_level] ?? ""}`}

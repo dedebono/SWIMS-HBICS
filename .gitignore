@@ -45,3 +45,14 @@ brain/
 
 # Uploads
 backend/uploads/
+
+# TLS certificates & private keys (never commit)
+minio-certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Generated API docs
+backend/api.md

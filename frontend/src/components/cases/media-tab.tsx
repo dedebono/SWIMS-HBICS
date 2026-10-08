@@ -52,17 +52,12 @@ export function MediaTab({ caseId }: { caseId: string }) {
     setIsLoading(true);
     const res = await apiClient<MediaAssetRow[]>(`/cases/${caseId}/media`);
     if (res.success && res.data) {
-      // Resolve URLs in parallel for thumbnail display
-      const withUrls: AssetWithUrl[] = await Promise.all(
-        res.data.map(async (asset) => {
-          try {
-            const urlRes = await apiClient<{ url: string }>(`/media/${asset.asset_id}`);
-            return { ...asset, url: urlRes.success ? urlRes.data?.url : undefined };
-          } catch {
-            return { ...asset };
-          }
-        }),
-      );
+      // Assets now include pre-signed download URL from backend — no extra fetch needed
+      // url field is added by backend's listAssetsForCase response
+      const withUrls: AssetWithUrl[] = (res.data as (MediaAssetRow & { url?: string })[]).map((asset) => ({
+        ...asset,
+        url: asset.url ?? `/api/media/${asset.asset_id}/download`,
+      }));
       setAssets(withUrls);
     }
     setIsLoading(false);
@@ -101,29 +96,33 @@ export function MediaTab({ caseId }: { caseId: string }) {
         });
       }
 
-      const presignedRes = await apiClient<{ uploadUrl: string; asset: MediaAssetRow }>('/media/upload', {
+      // Convert file to base64 for upload through HTTPS backend (avoids Mixed Content)
+      const fileBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1]!;
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(fileToUpload);
+      });
+
+      // Upload through backend proxy (avoids Minio HTTP presigned URL)
+      const uploadRes = await apiClient<{ asset_id: string; file_name: string }>('/media/direct-upload', {
         method: 'POST',
         body: {
           file_name: fileToUpload.name,
           mime_type: fileToUpload.type,
-          file_hash: 'sample-hash-skipped-for-demo',
+          file_data: fileBase64,
         },
       });
 
-      if (presignedRes.success && presignedRes.data) {
-        const { uploadUrl, asset } = presignedRes.data;
-
-        await fetch(uploadUrl, {
-          method: 'PUT',
-          body: fileToUpload,
-          headers: { 'Content-Type': fileToUpload.type },
-        });
-
-        await apiClient(`/media/${asset.asset_id}/link`, {
+      if (uploadRes.success && uploadRes.data) {
+        const { asset_id } = uploadRes.data;
+        await apiClient(`/media/${asset_id}/link`, {
           method: 'POST',
           body: { case_id: caseId },
         });
-
         fetchAssets();
       }
     } catch (err) {

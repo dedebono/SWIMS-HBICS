@@ -40,7 +40,7 @@ interface IncidentRow {
   };
 }
 
-// Name map filled from /incidents/my-students
+// Name map filled from /my-students
 interface StudentName {
   student_id: string;
   full_name: string;
@@ -51,6 +51,21 @@ const severityColors: Record<string, string> = {
   MEDIUM: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
   HIGH: 'bg-severity-high/15 text-severity-high border-severity-high/30',
   CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
+};
+
+/** DB stores LOW/MEDIUM/HIGH/CRITICAL; users see the Classification scale. */
+const severityLabels: Record<string, string> = {
+  LOW: 'Minor',
+  MEDIUM: 'Moderate',
+  HIGH: 'Major',
+  CRITICAL: 'Severe',
+};
+
+/** Base UI's <SelectValue> renders the raw item `value`, not the <SelectItem>
+ *  children — without `items` the filter trigger would show "CRITICAL". */
+const SEVERITY_FILTER_ITEMS = {
+  all: 'All Classifications',
+  ...severityLabels,
 };
 
 // Roles that see only their own reports
@@ -72,14 +87,12 @@ export default function IncidentsPage() {
     setIsLoading(true);
     try {
       // Teachers see only their own reports; others see all (paginated)
-      const endpoint = isReporterOnly
-        ? `/incidents/my-reports?page=${page}&limit=50`
-        : `/incidents/my-reports?page=${page}&limit=50`; // TODO: global view for admin/counselor
+      // Backend incidents routes mounted at /api → paths: /my-reports, /my-students
       // For now, everyone sees their own reports (global view can be added later)
 
       const [incRes, stuRes] = await Promise.all([
-        apiClient<any>(`/incidents/my-reports?page=${page}&limit=50`),
-        apiClient<StudentName[]>('/incidents/my-students'),
+        apiClient<any>(`/my-reports?page=${page}&limit=50`),
+        apiClient<StudentName[]>('/my-students'),
       ]);
 
       if (incRes.success && incRes.data) {
@@ -147,16 +160,20 @@ export default function IncidentsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-72"
         />
-        <Select value={severityFilter} onValueChange={(v) => setSeverityFilter(v ?? 'all')}>
+        <Select
+          value={severityFilter}
+          onValueChange={(v) => setSeverityFilter(v ?? 'all')}
+          items={SEVERITY_FILTER_ITEMS}
+        >
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Severity" />
+            <SelectValue placeholder="Classification" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Severities</SelectItem>
-            <SelectItem value="CRITICAL">Critical</SelectItem>
-            <SelectItem value="HIGH">High</SelectItem>
-            <SelectItem value="MEDIUM">Medium</SelectItem>
-            <SelectItem value="LOW">Low</SelectItem>
+            <SelectItem value="all">All Classifications</SelectItem>
+            <SelectItem value="CRITICAL">Severe</SelectItem>
+            <SelectItem value="HIGH">Major</SelectItem>
+            <SelectItem value="MEDIUM">Moderate</SelectItem>
+            <SelectItem value="LOW">Minor</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -203,7 +220,7 @@ export default function IncidentsPage() {
                           <span className="text-xs text-muted-foreground">/ {inc.sub_category}</span>
                         )}
                         <Badge variant="outline" className={`text-[10px] ${severityColors[inc.severity] ?? ''}`}>
-                          {inc.severity}
+                          {severityLabels[inc.severity] ?? inc.severity}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">

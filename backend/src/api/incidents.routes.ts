@@ -50,6 +50,36 @@ const listIncidentsSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(20),
 });
 
+// ─── GET /api/incidents/my-reports ────────────────────────────────────────────
+// Incidents reported by the current teacher user
+router.get(
+  '/my-reports',
+  checkPermission('incidents', 'read'),
+  asyncHandler(async (req, res) => {
+    const limit = Number(req.query['limit']) || 50;
+    const incidents = await incidentsService.listIncidentsByReporter(
+      req.tenantId,
+      req.userId,
+      limit,
+    );
+    sendSuccess(res, incidents);
+  }),
+);
+
+// ─── GET /api/incidents/my-students ───────────────────────────────────────────
+// Students who have incidents reported by the current teacher user
+router.get(
+  '/my-students',
+  checkPermission('incidents', 'read'),
+  asyncHandler(async (req, res) => {
+    const students = await incidentsService.listStudentsByReporter(
+      req.tenantId,
+      req.userId,
+    );
+    sendSuccess(res, students);
+  }),
+);
+
 // ─── POST /api/cases/:caseId/incidents ───────────────────────────────────────
 
 router.post(

@@ -1,4 +1,4 @@
-import { queryWithTenant, getClientWithTenant } from '../db/pool.js';
+import { queryWithTenant, getClientWithTenant, pool } from '../db/pool.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -707,4 +707,150 @@ export async function getFullHandbook(tenantId: string, levelId?: number): Promi
       required_documents: documents.filter(rd => rd.category_id === cat.id),
     };
   });
+}
+
+export async function exportHandbookData(tenantId: string) {
+  const [categories, levels, groups, behaviors, guidelines, consequences, documents] = await Promise.all([
+    listCategories(tenantId),
+    listEducationLevels(tenantId),
+    listBehaviorGroups(tenantId),
+    listBehaviorDetails(tenantId),
+    listHandlingGuidelines(tenantId),
+    listConsequenceGuidelines(tenantId),
+    listRequiredDocuments(tenantId),
+  ]);
+  
+  // Get behavior levels for each behavior
+  const behaviorsWithLevels = await Promise.all(
+    behaviors.map(async (b) => {
+      const levels_list = await getBehaviorLevels(tenantId, b.id);
+      return { ...b, level_ids: levels_list };
+    })
+  );
+  
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    categories,
+    levels,
+    groups,
+    behaviors: behaviorsWithLevels,
+    guidelines,
+    consequences,
+    documents,
+  };
+}
+
+export async function importHandbookData(tenantId: string, data: any) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Delete existing data in reverse dependency order
+    await client.query(`DELETE FROM discipline_handling_guidelines WHERE true`);
+    await client.query(`DELETE FROM discipline_consequence_guidelines WHERE true`);
+    await client.query(`DELETE FROM discipline_required_documents WHERE true`);
+    await client.query(`DELETE FROM discipline_behavior_levels WHERE true`);
+    await client.query(`DELETE FROM discipline_behavior_details WHERE true`);
+    await client.query(`DELETE FROM discipline_behavior_groups WHERE true`);
+    await client.query(`DELETE FROM discipline_education_levels WHERE true`);
+    await client.query(`DELETE FROM discipline_categories WHERE true`);
+    
+    const results: any = { categories: 0, levels: 0, groups: 0, behaviors: 0, guidelines: 0, consequences: 0, documents: 0 };
+    
+    // Import categories
+    if (data.categories?.length) {
+      for (const c of data.categories) {
+        const r = await client.query(
+          `INSERT INTO discipline_categories (id, name, general_description, characteristics, impact_victim, impact_perpetrator, impact_school, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,now(),now()) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, general_description=EXCLUDED.general_description, characteristics=EXCLUDED.characteristics, impact_victim=EXCLUDED.impact_victim, impact_perpetrator=EXCLUDED.impact_perpetrator, impact_school=EXCLUDED.impact_school, updated_at=now()`,
+          [c.id, c.name, c.general_description, c.characteristics, c.impact_victim, c.impact_perpetrator, c.impact_school]
+        );
+        results.categories++;
+      }
+    }
+    
+    // Import levels
+    if (data.levels?.length) {
+      for (const l of data.levels) {
+        await client.query(
+          `INSERT INTO discipline_education_levels (id, code, name, sort_order, created_at) VALUES ($1,$2,$3,$4,now()) ON CONFLICT (id) DO UPDATE SET code=EXCLUDED.code, name=EXCLUDED.name, sort_order=EXCLUDED.sort_order`,
+          [l.id, l.code, l.name, l.sort_order]
+        );
+        results.levels++;
+      }
+    }
+    
+    // Import groups
+    if (data.groups?.length) {
+      for (const g of data.groups) {
+        await client.query(
+          `INSERT INTO discipline_behavior_groups (id, category_id, group_name, description, created_at, updated_at) VALUES ($1,$2,$3,$4,now(),now()) ON CONFLICT (id) DO UPDATE SET category_id=EXCLUDED.category_id, group_name=EXCLUDED.group_name, description=EXCLUDED.description`,
+          [g.id, g.category_id, g.group_name, g.description]
+        );
+        results.groups++;
+      }
+    }
+    
+    // Import behaviors
+    if (data.behaviors?.length) {
+      for (const b of data.behaviors) {
+        await client.query(
+          `INSERT INTO discipline_behavior_details (id, group_id, behavior_text, created_at, updated_at) VALUES ($1,$2,$3,now(),now()) ON CONFLICT (id) DO UPDATE SET group_id=EXCLUDED.group_id, behavior_text=EXCLUDED.behavior_text`,
+          [b.id, b.group_id, b.behavior_text]
+        );
+        // Insert behavior-level mappings
+        if (b.level_ids?.length) {
+          for (const lid of b.level_ids) {
+            await client.query(
+              `INSERT INTO discipline_behavior_levels (behavior_id, level_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+              [b.id, lid]
+            );
+          }
+        }
+        results.behaviors++;
+      }
+    }
+    
+    // Import guidelines
+    if (data.guidelines?.length) {
+      for (const g of data.guidelines) {
+        await client.query(
+          `INSERT INTO discipline_handling_guidelines (id, category_id, level_id, target_type, step_number, guideline_text, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,now(),now()) ON CONFLICT (id) DO UPDATE SET category_id=EXCLUDED.category_id, level_id=EXCLUDED.level_id, target_type=EXCLUDED.target_type, step_number=EXCLUDED.step_number, guideline_text=EXCLUDED.guideline_text`,
+          [g.id, g.category_id, g.level_id, g.target_type, g.step_number, g.guideline_text]
+        );
+        results.guidelines++;
+      }
+    }
+    
+    // Import consequences
+    if (data.consequences?.length) {
+      for (const c of data.consequences) {
+        await client.query(
+          `INSERT INTO discipline_consequence_guidelines (id, category_id, level_id, consequence_type, consequence_text, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,now(),now()) ON CONFLICT (id) DO UPDATE SET category_id=EXCLUDED.category_id, level_id=EXCLUDED.level_id, consequence_type=EXCLUDED.consequence_type, consequence_text=EXCLUDED.consequence_text`,
+          [c.id, c.category_id, c.level_id, c.consequence_type, c.consequence_text]
+        );
+        results.consequences++;
+      }
+    }
+    
+    // Import documents
+    if (data.documents?.length) {
+      for (const d of data.documents) {
+        await client.query(
+          `INSERT INTO discipline_required_documents (id, category_id, level_id, document_name, template_url, description, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,now(),now()) ON CONFLICT (id) DO UPDATE SET category_id=EXCLUDED.category_id, level_id=EXCLUDED.level_id, document_name=EXCLUDED.document_name, template_url=EXCLUDED.template_url, description=EXCLUDED.description`,
+          [d.id, d.category_id, d.level_id, d.document_name, d.template_url, d.description]
+        );
+        results.documents++;
+      }
+    }
+    
+    await client.query('COMMIT');
+    return results;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

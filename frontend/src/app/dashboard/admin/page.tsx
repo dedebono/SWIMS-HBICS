@@ -285,9 +285,10 @@ export default function AdminDashboardPage() {
             Migrasi Data
           </CardTitle>
           <CardDescription>
-            Export data untuk migrasi ke server produksi baru, lalu import di
-            server tujuan. Termasuk: pengguna, siswa, kasus aktif (+ insiden,
-            intervensi, observasi, berbagi kasus). Media tidak disertakan.
+            Export semua data ke server produksi baru, lalu import di
+            server tujuan. Termasuk: pengguna, siswa, kasus, insiden, intervensi,
+            observasi, konseling, quisioner, rujukan psikolog, buku pedoman
+            disiplin, dan lainnya. Media (file) tidak disertakan.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

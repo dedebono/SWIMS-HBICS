@@ -31,6 +31,36 @@ export type Resource =
 
 export type Action = 'create' | 'read' | 'update' | 'delete';
 
+/**
+ * Runtime name lists — the single source of truth for validating permission
+ * payloads. Kept alongside the `Resource`/`Action` unions above so request
+ * validation (zod enums) and the TS types cannot drift apart.
+ *
+ * `manage` is deliberately included: it is not part of the CRUD `Action`
+ * union, but `admin.manage` is what gates RBAC administration at runtime and
+ * role_permissions stores those rows.
+ */
+export const RESOURCE_NAMES = [
+  'cases',
+  'incidents',
+  'interventions',
+  'media_assets',
+  'alerts',
+  'reports',
+  'consents',
+  'audit_logs',
+  'positive_observations',
+  'students',
+  'admin',
+  'quisioner',
+  'appointments',
+  'availability',
+  'staff_quisioner',
+  'employee_counseling',
+] as const;
+
+export const ACTION_NAMES = ['create', 'read', 'update', 'delete', 'manage'] as const;
+
 // ─── Permission Matrix Type ──────────────────────────────────────────────────
 
 export type PermissionMatrix = Record<Role, Record<Resource, CrudFlags>>;
@@ -46,24 +76,6 @@ const cr: CrudFlags = { create: true, read: true, update: false, delete: false }
 
 export const PERMISSIONS: PermissionMatrix = {
   TEACHER: {
-    cases: cr,
-    incidents: cru,
-    interventions: cru,
-    media_assets: cru,
-    alerts: none,
-    reports: readOnly,
-    consents: readOnly,
-    audit_logs: none,
-    positive_observations: cru,
-    students: readOnly,
-    admin: none,
-    quisioner: cr,
-    appointments: none,
-    availability: none,
-    staff_quisioner: none,
-    employee_counseling: cr,
-  },
-  SUBSTITUTE_TEACHER: {
     cases: cr,
     incidents: cru,
     interventions: cru,
@@ -146,24 +158,6 @@ export const PERMISSIONS: PermissionMatrix = {
     audit_logs: none,
     positive_observations: readOnly,
     students: none,         // no PII access
-    admin: none,
-    quisioner: none,
-    appointments: none,
-    availability: none,
-    staff_quisioner: none,
-    employee_counseling: none,
-  },
-  CASE_REVIEWER: {
-    cases: readOnly,        // assigned cases only (enforced by ABAC)
-    incidents: readOnly,
-    interventions: readOnly,
-    media_assets: readOnly,
-    alerts: none,
-    reports: readOnly,
-    consents: none,
-    audit_logs: none,
-    positive_observations: readOnly,
-    students: readOnly,
     admin: none,
     quisioner: none,
     appointments: none,

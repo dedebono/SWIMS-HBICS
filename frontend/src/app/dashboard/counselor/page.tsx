@@ -37,6 +37,14 @@ interface DormantCase {
   case_id: string;
   risk_level: string;
   updated_at: string;
+  student_name?: string | null;
+}
+
+/** Format a case title as "Case <Student Name> #3e7bfccd".
+ *  Falls back to the short id alone when student_name is missing. */
+function caseTitle(c: { case_id: string; student_name?: string | null }): string {
+  const short = c.case_id.slice(0, 8);
+  return c.student_name ? `Case ${c.student_name} #${short}` : `Case #${short}`;
 }
 
 interface DashboardData {
@@ -121,7 +129,7 @@ function DormantCases({ cases, onRefresh }: { cases: DormantCase[]; onRefresh: (
             >
               <div className="space-y-1">
                 <p className="text-sm font-medium leading-none flex items-center gap-2">
-                  Case #{c.case_id.split("-")[0]}
+                  Case {c.student_name ? `${c.student_name} ` : ''}#{c.case_id.slice(0, 8)}
                   <Badge
                     variant={
                       c.risk_level === "CRITICAL" || c.risk_level === "HIGH"

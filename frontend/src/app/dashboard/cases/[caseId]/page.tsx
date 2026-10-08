@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, useCallback } from 'react';
+import { useEffect, useState, use, useCallback, useMemo } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { ErrorBoundary } from '@/components/layout/error-boundary';
@@ -33,7 +33,7 @@ import { MediaTab } from '@/components/cases/media-tab';
 import { CommunicationsTab } from '@/components/cases/communications-tab';
 import { StudentProfileDialog } from '@/components/students/student-profile-dialog';
 import { CounselingTab } from '@/components/counseling/counseling-tab';
-import { RISK_COLORS, STATUS_COLORS } from '@/lib/constants';
+import { RISK_COLORS, STATUS_COLORS, classificationLabel } from '@/lib/constants';
 interface CaseDetail {
   case_id: string;
   student_id: string;
@@ -49,6 +49,7 @@ interface CaseDetail {
   created_by: string;
   created_at: string;
   updated_at: string;
+  student_name?: string | null;
 }
 
 interface IncidentItem {
@@ -108,6 +109,21 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const [justification, setJustification] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
+  // Case has no `category` column — derive it from its incidents. A case can hold
+  // several incidents, so collect the distinct categories (and their Kelompok).
+  const caseCategory = useMemo(() => {
+    const cats = [...new Set(incidents.map((i) => i.category).filter(Boolean))];
+    const groups = [...new Set(incidents.map((i) => i.sub_category).filter(Boolean))];
+    if (cats.length === 0) return 'N/A';
+    const base = cats.join(', ');
+    return groups.length > 0 ? `${base} — ${groups.join(', ')}` : base;
+  }, [incidents]);
+
+  // OPEN / MONITORING / CLOSED → Open / Monitoring / Closed
+  const statusLabel = caseData?.status
+    ? caseData.status.charAt(0) + caseData.status.slice(1).toLowerCase()
+    : 'N/A';
 
   // Share state
   const [shares, setShares] = useState<Array<{ share_id: string; shared_with: string; shared_with_name: string; shared_with_role: string }>>([]);
@@ -313,7 +329,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-bold tracking-tight">
-              Case #{caseData.case_id.slice(0, 8)}
+              Case {caseData.student_name ? `${caseData.student_name} ` : ''}#{caseData.case_id.slice(0, 8)}
             </h2>
             <Badge variant="outline" className={STATUS_COLORS[caseData.status] ?? ''}>
               {caseData.status}
@@ -476,14 +492,27 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                 <CardTitle className="text-sm">Case Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <InfoRow label="Type" value={caseData.case_type} />
-                <InfoRow label="Status" value={caseData.status} />
-                <InfoRow label="Risk Level" value={`${caseData.risk_level} (${caseData.risk_level_source})`} />
-                <InfoRow label="School Phase" value={caseData.school_phase_ref ?? 'N/A'} />
-                <InfoRow label="Opened" value={new Date(caseData.opened_date).toLocaleDateString()} />
-                {caseData.closed_date && (
-                  <InfoRow label="Closed" value={new Date(caseData.closed_date).toLocaleDateString()} />
-                )}
+                {/* Order: Classification → Category → Status → Case reported */}
+                <InfoRow
+                  label="Classification"
+                  value={classificationLabel(caseData.risk_level)}
+                  hint={caseData.risk_level_source}
+                />
+                <InfoRow label="Category" value={caseCategory} />
+                <InfoRow label="Status" value={statusLabel} />
+                <InfoRow
+                  label="Case reported"
+                  value={new Date(caseData.opened_date).toLocaleDateString()}
+                />
+
+                {/* Secondary case attributes */}
+                <div className="space-y-3 border-t border-border/50 pt-3">
+                  <InfoRow label="Type" value={caseData.case_type} />
+                  <InfoRow label="School Phase" value={caseData.school_phase_ref ?? 'N/A'} />
+                  {caseData.closed_date && (
+                    <InfoRow label="Closed" value={new Date(caseData.closed_date).toLocaleDateString()} />
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -563,7 +592,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                           <span className="text-xs text-muted-foreground">/ {inc.sub_category}</span>
                         )}
                         <Badge variant="outline" className={`text-[10px] ${RISK_COLORS[inc.severity] ?? ''}`}>
-                          {inc.severity}
+                          {classificationLabel(inc.severity)}
                         </Badge>
                         {inc.language_flag && (
                           <Badge variant="destructive" className="text-[10px]">⚠ Language Flag</Badge>
@@ -574,10 +603,10 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                     {/* Description */}
                     <p className="text-sm text-foreground leading-relaxed">{inc.description}</p>
 
-                    {/* Immediate Actions */}
+                    {/* Actions Taken So Far */}
                     {inc.immediate_actions && (
                       <div className="rounded-md bg-muted/40 border border-border/50 p-3">
-                        <p className="text-xs font-semibold text-muted-foreground mb-1">Immediate Actions Taken</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Actions Taken So Far</p>
                         <p className="text-sm">{inc.immediate_actions}</p>
                       </div>
                     )}
@@ -844,11 +873,14 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="flex justify-between text-sm">
+    <div className="flex justify-between items-baseline gap-3 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
+      <span className="font-medium text-right">
+        {value}
+        {hint && <span className="ml-1 text-xs font-normal text-muted-foreground">({hint})</span>}
+      </span>
     </div>
   );
 }

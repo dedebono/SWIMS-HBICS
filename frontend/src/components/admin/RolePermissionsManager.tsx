@@ -10,21 +10,17 @@ import { Separator } from "@/components/ui/separator";
 import { ShieldCheck, RefreshCw, Save, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
+import { LOGIN_ROLES } from "@/lib/constants";
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
-const ROLES = [
-  "TEACHER",
-  "SUBSTITUTE_TEACHER",
-  "COUNSELOR",
-  "SCHOOL_HEAD",
-  "SCHOOL_NURSE",
-  "BOARD_MEMBER",
-  "CASE_REVIEWER",
-  "IT_ADMIN",
-  "PERSONAL",
-] as const;
+// Mirrors `ROLE_NAMES` in shared/types/database.ts (the frontend cannot import
+// @swims/shared — see frontend/src/lib/constants.ts). `STUDENT` is absent on
+// purpose: students have no login and no permission matrix.
+const ROLES = LOGIN_ROLES;
 
+// Must cover every resource the backend enforces with checkPermission(), otherwise
+// those rows are invisible here and can only be changed via SQL.
 const RESOURCES: { key: string; label: string }[] = [
   { key: "cases", label: "Cases" },
   { key: "incidents", label: "Incidents" },
@@ -36,6 +32,11 @@ const RESOURCES: { key: string; label: string }[] = [
   { key: "audit_logs", label: "Audit Logs" },
   { key: "positive_observations", label: "Positive Observations" },
   { key: "students", label: "Students" },
+  { key: "appointments", label: "Appointments" },
+  { key: "availability", label: "Availability Slots" },
+  { key: "quisioner", label: "Quisioner" },
+  { key: "staff_quisioner", label: "Staff Quisioner" },
+  { key: "employee_counseling", label: "Employee Counseling" },
   { key: "admin", label: "Admin" },
 ];
 

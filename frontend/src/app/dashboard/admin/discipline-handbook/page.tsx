@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   BookOpen, Plus, Pencil, Trash2, RefreshCw, Save, ChevronDown, ChevronRight, ChevronUp,
   Layers, Scale, GraduationCap, FileText, AlertTriangle, FolderOpen, Users,
-  ExternalLink, X
+  ExternalLink, X, Download, Upload
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -145,6 +145,44 @@ export default function AdminDisciplineHandbookPage() {
   const levelName = (id: number) => levels.find(l => l.id === id)?.name ?? `Jenjang ${id}`;
   const levelCode = (id: number) => levels.find(l => l.id === id)?.code ?? `?`;
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleExport() {
+    try {
+      const res = await apiClient<any>('/discipline-handbook/export');
+      if (!res.success) { toast.error('Gagal export'); return; }
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `buku-pedoman-disiplin-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Berhasil export');
+    } catch { toast.error('Gagal export'); }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm(`Import data dari "${file.name}"? Semua data handbook saat ini akan diganti.`)) {
+      e.target.value = '';
+      return;
+    }
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await apiClient('/discipline-handbook/import', { method: 'POST', body: data });
+      if (res.success) {
+        toast.success('Berhasil import');
+        fetchAll();
+      } else {
+        toast.error(res.error || 'Gagal import');
+      }
+    } catch { toast.error('File tidak valid'); }
+    e.target.value = '';
+  }
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [catCollapsed, setCatCollapsed] = useState<Set<number>>(new Set());
   const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
@@ -168,7 +206,12 @@ export default function AdminDisciplineHandbookPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">Kelola kategori, jenjang, SOP penanganan, sanksi, dan dokumen.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchAll}><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Refresh</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={fetchAll}><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Refresh</Button>
+          <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-3.5 w-3.5 mr-1.5" />Export</Button>
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="h-3.5 w-3.5 mr-1.5" />Import</Button>
+          <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+        </div>
       </div>
 
       {/* ── Tab Navigation ── */}

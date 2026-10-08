@@ -24,8 +24,8 @@ const en: Translations = {
   'nav.dashboard': 'Dashboard',
   'nav.user_management': 'User Management',
   'nav.settings': 'Settings',
-  'nav.cases': 'Cases',
-  'nav.new_incident': 'New Incident',
+  'nav.cases': 'Student Cases',
+  'nav.new_incident': 'Report Incident',
   'nav.audit_logs': 'Audit Logs',
   'sidebar.subtitle': 'Wellbeing Management',
 };

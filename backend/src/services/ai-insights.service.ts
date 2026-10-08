@@ -9,11 +9,11 @@ export async function generateCaseSummary(tenantId: string, caseId: string): Pro
     const settings = tenantRows[0]?.settings || {};
     const aiSettings = settings.ai || {};
 
-    if (!aiSettings.aiEnabled) {
+    if (!aiSettings.enabled) {
       throw new Error('AI capabilities are disabled for this tenant.');
     }
 
-    if (!aiSettings.aiApiUrl || !aiSettings.aiApiKey) {
+    if (!aiSettings.apiUrl || !aiSettings.apiKey) {
       throw new Error('AI configuration is incomplete. Please configure API URL and Key in IT Admin settings.');
     }
 
@@ -34,14 +34,16 @@ export async function generateCaseSummary(tenantId: string, caseId: string): Pro
       ${historyText}
     `;
 
-    const response = await fetch(aiSettings.aiApiUrl, {
+    const apiUrl = aiSettings.apiUrl.replace(/\/$/, '') + '/chat/completions';
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${aiSettings.aiApiKey}`,
+        'Authorization': `Bearer ${aiSettings.apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: "default", // Or could be configurable
+        model: aiSettings.model || 'default',
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2
       })

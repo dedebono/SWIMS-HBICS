@@ -12,8 +12,13 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 import Papa from "papaparse";
 import RolePermissionsManager from "@/components/admin/RolePermissionsManager";
-
-type Role = 'STUDENT' | 'TEACHER' | 'COUNSELOR' | 'SCHOOL_HEAD' | 'SCHOOL_NURSE' | 'BOARD_MEMBER' | 'CASE_REVIEWER' | 'IT_ADMIN' | 'SUBSTITUTE_TEACHER' | 'PERSONAL' | 'PSYCHOLOGIST';
+import {
+  ACCOUNT_ROLES,
+  ASSIGNABLE_ROLES,
+  ROLE_LABELS,
+  type AccountRole,
+  type LoginRole,
+} from "@/lib/constants";
 
 interface UserData {
   id: string;
@@ -33,7 +38,7 @@ export default function AdminUsersPage() {
   const [formData, setFormData] = useState({
     full_name: "",
     email: "",
-    role: "STUDENT" as Role,
+    role: "STUDENT" as AccountRole,
     national_id: "",
     password: "",
     gender: "",
@@ -247,16 +252,42 @@ export default function AdminUsersPage() {
 
           // Validate and clean data — skip rows missing name / with invalid or
           // duplicate email; upload the rest.
+          //
+          // STUDENT rows are the exception on both counts: a student is a record
+          // in `students`, not a login account, so it needs no email (the
+          // optional `parent_email`/`email` column is stored as
+          // students.parent_email). Requiring a valid email silently dropped
+          // every student row from a CSV before.
+          const KNOWN_ROLES = new Set<string>(ACCOUNT_ROLES as readonly string[]);
           const parsedUsers = (results.data as any[])
             .map((row: any) => ({
               full_name: row.full_name?.trim(),
-              email: row.email?.trim(),
-              role: (row.role?.trim().toUpperCase() || "STUDENT") as Role,
+              email: row.email?.trim() || undefined,
+              role: (row.role?.trim().toUpperCase() || "STUDENT") as AccountRole,
               national_id: row.national_id?.trim() || undefined,
+              gender: row.gender?.trim() || undefined,
+              phone_number: row.phone_number?.trim() || undefined,
+              date_of_birth: row.date_of_birth?.trim() || undefined,
+              parent_email: row.parent_email?.trim() || undefined,
             }))
             .filter((u) => {
+              // Drop rows naming a role the backend would reject outright —
+              // the bulk endpoint is one transaction, so one bad role would
+              // roll back the entire batch.
+              if (!KNOWN_ROLES.has(u.role)) {
+                skippedLocal++;
+                return false;
+              }
+
               const emailLower = u.email?.toLowerCase();
-              // Require a name and a valid email; drop duplicate emails within the file.
+              // Staff need a unique, valid email; students need neither.
+              if (u.role === "STUDENT") {
+                if (!u.full_name) {
+                  skippedLocal++;
+                  return false;
+                }
+                return true;
+              }
               if (!u.full_name || !emailLower || !emailRegex.test(emailLower) || seenEmails.has(emailLower)) {
                 skippedLocal++;
                 return false;
@@ -351,23 +382,18 @@ export default function AdminUsersPage() {
               </div>
               <div className="space-y-2">
                 <Label>Role *</Label>
-                <Select 
-                  value={formData.role} 
-                  onValueChange={(v) => setFormData({ ...formData, role: v as Role })}
+                <Select
+                  value={formData.role}
+                  onValueChange={(v) => setFormData({ ...formData, role: v as AccountRole })}
+                  items={ROLE_LABELS}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="STUDENT">Student</SelectItem>
-                    <SelectItem value="TEACHER">Teacher</SelectItem>
-                    <SelectItem value="COUNSELOR">Counselor</SelectItem>
-                    <SelectItem value="PSYCHOLOGIST">Psychologist</SelectItem>
-                    <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
-                    <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
-                    <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
-                    <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
-                    <SelectItem value="PERSONAL">Personal</SelectItem>
+                    {ACCOUNT_ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -509,20 +535,20 @@ export default function AdminUsersPage() {
               />
             </div>
             <div className="w-full md:w-48">
-              <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value ?? 'ALL')}>
+              <Select
+                value={roleFilter}
+                onValueChange={(value) => setRoleFilter(value ?? 'ALL')}
+                items={{ ALL: 'All Roles', ...ROLE_LABELS }}
+              >
                 <SelectTrigger>
                   <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                   <SelectValue placeholder="Filter by Role" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Roles</SelectItem>
-                  <SelectItem value="STUDENT">Student</SelectItem>
-                  <SelectItem value="TEACHER">Teacher</SelectItem>
-                  <SelectItem value="COUNSELOR">Counselor</SelectItem>
-                  <SelectItem value="PSYCHOLOGIST">Psychologist</SelectItem>
-                  <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
-                  <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
-                  <SelectItem value="PERSONAL">Personal</SelectItem>
+                  {ACCOUNT_ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -663,19 +689,18 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Role</Label>
-                  <Select value={editForm.role} onValueChange={v => setEditForm({ ...editForm, role: v ?? '' })}>
+                  <Select
+                    value={editForm.role}
+                    onValueChange={v => setEditForm({ ...editForm, role: v ?? '' })}
+                    items={ROLE_LABELS}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="TEACHER">Teacher</SelectItem>
-                      <SelectItem value="COUNSELOR">Counselor</SelectItem>
-                      <SelectItem value="PSYCHOLOGIST">Psychologist</SelectItem>
-                      <SelectItem value="SCHOOL_HEAD">School Head</SelectItem>
-                      <SelectItem value="SCHOOL_NURSE">School Nurse</SelectItem>
-                      <SelectItem value="BOARD_MEMBER">Board Member</SelectItem>
-                      <SelectItem value="IT_ADMIN">IT Admin</SelectItem>
-                      <SelectItem value="PERSONAL">Personal</SelectItem>
+                      {ASSIGNABLE_ROLES.map((r) => (
+                        <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
