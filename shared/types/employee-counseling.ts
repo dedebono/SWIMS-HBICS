@@ -179,22 +179,29 @@ export interface SessionSection10Closure {
 
 export const EmployeeCounselingSubmissionSchema = z.object({
   employee_name: z.string().min(1),
-  unit: z.string().optional(),
-  position: z.string().optional(),
-  contact_number: z.string().optional(),
+  // These are NULLABLE columns in the DB (migration 044: `unit TEXT` with no
+  // NOT NULL) and submitIntake() explicitly persists `data.unit ?? null`.
+  // `z.string().optional()` accepts `undefined` but REJECTS `null`, so a client
+  // that omits the field by sending `null` got 422 "Expected string, received
+  // null". `.nullish()` accepts both, matching the storage contract.
+  unit: z.string().nullish(),
+  position: z.string().nullish(),
+  contact_number: z.string().nullish(),
   answers: z.object({
     q1_alasan: z.array(z.string()).min(1),
-    q2_deskripsi: z.string().optional(),
+    // Same reasoning: optional free-text fields are stored inside the answers
+    // JSONB blob, where an absent key and an explicit null mean the same thing.
+    q2_deskripsi: z.string().nullish(),
     q3_durasi: z.string(),
     q4_dampak: z.number().int().min(1).max(5),
     q5_area_terdampak: z.array(z.string()),
     q6_harapan: z.array(z.string()),
     q7_pernah_konseling: z.enum(['belum_pernah', 'pernah', 'sedang_dalam_pendampingan']),
-    q7_pernah_konseling_detail: z.string().optional(),
+    q7_pernah_konseling_detail: z.string().nullish(),
     q8_safety_threat: z.enum(['tidak', 'ya', 'tidak_yakin']),
     q9_bantuan_segera: z.enum(['tidak', 'ya', 'tidak_yakin']),
     e_waktu: z.array(z.string()),
-    e_hari: z.string().optional(),
+    e_hari: z.string().nullish(),
     e_metode: z.enum(['tatap_muka', 'online', 'tanpa_preferensi']),
     e_konselor_preferensi: z.enum(['tanpa_preferensi', 'konselor_pria', 'konselor_wanita']),
   }),

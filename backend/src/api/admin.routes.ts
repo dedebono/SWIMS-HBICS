@@ -15,6 +15,7 @@ import {
   resetRolePermissions,
 } from '../services/role-permissions.service.js';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { buildAvatarUrl } from '../services/avatar.service.js';
 import { pool } from '../db/pool.js';
 import { hashNationalId, encryptField, decryptField } from '../utils/encryption.js';
 import type { UserRow } from '@swims/shared';
@@ -59,6 +60,29 @@ async function decorateStudent(row: any): Promise<any> {
     try { row.national_id = decryptField(row.national_id); } catch { /* keep as stored */ }
   }
   return { ...row, role: STUDENT, is_active: true, type: STUDENT };
+}
+
+/**
+ * Attach the signed avatar URLs to a row that already selected
+ * `avatar_key` / `avatar_updated_at`.
+ *
+ * The URL is signed (an `<img>` cannot send an Authorization header) and carries
+ * the upload timestamp as `v=`, so replacing a photo busts the browser cache
+ * instead of leaving a stale face on screen. Rows without a photo get nulls plus
+ * `has_photo: false`, which lets the UI skip the request entirely and render
+ * initials.
+ */
+function withAvatar(row: any, tenantId: string): any {
+  const hasPhoto = Boolean(row?.avatar_key);
+  if (!hasPhoto) {
+    return { ...row, has_photo: false, avatar_url: null, thumb_url: null };
+  }
+  return {
+    ...row,
+    has_photo: true,
+    avatar_url: buildAvatarUrl(row.id, tenantId, 'full', row.avatar_updated_at),
+    thumb_url: buildAvatarUrl(row.id, tenantId, 'thumb', row.avatar_updated_at),
+  };
 }
 
 /**
@@ -150,7 +174,11 @@ router.get(
       `SELECT user_id as id, full_name, email, role,
               is_active, created_at, national_id,
               CASE WHEN role = 'STUDENT' THEN 'STUDENT' ELSE 'STAFF' END as type,
-              gender
+              gender, avatar_key, avatar_updated_at,
+              -- The users table has no phone_number column (only students does);
+              -- the UNION needs both branches to line up, and the frontend only
+              -- reads this field for student rows.
+              NULL::varchar as phone_number
        FROM users
        WHERE tenant_id = $1 AND deleted_at IS NULL
        UNION ALL
@@ -158,7 +186,7 @@ router.get(
               parent_email as email, 'STUDENT' as role,
               true as is_active, created_at, national_id,
               'STUDENT' as type,
-              gender
+              gender, avatar_key, avatar_updated_at, phone_number
        FROM students
        WHERE tenant_id = $1 AND deleted_at IS NULL
        ORDER BY full_name ASC`,
@@ -170,7 +198,7 @@ router.get(
         try { row.national_id = decryptField(row.national_id); } catch { /* keep encrypted */ }
       }
     }
-    sendSuccess(res, rows);
+    sendSuccess(res, (rows as any[]).map((row) => withAvatar(row, tenantId)));
   }),
 );
 
@@ -354,20 +382,43 @@ router.delete(
   asyncHandler(async (req, res) => {
     const tenantId = (req as any).tenantId;
     const id = String(req.params.id);
+    // An admin deleting their own account soft-deletes the only login that can
+    // undo it — the school then has no way back in. Refuse before any write.
+    if (id === req.userId) {
+      sendError(res, 'Anda tidak dapat menghapus akun Anda sendiri.', 400);
+      return;
+    }
     // Resolve first and verify the UPDATE actually matched a row. The old code
     // ran the UPDATE, ignored the result, and always replied {deleted:true} —
     // so deleting a student silently did nothing while reporting success.
     const table = await resolveAccountTable(tenantId, id);
     if (!table) { sendError(res, 'Account not found', 404); return; }
 
+    // A soft-deleted row keeps its avatar_key, so the photo files must go too or
+    // they linger in the media volume with no owner. deleteAvatar cannot be used
+    // here — it re-reads the row with `deleted_at IS NULL`, which we just cleared.
+    // Ignore failures: a stale file is recoverable, a failed DELETE is not.
+    if (table === 'users') {
+      const { rows } = await pool.query(
+        `UPDATE users SET deleted_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+         RETURNING avatar_key`,
+        [id, tenantId],
+      );
+      if (!rows.length) { sendError(res, 'Account not found', 404); return; }
+      if (rows[0].avatar_key) {
+        const { deleteAvatarFiles } = await import('../services/avatar.service.js');
+        await deleteAvatarFiles(rows[0].avatar_key).catch(() => undefined);
+      }
+      sendSuccess(res, { deleted: true, type: 'STAFF' });
+      return;
+    }
+
     const { rowCount } = await pool.query(
-      table === 'students'
-        ? `UPDATE students SET deleted_at = NOW() WHERE student_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`
-        : `UPDATE users SET deleted_at = NOW() WHERE user_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      `UPDATE students SET deleted_at = NOW() WHERE student_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
       [id, tenantId],
     );
     if (!rowCount) { sendError(res, 'Account not found', 404); return; }
-    sendSuccess(res, { deleted: true, type: table === 'students' ? STUDENT : 'STAFF' });
+    sendSuccess(res, { deleted: true, type: 'STUDENT' });
   }),
 );
 

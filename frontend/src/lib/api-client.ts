@@ -37,18 +37,32 @@ export function clearTokens(): void {
   localStorage.removeItem('swims_user');
 }
 
-export function getStoredUser(): { user_id: string; full_name: string; email: string; role: string; tenant_id: string; gender?: string } | null {
+/** Shape of the user object persisted in localStorage by `swims_user`. */
+export type StoredUser = {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  tenant_id: string;
+  gender?: string;
+  /** Signed 128px WebP URL from /auth/login, or null when no photo is set. */
+  avatar_url?: string | null;
+  /** Signed 512px WebP URL, or null. */
+  avatar_full_url?: string | null;
+};
+
+export function getStoredUser(): StoredUser | null {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem('swims_user');
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as { user_id: string; full_name: string; email: string; role: string; tenant_id: string; gender?: string };
+    return JSON.parse(raw) as StoredUser;
   } catch {
     return null;
   }
 }
 
-export function setStoredUser(user: { user_id: string; full_name: string; email: string; role: string; tenant_id: string; gender?: string }): void {
+export function setStoredUser(user: StoredUser): void {
   localStorage.setItem('swims_user', JSON.stringify(user));
 }
 

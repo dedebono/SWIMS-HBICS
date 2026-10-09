@@ -1,17 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { useEffect, useMemo, useState } from "react";
 import { id as idLocale } from "date-fns/locale";
 import { formatInTimeZone } from "date-fns-tz";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import {
+  CalendarClock,
+  CheckCircle2,
+  ClipboardList,
+  Inbox,
+  UserRound,
+  XCircle,
+} from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { IconBox } from "@/components/ui/icon-box";
+import { EmptyState, PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge, severityTone } from "@/components/ui/status-badge";
 import { apiClient } from "@/lib/api-client";
-import { toast } from "sonner";
-import { CheckCircle2, XCircle, ClipboardList } from "lucide-react";
 
 interface ReferralRow {
   referral_id: string;
@@ -29,6 +45,13 @@ interface ReferralRow {
 
 const refTypeLabel = (t: string) =>
   t === "internal_psychologist" ? "Psikolog Sekolah" : "Puspaga (Eksternal)";
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Menunggu Persetujuan",
+  approved: "Disetujui",
+  rejected: "Ditolak",
+  completed: "Selesai",
+};
 
 export default function ApprovalsPage() {
   const [items, setItems] = useState<ReferralRow[]>([]);
@@ -62,79 +85,164 @@ export default function ApprovalsPage() {
     }
   };
 
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      pending: items.filter((r) => r.status === "pending").length,
+      approved: items.filter((r) => r.status === "approved").length,
+      rejected: items.filter((r) => r.status === "rejected").length,
+    }),
+    [items]
+  );
+
+  const decided = stats.approved + stats.rejected;
+
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Persetujuan Rujukan Psikolog</h1>
-        <p className="text-muted-foreground">
-          Antrian rujukan dari konselor yang menunggu persetujuan Anda (pemimpin area/divisi).
-        </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Persetujuan Rujukan Psikolog"
+        description="Antrian rujukan dari konselor yang menunggu persetujuan Anda sebagai pemimpin area atau divisi."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total Rujukan"
+          value={stats.total}
+          hint="Seluruh rujukan yang masuk ke meja Anda"
+          icon={<ClipboardList className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Menunggu Persetujuan"
+          value={stats.pending}
+          hint="Perlu ditinjau dan diputuskan"
+          icon={<Inbox className="size-5" />}
+          iconTone="yellow"
+          trend={stats.pending > 0 ? "up" : "flat"}
+          trendLabel={stats.pending > 0 ? "Perlu tindakan" : "Semua beres"}
+        />
+        <StatCard
+          label="Disetujui"
+          value={stats.approved}
+          hint="Rujukan diteruskan ke psikolog tujuan"
+          icon={<CheckCircle2 className="size-5" />}
+          iconTone="green"
+          trend="up"
+          trendLabel="Sudah diproses"
+        />
+        <StatCard
+          label="Ditolak"
+          value={stats.rejected}
+          hint="Rujukan tidak dilanjutkan"
+          icon={<XCircle className="size-5" />}
+          iconTone="red"
+          progress={stats.total > 0 ? (decided / stats.total) * 100 : 0}
+          progressLabel="Progres keputusan rujukan"
+        />
       </div>
 
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Memuat…</p>
-      ) : items.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm gap-2">
-            <CheckCircle2 className="w-6 h-6 opacity-50" />
-            <p>Tidak ada rujukan menunggu persetujuan.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        items.map((r) => (
-          <Card key={r.referral_id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ClipboardList className="w-4 h-4" />
-                  {refTypeLabel(r.referral_type)}
-                </CardTitle>
-                <Badge className="text-[10px] bg-yellow-100 text-yellow-700">{r.status}</Badge>
+      <Card>
+        <CardHeader>
+          <CardTitle>Antrean Rujukan</CardTitle>
+          <CardDescription>
+            Baca alasan rujukan, tambahkan catatan bila perlu, lalu setujui atau tolak.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loading ? (
+            <div className="flex flex-col items-center gap-3 py-10">
+              <div className="size-9 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+              <p className="text-sm font-medium text-muted-foreground">Memuat antrean rujukan…</p>
+            </div>
+          ) : items.length === 0 ? (
+            <EmptyState
+              icon={<CheckCircle2 className="size-6" />}
+              title="Tidak ada rujukan menunggu persetujuan"
+              description="Semua rujukan sudah diproses. Rujukan baru dari konselor akan otomatis tampil di sini."
+            />
+          ) : (
+            items.map((r) => (
+              <div
+                key={r.referral_id}
+                className="rounded-2xl border border-border bg-card p-4 shadow-card sm:p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <IconBox tone="purple" size="sm">
+                      <ClipboardList className="size-4" />
+                    </IconBox>
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-heading text-sm font-semibold text-heading">
+                        {refTypeLabel(r.referral_type)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Diusulkan oleh {r.recommended_by_name ?? "Konselor"}
+                        {r.appointment_type
+                          ? ` • ${r.appointment_type === "student" ? "Siswa" : "Personal"}`
+                          : ""}
+                        {r.created_for ? ` • ${r.created_for}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <StatusBadge
+                    tone={severityTone(r.status)}
+                    label={STATUS_LABEL[r.status] ?? r.status}
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+                  {r.scheduled_at ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <CalendarClock className="size-3.5 shrink-0" />
+                      {formatInTimeZone(new Date(r.scheduled_at), "Asia/Jakarta", "dd MMM yyyy HH:mm", {
+                        locale: idLocale,
+                      })}
+                    </span>
+                  ) : null}
+                  {r.created_for ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <UserRound className="size-3.5 shrink-0" />
+                      {r.created_for}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 rounded-xl border border-border bg-background p-3.5">
+                  <p className="text-xs font-semibold text-heading">Alasan rujukan</p>
+                  <p className="mt-1 text-sm leading-relaxed text-secondary-text">{r.reason}</p>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <Label htmlFor={`note-${r.referral_id}`}>Catatan persetujuan (opsional)</Label>
+                  <Textarea
+                    id={`note-${r.referral_id}`}
+                    rows={2}
+                    placeholder="Catatan untuk konselor…"
+                    value={notes[r.referral_id] ?? ""}
+                    onChange={(e) => setNotes((p) => ({ ...p, [r.referral_id]: e.target.value }))}
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={busyId === r.referral_id}
+                    onClick={() => decide(r.referral_id, false)}
+                  >
+                    <XCircle className="size-4" /> Tolak
+                  </Button>
+                  <Button
+                    disabled={busyId === r.referral_id}
+                    onClick={() => decide(r.referral_id, true)}
+                  >
+                    <CheckCircle2 className="size-4" /> Setujui
+                  </Button>
+                </div>
               </div>
-              <CardDescription>
-                Diusulkan oleh {r.recommended_by_name ?? "Konselor"}
-                {r.appointment_type ? ` • ${r.appointment_type === "student" ? "Siswa" : "Personal"}` : ""}
-                {r.created_for ? ` • ${r.created_for}` : ""}
-                {r.scheduled_at
-                  ? ` • ${formatInTimeZone(new Date(r.scheduled_at), 'Asia/Jakarta', "dd MMM yyyy HH:mm", { locale: idLocale })}`
-                  : ""}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm">{r.reason}</p>
-              <div className="space-y-1">
-                <Label className="text-xs">Catatan Persetujuan (opsional)</Label>
-                <Textarea
-                  className="text-xs"
-                  rows={2}
-                  placeholder="Catatan untuk konselor…"
-                  value={notes[r.referral_id] ?? ""}
-                  onChange={(e) => setNotes((p) => ({ ...p, [r.referral_id]: e.target.value }))}
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={busyId === r.referral_id}
-                  className="gap-1.5"
-                  onClick={() => decide(r.referral_id, false)}
-                >
-                  <XCircle className="w-4 h-4" /> Tolak
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={busyId === r.referral_id}
-                  className="gap-1.5"
-                  onClick={() => decide(r.referral_id, true)}
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Setujui
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))
-      )}
+            ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

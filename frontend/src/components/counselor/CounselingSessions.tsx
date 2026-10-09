@@ -1,21 +1,50 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
-import { id as idLocale } from "date-fns/locale";
-import { formatInTimeZone } from "date-fns-tz";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { apiClient } from "@/lib/api-client";
-import { toast } from "sonner";
-import { Calendar, ClipboardList, FileCheck2, ExternalLink } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { id as idLocale } from 'date-fns/locale';
+import { formatInTimeZone } from 'date-fns-tz';
+import { toast } from 'sonner';
+import {
+  CalendarClock,
+  CalendarDays,
+  ClipboardList,
+  ExternalLink,
+  FileCheck2,
+  MapPin,
+  NotebookPen,
+  Save,
+  Send,
+  UserRound,
+  Users,
+  XCircle,
+} from 'lucide-react';
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { IconBox } from '@/components/ui/icon-box';
+import { EmptyState } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge, severityTone } from '@/components/ui/status-badge';
+import { apiClient } from '@/lib/api-client';
 
 interface CounselorAppt {
   appointment_id: string;
-  type: "student" | "personal";
+  type: 'student' | 'personal';
   status: string;
   scheduled_at: string | null;
   location: string | null;
@@ -30,34 +59,31 @@ interface ReferralView {
   appointment_id: string | null;
   recommended_by: string | null;
   reason: string;
-  referral_type: "internal_psychologist" | "puspaga_external";
-  status: "pending" | "approved" | "rejected" | "completed";
+  referral_type: 'internal_psychologist' | 'puspaga_external';
+  status: 'pending' | 'approved' | 'rejected' | 'completed';
   leader_note: string | null;
 }
 
-const apptStatusColor = (s: string) => {
-  switch (s) {
-    case "confirmed": return "bg-green-100 text-green-800";
-    case "pending": return "bg-yellow-100 text-yellow-800";
-    case "awaiting_psychologist_availability": return "bg-indigo-100 text-indigo-800";
-    case "cancelled": return "bg-red-100 text-red-800";
-    case "completed": return "bg-blue-100 text-blue-800";
-    default: return "bg-gray-100 text-gray-800";
-  }
+const APPT_STATUS_LABEL: Record<string, string> = {
+  pending: 'Menunggu',
+  confirmed: 'Terkonfirmasi',
+  awaiting_psychologist_availability: 'Menunggu Ketersediaan Psikolog',
+  cancelled: 'Dibatalkan',
+  completed: 'Selesai',
 };
 
-const refStatusColor = (s: string) => {
-  switch (s) {
-    case "approved": return "bg-green-100 text-green-700";
-    case "pending": return "bg-yellow-100 text-yellow-700";
-    case "rejected": return "bg-red-100 text-red-700";
-    case "completed": return "bg-blue-100 text-blue-700";
-    default: return "bg-gray-100 text-gray-700";
-  }
+const REF_STATUS_LABEL: Record<string, string> = {
+  pending: 'Menunggu Persetujuan',
+  approved: 'Disetujui',
+  rejected: 'Ditolak',
+  completed: 'Selesai',
 };
+
+const apptTone = (s: string) =>
+  s === 'awaiting_psychologist_availability' ? ('purple' as const) : severityTone(s);
 
 const refTypeLabel = (t: string) =>
-  t === "internal_psychologist" ? "Psikolog Sekolah" : "Puspaga (Eksternal)";
+  t === 'internal_psychologist' ? 'Psikolog Sekolah' : 'Puspaga (Eksternal)';
 
 export default function CounselingSessions() {
   const [appointments, setAppointments] = useState<CounselorAppt[]>([]);
@@ -66,22 +92,22 @@ export default function CounselingSessions() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
   const [refFormFor, setRefFormFor] = useState<string | null>(null);
-  const [refDraft, setRefDraft] = useState<{ reason: string; type: "internal_psychologist" | "puspaga_external" }>({ reason: "", type: "internal_psychologist" });
+  const [refDraft, setRefDraft] = useState<{ reason: string; type: 'internal_psychologist' | 'puspaga_external' }>({ reason: '', type: 'internal_psychologist' });
   const [submittingRef, setSubmittingRef] = useState(false);
   const [externalResult, setExternalResult] = useState<Record<string, string>>({});
   const [savingExtId, setSavingExtId] = useState<string | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
-    const user = JSON.parse(localStorage.getItem("swims_user") || "{}");
+    const user = JSON.parse(localStorage.getItem('swims_user') || '{}');
     const [apptRes, refRes] = await Promise.all([
       apiClient<CounselorAppt[]>(`/appointments?counselor_id=${user.user_id}`),
-      apiClient<ReferralView[]>("/referrals"),
+      apiClient<ReferralView[]>('/referrals'),
     ]);
     if (apptRes.success && apptRes.data) {
       setAppointments(apptRes.data);
       const init: Record<string, string> = {};
-      apptRes.data.forEach((a) => (init[a.appointment_id] = a.notes ?? ""));
+      apptRes.data.forEach((a) => (init[a.appointment_id] = a.notes ?? ''));
       setNotes(init);
     }
     if (refRes.success && refRes.data) setReferrals(refRes.data);
@@ -97,197 +123,297 @@ export default function CounselingSessions() {
   const saveNotes = async (apptId: string) => {
     setSavingNoteId(apptId);
     const res = await apiClient(`/appointments/${apptId}/notes`, {
-      method: "PATCH",
-      body: { notes: notes[apptId] ?? "" },
+      method: 'PATCH',
+      body: { notes: notes[apptId] ?? '' },
     });
     setSavingNoteId(null);
-    if (res.success) toast.success("Catatan sesi disimpan");
-    else toast.error(res.error ?? "Gagal menyimpan");
+    if (res.success) toast.success('Catatan sesi disimpan');
+    else toast.error(res.error ?? 'Gagal menyimpan');
   };
 
   const submitReferral = async (apptId: string) => {
     if (!refDraft.reason.trim()) {
-      toast.error("Alasan rujukan wajib diisi.");
+      toast.error('Alasan rujukan wajib diisi.');
       return;
     }
     setSubmittingRef(true);
-    const res = await apiClient("/referrals", {
-      method: "POST",
+    const res = await apiClient('/referrals', {
+      method: 'POST',
       body: { appointment_id: apptId, reason: refDraft.reason, referral_type: refDraft.type },
     });
     setSubmittingRef(false);
     if (res.success) {
-      toast.success("Rujukan dikirim, menunggu persetujuan School Head.");
+      toast.success('Rujukan dikirim, menunggu persetujuan School Head.');
       setRefFormFor(null);
-      setRefDraft({ reason: "", type: "internal_psychologist" });
+      setRefDraft({ reason: '', type: 'internal_psychologist' });
       fetchAll();
     } else {
-      toast.error(res.error ?? "Gagal mengirim rujukan");
+      toast.error(res.error ?? 'Gagal mengirim rujukan');
     }
   };
 
   const saveExternal = async (referralId: string) => {
     if (!externalResult[referralId]?.trim()) {
-      toast.error("Hasil konsultasi wajib diisi.");
+      toast.error('Hasil konsultasi wajib diisi.');
       return;
     }
     setSavingExtId(referralId);
     const res = await apiClient(`/referrals/${referralId}/external-result`, {
-      method: "POST",
+      method: 'POST',
       body: { note: externalResult[referralId] },
     });
     setSavingExtId(null);
     if (res.success) {
-      toast.success("Hasil konsultasi Puspaga tersimpan.");
+      toast.success('Hasil konsultasi Puspaga tersimpan.');
       fetchAll();
     } else {
-      toast.error(res.error ?? "Gagal menyimpan hasil");
+      toast.error(res.error ?? 'Gagal menyimpan hasil');
     }
   };
 
+  const pendingReferrals = appointments.filter(
+    (a) => referralFor(a.appointment_id)?.status === 'pending'
+  ).length;
+  const studentSessions = appointments.filter((a) => a.type === 'student').length;
+  const personalSessions = appointments.length - studentSessions;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Janji Temu & Rujukan Saya</CardTitle>
-        <CardDescription>
-          Isi hasil sesi konseling (poin 6) dan buat rujukan psikolog — disetujui 2 pihak (Anda + School Head).
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Memuat…</p>
-        ) : appointments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Belum ada janji temu.</p>
-        ) : (
-          appointments.map((a) => {
-            const ref = referralFor(a.appointment_id);
-            return (
-              <div key={a.appointment_id} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium capitalize">
-                      {a.type === "student" ? "Siswa" : "Personal (Guru/Staf)"}
-                      {a.created_for_name ? ` • ${a.created_for_name}` : a.created_for ? ` • ${a.created_for}` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {a.scheduled_at
-                        ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', "dd MMM yyyy HH:mm", { locale: idLocale })
-                        : "Belum dijadwalkan"}
-                      {a.location ? ` • ${a.location}` : ""}
-                    </p>
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard
+          label="Total Janji Temu"
+          value={appointments.length}
+          hint="Sesi konseling yang ditugaskan kepada Anda"
+          icon={<CalendarDays className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Sesi Siswa"
+          value={studentSessions}
+          hint="Konseling untuk siswa"
+          icon={<Users className="size-5" />}
+          iconTone="purple"
+        />
+        <StatCard
+          label="Rujukan Menunggu Persetujuan"
+          value={pendingReferrals}
+          hint="Menunggu keputusan School Head"
+          icon={<ClipboardList className="size-5" />}
+          iconTone="yellow"
+          trend={pendingReferrals > 0 ? 'up' : 'flat'}
+          trendLabel={pendingReferrals > 0 ? 'Perlu ditinjau' : 'Semua beres'}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Janji Temu &amp; Rujukan Saya</CardTitle>
+          <CardDescription>
+            Isi hasil sesi konseling (poin 6) dan buat rujukan psikolog — disetujui 2 pihak (Anda +
+            School Head). Sesi personal: {personalSessions}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loading ? (
+            <div className="flex flex-col items-center gap-3 py-10">
+              <div className="size-9 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+              <p className="text-sm font-medium text-muted-foreground">Memuat janji temu…</p>
+            </div>
+          ) : appointments.length === 0 ? (
+            <EmptyState
+              icon={<CalendarClock className="size-6" />}
+              title="Belum ada janji temu"
+              description="Belum ada sesi konseling yang ditugaskan kepada Anda. Janji temu baru akan otomatis tampil di sini."
+            />
+          ) : (
+            appointments.map((a) => {
+              const ref = referralFor(a.appointment_id);
+              return (
+                <div
+                  key={a.appointment_id}
+                  className="rounded-2xl border border-border bg-card p-4 shadow-card sm:p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <IconBox tone={a.type === 'student' ? 'purple' : 'teal'} size="sm">
+                        <UserRound className="size-4" />
+                      </IconBox>
+                      <div className="min-w-0 space-y-1">
+                        <p className="font-heading text-sm font-semibold text-heading">
+                          {a.created_for_name ?? a.created_for ?? 'Tanpa nama'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {a.type === 'student' ? 'Sesi Siswa' : 'Sesi Personal (Guru/Staf)'}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <CalendarClock className="size-3.5 shrink-0" />
+                            {a.scheduled_at
+                              ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', {
+                                  locale: idLocale,
+                                })
+                              : 'Belum dijadwalkan'}
+                          </span>
+                          {a.location ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <MapPin className="size-3.5 shrink-0" />
+                              {a.location}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <StatusBadge
+                      tone={apptTone(a.status)}
+                      label={APPT_STATUS_LABEL[a.status] ?? a.status}
+                    />
                   </div>
-                  <Badge className={`text-[10px] ${apptStatusColor(a.status)}`}>{a.status}</Badge>
-                </div>
 
-                {/* Hasil Sesi (point 6 hook) */}
-                <div className="space-y-1">
-                  <Label className="text-xs">Hasil Sesi Konseling</Label>
-                  <Textarea
-                    className="text-xs"
-                    rows={2}
-                    placeholder="Catatan hasil sesi…"
-                    value={notes[a.appointment_id] ?? ""}
-                    onChange={(e) => setNotes((p) => ({ ...p, [a.appointment_id]: e.target.value }))}
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={savingNoteId === a.appointment_id}
-                      onClick={() => saveNotes(a.appointment_id)}
-                    >
-                      {savingNoteId === a.appointment_id ? "Menyimpan…" : "Simpan Catatan"}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Rujukan */}
-                {!ref && refFormFor !== a.appointment_id && (
-                  <Button size="sm" variant="secondary" className="gap-2" onClick={() => setRefFormFor(a.appointment_id)}>
-                    <ClipboardList className="w-4 h-4" /> Buat Rujukan Psikolog
-                  </Button>
-                )}
-
-                {!ref && refFormFor === a.appointment_id && (
-                  <div className="space-y-2 border rounded p-3 bg-muted/30">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Jenis Rujukan</Label>
-                      <select
-                        className="border rounded p-2 w-full text-sm"
-                        value={refDraft.type}
-                        onChange={(e) => setRefDraft((p) => ({ ...p, type: e.target.value as "internal_psychologist" | "puspaga_external" }))}
+                  {/* Hasil Sesi (point 6 hook) */}
+                  <div className="mt-4 space-y-2 rounded-xl border border-border bg-background p-3.5">
+                    <Label htmlFor={`notes-${a.appointment_id}`}>
+                      <NotebookPen className="size-3.5" />
+                      Hasil Sesi Konseling
+                    </Label>
+                    <Textarea
+                      id={`notes-${a.appointment_id}`}
+                      rows={2}
+                      placeholder="Catatan hasil sesi…"
+                      value={notes[a.appointment_id] ?? ''}
+                      onChange={(e) => setNotes((p) => ({ ...p, [a.appointment_id]: e.target.value }))}
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        disabled={savingNoteId === a.appointment_id}
+                        onClick={() => saveNotes(a.appointment_id)}
                       >
-                        <option value="internal_psychologist">Psikolog Sekolah</option>
-                        <option value="puspaga_external">Puspaga (Eksternal)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Alasan Rujukan</Label>
-                      <Textarea
-                        className="text-xs"
-                        rows={2}
-                        placeholder="Jelaskan alasan rujukan…"
-                        value={refDraft.reason}
-                        onChange={(e) => setRefDraft((p) => ({ ...p, reason: e.target.value }))}
-                      />
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => setRefFormFor(null)}>Batal</Button>
-                      <Button size="sm" disabled={submittingRef} onClick={() => submitReferral(a.appointment_id)}>
-                        {submittingRef ? "Mengirim…" : "Kirim Rujukan"}
+                        <Save className="size-4" />
+                        {savingNoteId === a.appointment_id ? 'Menyimpan…' : 'Simpan Catatan'}
                       </Button>
                     </div>
                   </div>
-                )}
 
-                {ref && (
-                  <div className="border rounded p-3 bg-muted/30 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium flex items-center gap-1.5">
-                        <ClipboardList className="w-3.5 h-3.5" />
-                        Rujukan: {refTypeLabel(ref.referral_type)}
-                      </p>
-                      <Badge className={`text-[10px] ${refStatusColor(ref.status)}`}>{ref.status}</Badge>
+                  {/* Rujukan */}
+                  {!ref && refFormFor !== a.appointment_id && (
+                    <div className="mt-4 flex justify-end">
+                      <Button variant="outline" onClick={() => setRefFormFor(a.appointment_id)}>
+                        <ClipboardList className="size-4" /> Buat Rujukan Psikolog
+                      </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">{ref.reason}</p>
-                    {ref.status === "rejected" && ref.leader_note && (
-                      <p className="text-xs text-red-600">Ditolak: {ref.leader_note}</p>
-                    )}
-                    {ref.status === "approved" && ref.referral_type === "internal_psychologist" && (
-                      <p className="text-xs text-green-700 flex items-center gap-1.5">
-                        <FileCheck2 className="w-3.5 h-3.5" /> Disetujui — janji temu tampil di dashboard psikolog.
+                  )}
+
+                  {!ref && refFormFor === a.appointment_id && (
+                    <div className="mt-4 space-y-3 rounded-xl border border-primary/25 bg-primary-softer p-4">
+                      <p className="font-heading text-sm font-semibold text-heading">
+                        Formulir Rujukan Psikolog
                       </p>
-                    )}
-                    {ref.status === "approved" && ref.referral_type === "puspaga_external" && (
                       <div className="space-y-2">
-                        <Label className="text-xs flex items-center gap-1.5">
-                          <ExternalLink className="w-3.5 h-3.5" /> Hasil Konsultasi Puspaga
-                        </Label>
-                        <Textarea
-                          className="text-xs"
-                          rows={2}
-                          placeholder="Isi hasil konsultasi eksternal…"
-                          value={externalResult[ref.referral_id] ?? ""}
-                          onChange={(e) => setExternalResult((p) => ({ ...p, [ref.referral_id]: e.target.value }))}
-                        />
-                        <div className="flex justify-end">
-                          <Button
-                            size="sm"
-                            disabled={savingExtId === ref.referral_id}
-                            onClick={() => saveExternal(ref.referral_id)}
-                          >
-                            {savingExtId === ref.referral_id ? "Menyimpan…" : "Simpan Hasil"}
-                          </Button>
-                        </div>
+                        <Label htmlFor={`ref-type-${a.appointment_id}`}>Jenis Rujukan</Label>
+                        <Select
+                          value={refDraft.type}
+                          onValueChange={(value) =>
+                            setRefDraft((p) => ({
+                              ...p,
+                              type: value as 'internal_psychologist' | 'puspaga_external',
+                            }))
+                          }
+                        >
+                          <SelectTrigger id={`ref-type-${a.appointment_id}`} className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="internal_psychologist">Psikolog Sekolah</SelectItem>
+                            <SelectItem value="puspaga_external">Puspaga (Eksternal)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </CardContent>
-    </Card>
+                      <div className="space-y-2">
+                        <Label htmlFor={`ref-reason-${a.appointment_id}`}>Alasan Rujukan</Label>
+                        <Textarea
+                          id={`ref-reason-${a.appointment_id}`}
+                          rows={2}
+                          placeholder="Jelaskan alasan rujukan…"
+                          value={refDraft.reason}
+                          onChange={(e) => setRefDraft((p) => ({ ...p, reason: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setRefFormFor(null)}>
+                          Batal
+                        </Button>
+                        <Button disabled={submittingRef} onClick={() => submitReferral(a.appointment_id)}>
+                          <Send className="size-4" />
+                          {submittingRef ? 'Mengirim…' : 'Kirim Rujukan'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {ref && (
+                    <div className="mt-4 space-y-2.5 rounded-xl border border-border bg-background p-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="inline-flex items-center gap-2 font-heading text-sm font-semibold text-heading">
+                          <IconBox tone="purple" size="sm">
+                            <ClipboardList className="size-4" />
+                          </IconBox>
+                          Rujukan: {refTypeLabel(ref.referral_type)}
+                        </p>
+                        <StatusBadge
+                          tone={severityTone(ref.status)}
+                          label={REF_STATUS_LABEL[ref.status] ?? ref.status}
+                        />
+                      </div>
+                      <p className="text-sm leading-relaxed text-secondary-text">{ref.reason}</p>
+
+                      {ref.status === 'rejected' && ref.leader_note && (
+                        <p className="inline-flex items-start gap-2 text-xs text-destructive">
+                          <XCircle className="mt-0.5 size-3.5 shrink-0" />
+                          Ditolak: {ref.leader_note}
+                        </p>
+                      )}
+
+                      {ref.status === 'approved' && ref.referral_type === 'internal_psychologist' && (
+                        <p className="inline-flex items-center gap-2 rounded-lg bg-success-soft px-3 py-2 text-xs text-secondary-text">
+                          <FileCheck2 className="size-3.5 shrink-0 text-success" />
+                          Disetujui — janji temu tampil di dashboard psikolog.
+                        </p>
+                      )}
+
+                      {ref.status === 'approved' && ref.referral_type === 'puspaga_external' && (
+                        <div className="space-y-2 border-t border-border pt-3">
+                          <Label htmlFor={`ext-${ref.referral_id}`}>
+                            <ExternalLink className="size-3.5" />
+                            Hasil Konsultasi Puspaga
+                          </Label>
+                          <Textarea
+                            id={`ext-${ref.referral_id}`}
+                            rows={2}
+                            placeholder="Isi hasil konsultasi eksternal…"
+                            value={externalResult[ref.referral_id] ?? ''}
+                            onChange={(e) =>
+                              setExternalResult((p) => ({ ...p, [ref.referral_id]: e.target.value }))
+                            }
+                          />
+                          <div className="flex justify-end">
+                            <Button
+                              disabled={savingExtId === ref.referral_id}
+                              onClick={() => saveExternal(ref.referral_id)}
+                            >
+                              <Save className="size-4" />
+                              {savingExtId === ref.referral_id ? 'Menyimpan…' : 'Simpan Hasil'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

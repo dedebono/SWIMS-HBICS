@@ -1,25 +1,48 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { apiClient } from '@/lib/api-client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DataTable,
+  TableBody,
+  TableCell,
+  TableEmptyRow,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui/data-table';
+import { IconBox, type IconTone } from '@/components/ui/icon-box';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { EmptyState, PageHeader } from '@/components/ui/page-header';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { format, parseISO } from 'date-fns';
 import {
-  Shield,
-  Search,
-  RefreshCw,
+  Activity,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ClipboardList,
   FileText,
+  FolderTree,
+  LayoutGrid,
+  Paperclip,
+  RefreshCw,
+  ScrollText,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Star,
   User,
-  Building2,
-  Clock,
-  Filter,
-  X
+  Users,
+  Wrench,
+  X,
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -45,69 +68,6 @@ interface AuditLogMeta {
   hasMore: boolean;
 }
 
-// ─── Action Labels & Colours ─────────────────────────────────────────────────
-
-const actionConfig: Record<string, { label: string; color: string; bg: string }> = {
-  // Auth
-  LOGIN: { label: 'Login', color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-  LOGOUT: { label: 'Logout', color: 'text-zinc-600', bg: 'bg-zinc-100 dark:bg-zinc-900/30' },
-  USER_CREATED: { label: 'User Created', color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
-  USER_UPDATED: { label: 'User Updated', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-  // Cases
-  CASE_CREATED: { label: 'Case Created', color: 'text-violet-600', bg: 'bg-violet-100 dark:bg-violet-900/30' },
-  CASE_UPDATED: { label: 'Case Updated', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-  CASE_CLOSED: { label: 'Case Closed', color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-  // Incidents
-  INCIDENT_CREATED: { label: 'Incident Created', color: 'text-rose-600', bg: 'bg-rose-100 dark:bg-rose-900/30' },
-  INCIDENT_UPDATED: { label: 'Incident Updated', color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30' },
-  // Interventions
-  INTERVENTION_CREATED: { label: 'Intervention Created', color: 'text-cyan-600', bg: 'bg-cyan-100 dark:bg-cyan-900/30' },
-  INTERVENTION_UPDATED: { label: 'Intervention Updated', color: 'text-teal-600', bg: 'bg-teal-100 dark:bg-teal-900/30' },
-  // Reports
-  REPORT_GENERATED: { label: 'Report Generated', color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
-  // RTBF
-  RTBF_EXECUTED: { label: 'RTBF Executed', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-  RTBF_PDF_GENERATED: { label: 'RTBF Certificate', color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-  // Consents
-  CONSENT_UPDATED: { label: 'Consent Updated', color: 'text-lime-600', bg: 'bg-lime-100 dark:bg-lime-900/30' },
-  // Media
-  MEDIA_UPLOADED: { label: 'Media Uploaded', color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-  MEDIA_DELETED: { label: 'Media Deleted', color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30' },
-  // Positive
-  POSITIVE_OBSERVATION_CREATED: { label: 'Positive Observation', color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
-  // AI
-  AI_INSIGHTS_GENERATED: { label: 'AI Insights', color: 'text-indigo-600', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
-  // Pattern Detection
-  PATTERN_DETECTED: { label: 'Pattern Detected', color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-};
-
-function getActionConfig(action: string) {
-  if (actionConfig[action]) return actionConfig[action];
-  // Fallback: extract category from action name
-  const category = action.split('_')[0];
-  return {
-    label: action.replace(/_/g, ' '),
-    color: 'text-zinc-600 dark:text-zinc-400',
-    bg: 'bg-zinc-100 dark:bg-zinc-900/30'
-  };
-}
-
-// ─── Entity Type Icons ────────────────────────────────────────────────────────
-
-const entityIcons: Record<string, React.ReactNode> = {
-  cases: <FileText className="w-3.5 h-3.5" />,
-  incidents: <span className="text-xs">⚠️</span>,
-  interventions: <span className="text-xs">💊</span>,
-  students: <User className="w-3.5 h-3.5" />,
-  users: <Building2 className="w-3.5 h-3.5" />,
-  reports: <span className="text-xs">📊</span>,
-  consents: <span className="text-xs">📋</span>,
-  media_assets: <span className="text-xs">📎</span>,
-  positive_observations: <span className="text-xs">⭐</span>,
-};
-
-// ─── Filter Bar ───────────────────────────────────────────────────────────────
-
 interface Filters {
   action: string;
   entity_type: string;
@@ -115,205 +75,355 @@ interface Filters {
   to: string;
 }
 
+// ─── Konfigurasi aksi (label Bahasa Indonesia + tone semantik) ───────────────
+
+const ACTION_META: Record<string, { label: string; tone: StatusTone }> = {
+  // Autentikasi
+  LOGIN: { label: 'Masuk', tone: 'info' },
+  LOGOUT: { label: 'Keluar', tone: 'neutral' },
+  USER_CREATED: { label: 'Pengguna Baru', tone: 'success' },
+  USER_UPDATED: { label: 'Pengguna Diperbarui', tone: 'warning' },
+  // Kasus
+  CASE_CREATED: { label: 'Kasus Dibuat', tone: 'purple' },
+  CASE_UPDATED: { label: 'Kasus Diperbarui', tone: 'warning' },
+  CASE_CLOSED: { label: 'Kasus Ditutup', tone: 'success' },
+  // Insiden
+  INCIDENT_CREATED: { label: 'Insiden Dibuat', tone: 'danger' },
+  INCIDENT_UPDATED: { label: 'Insiden Diperbarui', tone: 'warning' },
+  // Intervensi
+  INTERVENTION_CREATED: { label: 'Intervensi Dibuat', tone: 'info' },
+  INTERVENTION_UPDATED: { label: 'Intervensi Diperbarui', tone: 'info' },
+  // Laporan
+  REPORT_GENERATED: { label: 'Laporan Dibuat', tone: 'purple' },
+  // RTBF
+  RTBF_EXECUTED: { label: 'RTBF Dijalankan', tone: 'danger' },
+  RTBF_PDF_GENERATED: { label: 'Sertifikat RTBF', tone: 'danger' },
+  // Persetujuan
+  CONSENT_UPDATED: { label: 'Persetujuan Diperbarui', tone: 'success' },
+  // Media
+  MEDIA_UPLOADED: { label: 'Media Diunggah', tone: 'purple' },
+  MEDIA_DELETED: { label: 'Media Dihapus', tone: 'danger' },
+  // Observasi positif
+  POSITIVE_OBSERVATION_CREATED: { label: 'Observasi Positif', tone: 'success' },
+  // AI
+  AI_INSIGHTS_GENERATED: { label: 'Insight AI', tone: 'purple' },
+  // Deteksi pola
+  PATTERN_DETECTED: { label: 'Pola Terdeteksi', tone: 'warning' },
+};
+
+/** Kategori yang dikenal → tone. Entri tak dikenal tetap tampil netral. */
+const CATEGORY_TONE: Record<string, StatusTone> = {
+  LOGIN: 'info',
+  LOGOUT: 'neutral',
+  USER: 'success',
+  CASE: 'purple',
+  INCIDENT: 'danger',
+  INTERVENTION: 'info',
+  REPORT: 'purple',
+  RTBF: 'danger',
+  CONSENT: 'success',
+  MEDIA: 'purple',
+  POSITIVE: 'success',
+  AI: 'purple',
+  PATTERN: 'warning',
+};
+
+function getActionMeta(action: string): { label: string; tone: StatusTone } {
+  const known = ACTION_META[action];
+  if (known) return known;
+
+  const category = action.split('_')[0];
+  const tone = CATEGORY_TONE[category] ?? 'neutral';
+  const pretty = category.charAt(0) + category.slice(1).toLowerCase();
+  return { label: `${pretty}: ${action.toLowerCase().replace(/_/g, ' ')}`, tone };
+}
+
+// ─── Metadata entitas ────────────────────────────────────────────────────────
+
+const ENTITY_META: Record<string, { label: string; icon: ReactNode; tone: IconTone }> = {
+  cases: { label: 'Kasus', icon: <FileText className="size-4" />, tone: 'purple' },
+  incidents: { label: 'Insiden', icon: <ShieldCheck className="size-4" />, tone: 'red' },
+  interventions: { label: 'Intervensi', icon: <Wrench className="size-4" />, tone: 'teal' },
+  students: { label: 'Siswa', icon: <User className="size-4" />, tone: 'blue' },
+  users: { label: 'Pengguna', icon: <Users className="size-4" />, tone: 'slate' },
+  reports: { label: 'Laporan', icon: <LayoutGrid className="size-4" />, tone: 'blue' },
+  consents: { label: 'Persetujuan', icon: <ClipboardList className="size-4" />, tone: 'green' },
+  media_assets: { label: 'Media', icon: <Paperclip className="size-4" />, tone: 'yellow' },
+  positive_observations: { label: 'Observasi Positif', icon: <Star className="size-4" />, tone: 'green' },
+};
+
+function getEntityMeta(entityType: string) {
+  return (
+    ENTITY_META[entityType] ?? {
+      label: entityType || 'Entitas lain',
+      icon: <ScrollText className="size-4" />,
+      tone: 'slate' as IconTone,
+    }
+  );
+}
+
+/** Base UI menampilkan `value` apa adanya; `items` memetakan label. */
+const ENTITY_FILTER_ITEMS: Record<string, string> = {
+  all: 'Semua Entitas',
+  cases: 'Kasus',
+  incidents: 'Insiden',
+  interventions: 'Intervensi',
+  students: 'Siswa',
+  users: 'Pengguna',
+  reports: 'Laporan',
+  consents: 'Persetujuan',
+  media_assets: 'Media',
+  positive_observations: 'Observasi Positif',
+};
+
+function formatDate(iso: string): string {
+  try {
+    return format(parseISO(iso), 'dd MMM yyyy, HH:mm:ss');
+  } catch {
+    return iso;
+  }
+}
+
+function formatDay(iso: string): string {
+  try {
+    return format(parseISO(iso), 'dd MMMM yyyy');
+  } catch {
+    return iso;
+  }
+}
+
+// ─── Panel statistik ─────────────────────────────────────────────────────────
+
+function StatPanel({
+  label,
+  value,
+  hint,
+  icon,
+  iconTone,
+  progress,
+}: {
+  label: string;
+  value: ReactNode;
+  hint: string;
+  icon: ReactNode;
+  iconTone: IconTone;
+  progress?: number;
+}) {
+  return (
+    <StatCard
+      label={label}
+      value={value}
+      hint={hint}
+      icon={icon}
+      iconTone={iconTone}
+      progress={progress}
+    />
+  );
+}
+
+// ─── Filter Bar ──────────────────────────────────────────────────────────────
+
 function FilterBar({
   filters,
   onChange,
-  onClear
+  onClear,
 }: {
   filters: Filters;
   onChange: (k: keyof Filters, v: string) => void;
   onClear: () => void;
 }) {
-  const hasFilters = filters.action || filters.entity_type || filters.from || filters.to;
+  const hasFilters = Boolean(filters.action || filters.entity_type || filters.from || filters.to);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-        <Input
-          placeholder="Search by action..."
-          value={filters.action}
-          onChange={(e) => onChange('action', e.target.value)}
-          className="h-9 flex-1"
-        />
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="space-y-2">
+        <Label htmlFor="filter-action">Cari Aksi</Label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="filter-action"
+            aria-label="Cari jenis aksi pada log audit"
+            placeholder="cth. CASE_CREATED"
+            value={filters.action}
+            onChange={(e) => onChange('action', e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
-      <Select value={filters.entity_type} onValueChange={(v) => onChange('entity_type', v ? (v === 'all' ? '' : v) : '')}>
-        <SelectTrigger className="h-9 w-[160px]">
-          <SelectValue placeholder="Entity type" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Entities</SelectItem>
-          <SelectItem value="cases">Cases</SelectItem>
-          <SelectItem value="incidents">Incidents</SelectItem>
-          <SelectItem value="interventions">Interventions</SelectItem>
-          <SelectItem value="students">Students</SelectItem>
-          <SelectItem value="users">Users</SelectItem>
-          <SelectItem value="reports">Reports</SelectItem>
-          <SelectItem value="consents">Consents</SelectItem>
-          <SelectItem value="media_assets">Media</SelectItem>
-          <SelectItem value="positive_observations">Positive Obs.</SelectItem>
-        </SelectContent>
-      </Select>
+      <div className="space-y-2">
+        <Label htmlFor="filter-entity">Jenis Entitas</Label>
+        <Select
+          value={filters.entity_type || 'all'}
+          onValueChange={(v) => onChange('entity_type', v && v !== 'all' ? v : '')}
+          items={ENTITY_FILTER_ITEMS}
+        >
+          <SelectTrigger id="filter-entity" className="w-full">
+            <SelectValue placeholder="Semua entitas" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(ENTITY_FILTER_ITEMS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className="space-y-2">
+        <Label htmlFor="filter-from">Tanggal Mulai</Label>
         <Input
+          id="filter-from"
           type="date"
           value={filters.from}
           onChange={(e) => onChange('from', e.target.value)}
-          className="h-9 w-[150px]"
         />
-        <span className="text-muted-foreground text-xs">to</span>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="filter-to">Tanggal Akhir</Label>
         <Input
+          id="filter-to"
           type="date"
           value={filters.to}
           onChange={(e) => onChange('to', e.target.value)}
-          className="h-9 w-[150px]"
         />
       </div>
 
-      {hasFilters && (
-        <Button variant="ghost" size="sm" onClick={onClear} className="h-9 gap-1.5 text-muted-foreground">
-          <X className="w-3.5 h-3.5" />
-          Clear
-        </Button>
-      )}
+      {hasFilters ? (
+        <div className="sm:col-span-2 xl:col-span-4">
+          <Button variant="ghost" size="sm" onClick={onClear}>
+            <X className="size-3.5" />
+            Bersihkan Filter
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-// ─── Log Row ─────────────────────────────────────────────────────────────────
+// ─── Detail satu log ─────────────────────────────────────────────────────────
+
+function LogDetail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[132px_1fr]">
+      <span className="text-xs font-semibold text-heading">{label}</span>
+      <span
+        className={
+          mono
+            ? 'font-mono text-xs break-all text-muted-foreground'
+            : 'text-xs break-all text-muted-foreground'
+        }
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
 
 function LogRow({ log }: { log: AuditLogRow }) {
   const [expanded, setExpanded] = useState(false);
-  const cfg = getActionConfig(log.action);
-
-  const formatDate = (iso: string) => {
-    try {
-      return format(parseISO(iso), 'dd MMM yyyy, HH:mm:ss');
-    } catch {
-      return iso;
-    }
-  };
-
+  const action = getActionMeta(log.action);
+  const entity = getEntityMeta(log.entity_type);
   const shortId = log.entity_id ? log.entity_id.slice(0, 8) : null;
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
-      {/* Row header */}
-      <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
-      >
-        {/* Entity icon */}
-        <div className="shrink-0 text-muted-foreground">
-          {entityIcons[log.entity_type] ?? <Clock className="w-3.5 h-3.5" />}
-        </div>
+    <>
+      <TableRow interactive>
+        <TableCell>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="flex items-center gap-2.5 text-left"
+          >
+            <IconBox tone={entity.tone} size="sm">
+              {entity.icon}
+            </IconBox>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium text-heading">{entity.label}</span>
+              {shortId ? (
+                <span className="block font-mono text-xs text-muted-foreground">#{shortId}</span>
+              ) : null}
+            </span>
+          </button>
+        </TableCell>
+        <TableCell>
+          <StatusBadge tone={action.tone} label={action.label} />
+        </TableCell>
+        <TableCell className="font-mono text-xs text-muted-foreground">{log.entity_type || '—'}</TableCell>
+        <TableCell className="font-mono text-xs text-muted-foreground">
+          {log.actor_id ? `#${log.actor_id.slice(0, 8)}` : '—'}
+        </TableCell>
+        <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{log.ip_address ?? '—'}</TableCell>
+        <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{formatDate(log.created_at)}</TableCell>
+        <TableCell className="text-right">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={expanded ? `Sembunyikan detail log ${action.label}` : `Lihat detail log ${action.label}`}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </Button>
+        </TableCell>
+      </TableRow>
 
-        {/* Action badge */}
-        <Badge variant="outline" className={`${cfg.color} ${cfg.bg} border-0 shrink-0 font-medium text-xs`}>
-          {cfg.label}
-        </Badge>
-
-        {/* Entity info */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-xs text-muted-foreground font-mono">
-            {log.entity_type}
-          </span>
-          {shortId && (
-            <>
-              <span className="text-muted-foreground/40">/</span>
-              <span className="text-xs font-mono text-muted-foreground">
-                #{shortId}
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Timestamp */}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          <Clock className="w-3 h-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">
-            {formatDate(log.created_at)}
-          </span>
-        </div>
-      </div>
-
-      {/* Expanded detail */}
-      {expanded && (
-        <div className="px-4 pb-4 pt-0 border-t border-border/50 bg-muted/20">
-          <div className="grid gap-3 mt-3 text-xs">
-            <div className="grid grid-cols-[120px_1fr] gap-1">
-              <span className="text-muted-foreground font-medium">Log ID</span>
-              <span className="font-mono text-muted-foreground">{log.log_id}</span>
+      {expanded ? (
+        <TableRow>
+          <TableCell colSpan={7} className="bg-muted/40">
+            <div className="grid gap-3 py-3">
+              <LogDetail label="ID Log" value={log.log_id} mono />
+              <LogDetail label="ID;Aktor" value={log.actor_id || '—'} mono />
+              <LogDetail label="ID Instansi" value={log.tenant_id || '—'} mono />
+              <LogDetail label="Tanggal" value={formatDay(log.created_at)} />
+              {log.ip_address ? <LogDetail label="Alamat IP" value={log.ip_address} mono /> : null}
+              {log.user_agent ? <LogDetail label="Perangkat" value={log.user_agent} /> : null}
+              {log.before_state ? (
+                <div className="grid gap-1 sm:grid-cols-[132px_1fr]">
+                  <span className="text-xs font-semibold text-heading">Sebelum</span>
+                  <pre className="scroll-slim max-h-56 overflow-auto rounded-lg border border-border bg-card p-2.5 font-mono text-xs text-muted-foreground">
+                    {JSON.stringify(log.before_state, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
+              {log.after_state ? (
+                <div className="grid gap-1 sm:grid-cols-[132px_1fr]">
+                  <span className="text-xs font-semibold text-heading">Sesudah</span>
+                  <pre className="scroll-slim max-h-56 overflow-auto rounded-lg border border-border bg-card p-2.5 font-mono text-xs text-muted-foreground">
+                    {JSON.stringify(log.after_state, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
             </div>
-            <div className="grid grid-cols-[120px_1fr] gap-1">
-              <span className="text-muted-foreground font-medium">Actor ID</span>
-              <span className="font-mono text-muted-foreground">{log.actor_id}</span>
-            </div>
-            {log.ip_address && (
-              <div className="grid grid-cols-[120px_1fr] gap-1">
-                <span className="text-muted-foreground font-medium">IP Address</span>
-                <span className="font-mono text-muted-foreground">{log.ip_address}</span>
-              </div>
-            )}
-            {log.before_state && (
-              <div className="grid grid-cols-[120px_1fr] gap-1">
-                <span className="text-muted-foreground font-medium">Before</span>
-                <pre className="font-mono text-muted-foreground bg-muted rounded px-2 py-1 overflow-auto">
-                  {JSON.stringify(log.before_state, null, 2)}
-                </pre>
-              </div>
-            )}
-            {log.after_state && (
-              <div className="grid grid-cols-[120px_1fr] gap-1">
-                <span className="text-muted-foreground font-medium">After</span>
-                <pre className="font-mono text-muted-foreground bg-muted rounded px-2 py-1 overflow-auto">
-                  {JSON.stringify(log.after_state, null, 2)}
-                </pre>
-              </div>
-            )}
-            {log.user_agent && (
-              <div className="grid grid-cols-[120px_1fr] gap-1">
-                <span className="text-muted-foreground font-medium">User Agent</span>
-                <span className="text-muted-foreground break-all">{log.user_agent}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+          </TableCell>
+        </TableRow>
+      ) : null}
+    </>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
+const LIMIT = 30;
 
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [meta, setMeta] = useState<AuditLogMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<Filters>({
-    action: '',
-    entity_type: '',
-    from: '',
-    to: '',
-  });
-
-  const LIMIT = 30;
+  const [filters, setFilters] = useState<Filters>({ action: '', entity_type: '', from: '', to: '' });
 
   const fetchLogs = useCallback(async (pg: number, f: Filters) => {
     setLoading(true);
-    const params = new URLSearchParams({
-      page: String(pg),
-      limit: String(LIMIT),
-    });
+    const params = new URLSearchParams({ page: String(pg), limit: String(LIMIT) });
     if (f.action) params.set('action', f.action);
     if (f.entity_type) params.set('entity_type', f.entity_type);
     if (f.from) params.set('from', new Date(f.from).toISOString());
-    if (f.to) params.set('to', new Date(f.to + 'T23:59:59').toISOString());
+    if (f.to) params.set('to', new Date(`${f.to}T23:59:59`).toISOString());
 
-    const res = await apiClient<AuditLogRow[]>(`/audit-logs?${params}`);
+    const res = await apiClient<AuditLogRow[]>(`/audit-logs?${params.toString()}`);
     if (res.success && res.data) {
       setLogs(res.data);
       setMeta(res.meta as AuditLogMeta);
@@ -325,123 +435,186 @@ export default function AuditLogsPage() {
     fetchLogs(page, filters);
   }, [page, filters, fetchLogs]);
 
-  const handleFilterChange = (key: keyof Filters, value: string) => {
+  const handleFilterChange = useCallback((key: keyof Filters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
     setPage(1);
-  };
+  }, []);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setFilters({ action: '', entity_type: '', from: '', to: '' });
     setPage(1);
-  };
+  }, []);
 
-  const totalPages = meta ? Math.ceil(meta.total / LIMIT) : 1;
+  const totalPages = meta && meta.total > 0 ? Math.ceil(meta.total / LIMIT) : 1;
+  const hasFilters = Boolean(filters.action || filters.entity_type || filters.from || filters.to);
+
+  const distinctActors = useMemo(() => new Set(logs.map((l) => l.actor_id)).size, [logs]);
+  const sensitiveCount = useMemo(
+    () => logs.filter((l) => ACTION_META[l.action]?.tone === 'danger').length,
+    [logs],
+  );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Shield className="w-7 h-7 text-primary" />
-            Audit Logs
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Immutable record of all sensitive actions across the institution.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fetchLogs(page, filters)}
-          className="gap-2"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+    <div className="space-y-6">
+      <PageHeader
+        title="Log Audit"
+        description="Catatan semua tindakan sensitif di lingkungan sekolah. Data tidak dapat diubah atau dihapus."
+        actions={
+          <Button variant="outline" onClick={() => fetchLogs(page, filters)} disabled={loading}>
+            <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} />
+            Muat Ulang
+          </Button>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatPanel
+          label="Total Catatan"
+          value={meta ? meta.total.toLocaleString('id-ID') : '…'}
+          hint="Seluruh aktivitas yang tercatat di sistem"
+          icon={<ScrollText className="size-5" />}
+          iconTone="blue"
+        />
+        <StatPanel
+          label="Aktor pada Halaman Ini"
+          value={logs.length > 0 ? distinctActors : '—'}
+          hint="Pengguna unik yang melakukan aktivitas"
+          icon={<Users className="size-5" />}
+          iconTone="purple"
+        />
+        <StatPanel
+          label="Aksi Sensitif"
+          value={logs.length > 0 ? sensitiveCount : '—'}
+          hint="Perubahan berisiko tinggi pada halaman ini"
+          icon={<ShieldCheck className="size-5" />}
+          iconTone="red"
+        />
+        <StatPanel
+          label="Halaman"
+          value={`${page} / ${totalPages}`}
+          hint={meta?.hasMore ? 'Masih ada halaman berikutnya' : 'Ini halaman terakhir'}
+          icon={<FolderTree className="size-5" />}
+          iconTone="slate"
+        />
       </div>
 
-      {/* Filters */}
-      <Card className="glass">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            Filters
-          </CardTitle>
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="slate" size="sm">
+              <SlidersHorizontal className="size-4" />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Filter Log</CardTitle>
+              <CardDescription>
+                Saring berdasarkan jenis aksi, entitas, atau rentang tanggal.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <FilterBar
-            filters={filters}
-            onChange={handleFilterChange}
-            onClear={clearFilters}
-          />
+          <FilterBar filters={filters} onChange={handleFilterChange} onClear={clearFilters} />
         </CardContent>
       </Card>
 
-      {/* Results */}
-      <Card className="glass">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Activity Log</CardTitle>
-            {meta && (
-              <span className="text-xs text-muted-foreground">
-                {meta.total.toLocaleString()} total — page {page} of {totalPages}
-              </span>
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <IconBox tone="blue" size="sm">
+                <Activity className="size-4" />
+              </IconBox>
+              <div className="space-y-1">
+                <CardTitle>Aktivitas Tercatat</CardTitle>
+                <CardDescription>
+                  {meta
+                    ? `Menampilkan ${logs.length} dari ${meta.total.toLocaleString('id-ID')} catatan.`
+                    : 'Memuat catatan…'}
+                </CardDescription>
+              </div>
+            </div>
+            {hasFilters ? (
+              <Badge variant="soft">Filter aktif</Badge>
+            ) : (
+              <Badge variant="muted">Semua catatan</Badge>
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
+
+        <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+            <div className="flex flex-col items-center gap-3 py-16">
+              <span className="size-7 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+              <p className="text-sm text-muted-foreground">Memuat log audit…</p>
             </div>
           ) : logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                <Shield className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">No audit logs found.</p>
-              <p className="text-xs text-muted-foreground/60">
-                Try adjusting your filters or check back later.
-              </p>
-            </div>
+            <EmptyState
+              icon={<ScrollText />}
+              title={hasFilters ? 'Log tidak ditemukan' : 'Belum ada log audit'}
+              description={
+                hasFilters
+                  ? 'Tidak ada catatan yang cocok dengan filter Anda. Coba ubah atau bersihkan filter.'
+                  : 'Belum ada aktivitas yang tercatat. Log akan muncul otomatis saat ada tindakan di sistem.'
+              }
+              action={
+                hasFilters ? (
+                  <Button variant="outline" onClick={clearFilters}>
+                    <X className="size-4" />
+                    Bersihkan Filter
+                  </Button>
+                ) : null
+              }
+            />
           ) : (
-            <>
-              {logs.map((log) => (
-                <LogRow key={log.log_id} log={log} />
-              ))}
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between pt-4 border-t border-border/50">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    className="gap-1.5"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Previous
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Page {page} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={!meta?.hasMore}
-                    className="gap-1.5"
-                  >
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-            </>
+            <DataTable>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell scope="col">Entitas</TableHeaderCell>
+                  <TableHeaderCell scope="col">Aksi</TableHeaderCell>
+                  <TableHeaderCell scope="col">Jenis</TableHeaderCell>
+                  <TableHeaderCell scope="col">Aktor</TableHeaderCell>
+                  <TableHeaderCell scope="col">Alamat IP</TableHeaderCell>
+                  <TableHeaderCell scope="col">Waktu</TableHeaderCell>
+                  <TableHeaderCell scope="col" className="text-right">
+                    Detail
+                  </TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {logs.map((log) => (
+                  <LogRow key={log.log_id} log={log} />
+                ))}
+                {logs.length === 0 ? <TableEmptyRow colSpan={7}>Belum ada log audit.</TableEmptyRow> : null}
+              </TableBody>
+            </DataTable>
           )}
         </CardContent>
+
+        {totalPages > 1 && !loading && logs.length > 0 ? (
+          <CardFooter className="justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="size-4" />
+              Sebelumnya
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Halaman {page} dari {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!meta?.hasMore}
+            >
+              Berikutnya
+              <ChevronRight className="size-4" />
+            </Button>
+          </CardFooter>
+        ) : null}
       </Card>
     </div>
   );

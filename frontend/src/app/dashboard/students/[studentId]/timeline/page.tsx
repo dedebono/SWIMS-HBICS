@@ -3,10 +3,14 @@
 import { useEffect, useState, use } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { PageHeader, EmptyState } from '@/components/ui/page-header';
+import { StatCard, ProgressPill } from '@/components/ui/stat-card';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatusBadge, severityTone } from '@/components/ui/status-badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { classificationLabel } from '@/lib/constants';
 import {
   Select,
@@ -15,6 +19,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Activity,
+  AlertTriangle,
+  Award,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  ExternalLink,
+  Filter,
+  History,
+  RotateCcw,
+  Stethoscope,
+} from 'lucide-react';
 
 interface TimelineEvent {
   id: string;
@@ -38,12 +56,31 @@ interface StudentProgress {
   progress_percentage: number;
 }
 
-const riskBadge: Record<string, string> = {
-  LOW: 'bg-severity-low/15 text-severity-low border-severity-low/30',
-  MEDIUM: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
-  HIGH: 'bg-severity-high/15 text-severity-high border-severity-high/30',
-  CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
+const RISK_LABEL: Record<string, string> = {
+  LOW: 'Rendah',
+  MEDIUM: 'Sedang',
+  HIGH: 'Tinggi',
+  CRITICAL: 'Kritis',
 };
+
+const CASE_STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Terbuka',
+  MONITORING: 'Dipantau',
+  CLOSED: 'Ditutup',
+};
+
+const CASE_TYPE_LABEL: Record<string, string> = {
+  BEHAVIORAL: 'Perilaku',
+  EMOTIONAL: 'Emosional',
+  MEDICAL: 'Medis',
+  ACADEMIC: 'Akademik',
+  POSITIVE: 'Positif',
+};
+
+function label(map: Record<string, string>, value: string | null | undefined): string {
+  if (!value) return '—';
+  return map[String(value).toUpperCase()] ?? value;
+}
 
 interface StudentCase {
   case_id: string;
@@ -59,58 +96,98 @@ interface StudentCase {
   latest_incident_at: string | null;
 }
 
-const caseTypeColors: Record<string, string> = {
-  BEHAVIORAL: 'bg-event-incident/15 text-event-incident border-event-incident/30',
-  EMOTIONAL: 'bg-event-case-change/15 text-event-case-change border-event-case-change/30',
-  MEDICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
-  ACADEMIC: 'bg-event-intervention/15 text-event-intervention border-event-intervention/30',
-  POSITIVE: 'bg-event-observation/15 text-event-observation border-event-observation/30',
+const CASE_TYPE_ICON: Record<string, typeof Activity> = {
+  BEHAVIORAL: AlertTriangle,
+  EMOTIONAL: Activity,
+  MEDICAL: Stethoscope,
+  ACADEMIC: ClipboardList,
+  POSITIVE: Award,
 };
 
-const caseStatusColors: Record<string, string> = {
-  OPEN: 'bg-severity-high/15 text-severity-high border-severity-high/30',
-  MONITORING: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
-  CLOSED: 'bg-severity-low/15 text-severity-low border-severity-low/30',
-};
+type EventTone = 'red' | 'green' | 'blue' | 'slate';
 
-const eventColors: Record<string, { dot: string; line: string; bg: string; label: string }> = {
+/** Warna semantik tiap jenis aktivitas pada linimasa. */
+const eventMeta: Record<
+  string,
+  { label: string; dot: string; text: string; soft: string; ring: string; icon: typeof Activity }
+> = {
   INCIDENT: {
+    label: 'Insiden',
     dot: 'bg-event-incident',
-    line: 'border-event-incident/30',
-    bg: 'bg-event-incident/5 border-event-incident/20',
-    label: 'Incident',
+    text: 'text-event-incident',
+    soft: 'bg-event-incident/10',
+    ring: 'ring-event-incident/25',
+    icon: AlertTriangle,
   },
   OBSERVATION: {
+    label: 'Prestasi',
     dot: 'bg-event-observation',
-    line: 'border-event-observation/30',
-    bg: 'bg-event-observation/5 border-event-observation/20',
-    label: 'Achievement',
+    text: 'text-event-observation',
+    soft: 'bg-event-observation/10',
+    ring: 'ring-event-observation/25',
+    icon: Award,
   },
   INTERVENTION: {
+    label: 'Intervensi',
     dot: 'bg-event-intervention',
-    line: 'border-event-intervention/30',
-    bg: 'bg-event-intervention/5 border-event-intervention/20',
-    label: 'Intervention',
+    text: 'text-event-intervention',
+    soft: 'bg-event-intervention/10',
+    ring: 'ring-event-intervention/25',
+    icon: Activity,
   },
   CASE_STATUS_CHANGE: {
+    label: 'Perubahan Kasus',
     dot: 'bg-event-case-change',
-    line: 'border-event-case-change/30',
-    bg: 'bg-event-case-change/5 border-event-case-change/20',
-    label: 'Case',
+    text: 'text-event-case-change',
+    soft: 'bg-event-case-change/10',
+    ring: 'ring-event-case-change/25',
+    icon: ClipboardList,
   },
 };
 
-const severityColors: Record<string, string> = {
-  LOW: 'bg-severity-low/15 text-severity-low border-severity-low/30',
-  MEDIUM: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
-  HIGH: 'bg-severity-high/15 text-severity-high border-severity-high/30',
-  CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
+const TONE_TO_ICON: Record<EventTone, 'red' | 'green' | 'blue' | 'slate'> = {
+  red: 'red',
+  green: 'green',
+  blue: 'blue',
+  slate: 'slate',
 };
 
+function eventIconTone(type: string): EventTone {
+  switch (type) {
+    case 'INCIDENT':
+      return 'red';
+    case 'OBSERVATION':
+      return 'green';
+    case 'INTERVENTION':
+      return 'blue';
+    default:
+      return 'slate';
+  }
+}
+
 function getRelevanceLabel(weight: number): { label: string; color: string } {
-  if (weight > 0.7) return { label: 'High', color: 'text-severity-low' };
-  if (weight > 0.4) return { label: 'Medium', color: 'text-severity-medium' };
-  return { label: 'Low', color: 'text-muted-foreground' };
+  if (weight > 0.7) return { label: 'Tinggi', color: 'text-success' };
+  if (weight > 0.4) return { label: 'Sedang', color: 'text-warning' };
+  return { label: 'Rendah', color: 'text-muted-foreground' };
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export default function StudentTimelinePage({
@@ -188,69 +265,108 @@ export default function StudentTimelinePage({
     });
   };
 
+  const hasFilters = typeFilter !== 'all' || Boolean(fromDate) || Boolean(toDate);
+  const interventionRate =
+    progress && progress.interventions.total > 0
+      ? Math.round((progress.interventions.completed / progress.interventions.total) * 100)
+      : 0;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Student Timeline</h2>
-        <p className="text-muted-foreground">
-          Chronological view of the student’s <span className="font-medium">cases</span> and <span className="font-medium">achievements</span>{' '}
-          (plus incidents and interventions) for student{' '}
-          <span className="font-mono text-xs">{resolvedParams.studentId.slice(0, 8)}...</span>
-        </p>
+      <PageHeader
+        title="Linimasa Siswa"
+        description="Riwayat kronologis kasus, prestasi, insiden, dan intervensi siswa dalam satu alur."
+        actions={
+          <div className="flex items-center gap-2 rounded-[10px] border border-border bg-card px-3 py-2">
+            <History className="size-4 text-muted-foreground" />
+            <span className="font-mono text-xs text-muted-foreground">
+              {resolvedParams.studentId.slice(0, 8)}...
+            </span>
+          </div>
+        }
+      />
+
+      {/* Ringkasan angka */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Kemajuan Siswa"
+          value={`${progress?.progress_percentage ?? 0}%`}
+          hint="Persentase penyelesaian penanganan kasus siswa."
+          icon={<Activity className="size-5" />}
+          iconTone="blue"
+          progress={progress?.progress_percentage ?? 0}
+          progressLabel="Kemajuan penanganan kasus"
+        />
+        <StatCard
+          label="Kasus Siswa"
+          value={progress?.cases.total ?? cases.length}
+          hint={`${progress?.cases.open ?? 0} terbuka · ${progress?.cases.closed ?? 0} ditutup`}
+          icon={<ClipboardList className="size-5" />}
+          iconTone="purple"
+        />
+        <StatCard
+          label="Insiden"
+          value={progress?.incidents.total ?? 0}
+          hint="Total insiden yang tercatat untuk siswa ini."
+          icon={<AlertTriangle className="size-5" />}
+          iconTone="red"
+        />
+        <StatCard
+          label="Prestasi"
+          value={progress?.observations.total ?? 0}
+          hint="Catatan positif dan pencapaian siswa."
+          icon={<Award className="size-5" />}
+          iconTone="green"
+        />
       </div>
 
-      {/* Filter Bar */}
-      <Card className="glass border-border/50">
-        <CardContent className="flex flex-wrap gap-3 p-4">
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? 'all')}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Event type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Events</SelectItem>
-              <SelectItem value="INCIDENT">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-event-incident" /> Incidents
-                </span>
-              </SelectItem>
-              <SelectItem value="OBSERVATION">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-event-observation" /> Achievements
-                </span>
-              </SelectItem>
-              <SelectItem value="INTERVENTION">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-event-intervention" /> Interventions
-                </span>
-              </SelectItem>
-              <SelectItem value="CASE_STATUS_CHANGE">
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-event-case-change" /> Cases
-                </span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Penyaring */}
+      <Card>
+        <CardContent className="flex flex-wrap items-end gap-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+            <Filter className="size-4 text-primary" />
+            Penyaring
+          </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">From</span>
+          <div className="space-y-2">
+            <Label htmlFor="timeline-type">Jenis Aktivitas</Label>
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? 'all')}>
+              <SelectTrigger id="timeline-type" className="w-56" aria-label="Saring jenis aktivitas">
+                <SelectValue placeholder="Semua aktivitas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Aktivitas</SelectItem>
+                <SelectItem value="INCIDENT">Insiden</SelectItem>
+                <SelectItem value="OBSERVATION">Prestasi</SelectItem>
+                <SelectItem value="INTERVENTION">Intervensi</SelectItem>
+                <SelectItem value="CASE_STATUS_CHANGE">Perubahan Kasus</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="timeline-from">Dari Tanggal</Label>
             <Input
+              id="timeline-from"
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-40"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">To</span>
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-40"
+              className="w-44"
             />
           </div>
 
-          {(typeFilter !== 'all' || fromDate || toDate) && (
+          <div className="space-y-2">
+            <Label htmlFor="timeline-to">Sampai Tanggal</Label>
+            <Input
+              id="timeline-to"
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-44"
+            />
+          </div>
+
+          {hasFilters && (
             <Button
               variant="ghost"
               size="sm"
@@ -260,247 +376,302 @@ export default function StudentTimelinePage({
                 setToDate('');
               }}
             >
-              Clear Filters
+              <RotateCcw className="size-4" />
+              Atur Ulang Penyaring
             </Button>
           )}
         </CardContent>
       </Card>
 
-      {/* Progress Summary */}
-      {progress && (
-        <Card className="glass border-border/50">
-          <CardContent className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Student Progress</h3>
-              {progress.risk_level && (
-                <Badge variant="outline" className={`text-[10px] ${riskBadge[progress.risk_level]}`}>
-                  {progress.risk_level} risk
-                </Badge>
-              )}
-            </div>
-
-            {!progress.has_data ? (
-              <p className="text-xs text-muted-foreground">
-                No cases, interventions, or incidents recorded yet.
-              </p>
-            ) : (
-              <>
-                {/* Overall progress bar */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        {/* Linimasa */}
+        <div className="space-y-6 xl:col-span-2">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                    <span>Overall progress</span>
-                    <span className="font-medium text-foreground">{progress.progress_percentage}%</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${progress.progress_percentage}%` }}
-                    />
-                  </div>
+                  <CardTitle className="flex items-center gap-2.5">
+                    <IconBox tone="blue" size="sm">
+                      <CalendarDays />
+                    </IconBox>
+                    Linimasa Aktivitas
+                  </CardTitle>
+                  <CardDescription>
+                    Klik salah satu baris untuk melihat detail aktivitas.
+                  </CardDescription>
                 </div>
-
-                {/* Stat grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-[11px] text-muted-foreground">Cases</p>
-                    <p className="text-lg font-bold">{progress.cases.total}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {progress.cases.open} open · {progress.cases.monitoring} mon · {progress.cases.closed} closed
-                    </p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-[11px] text-muted-foreground">Interventions</p>
-                    <p className="text-lg font-bold">
-                      {progress.interventions.completed}/{progress.interventions.total}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">{progress.interventions.scheduled} scheduled</p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-[11px] text-muted-foreground">Incidents</p>
-                    <p className="text-lg font-bold">{progress.incidents.total}</p>
-                  </div>
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-[11px] text-muted-foreground">Achievements</p>
-                    <p className="text-lg font-bold text-green-600">{progress.observations.total}</p>
-                  </div>
+                <StatusBadge
+                  tone="neutral"
+                  label={`${events.length} aktivitas`}
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="size-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
+              ) : events.length === 0 ? (
+                <EmptyState
+                  icon={<History />}
+                  title="Belum ada aktivitas"
+                  description="Belum ada aktivitas yang tercatat. Coba ubah rentang tanggal atau jenis aktivitas."
+                />
+              ) : (
+                <ol className="relative space-y-3 pl-6">
+                  {/* Garis penghubung antar titik */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-[7px] top-2 bottom-2 w-px bg-border"
+                  />
+                  {events.map((event) => {
+                    const meta = eventMeta[event.type] ?? eventMeta['CASE_STATUS_CHANGE']!;
+                    const isExpanded = expandedEvents.has(event.id);
+                    const relevance = getRelevanceLabel(event.relevance_weight);
+                    const isBoardMember = user?.role === 'BOARD_MEMBER';
+                    const EventIcon = meta.icon;
 
-      {/* Cases */}
-      <Card className="glass border-border/50">
-        <CardContent className="p-4 space-y-3">
-          <h3 className="text-sm font-semibold">Cases ({cases.length})</h3>
-          {cases.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No cases recorded for this student.</p>
-          ) : (
-            <div className="space-y-2">
-              {cases.map((c) => (
-                <a
-                  key={c.case_id}
-                  href={`/dashboard/cases/${c.case_id}`}
-                  className="block rounded-lg border p-3 transition-all hover:border-primary/40 hover:shadow-md"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className={`text-[10px] ${caseTypeColors[c.case_type] ?? ''}`}>
-                        {c.case_type}
-                      </Badge>
-                      <Badge variant="outline" className={`text-[10px] ${caseStatusColors[c.status] ?? ''}`}>
-                        {c.status}
-                      </Badge>
-                      {c.risk_level && (
-                        <Badge variant="outline" className={`text-[10px] ${riskBadge[c.risk_level]}`}>
-                          {c.risk_level}
-                        </Badge>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {c.opened_date
-                        ? new Date(c.opened_date).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })
-                        : '-'}
-                    </span>
-                  </div>
-                  {c.summary && (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{c.summary}</p>
-                  )}
-                  <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                    <span>
-                      {c.incident_count} incident{c.incident_count !== 1 ? 's' : ''}
-                    </span>
-                    <span>
-                      {c.intervention_count} intervention{c.intervention_count !== 1 ? 's' : ''}
-                    </span>
-                    {c.assigned_counselor_name && <span>Counselor: {c.assigned_counselor_name}</span>}
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Timeline */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      ) : events.length === 0 ? (
-        <Card className="glass border-border/50">
-          <CardContent className="flex flex-col items-center py-16">
-            <p className="text-muted-foreground">No events found</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              Try adjusting your date range or event type filter
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="relative ml-4">
-          {/* Vertical line */}
-          <div className="absolute left-3 top-2 bottom-2 w-px bg-border" />
-
-          <div className="space-y-4">
-            {events.map((event) => {
-              const colors = eventColors[event.type] ?? eventColors['CASE_STATUS_CHANGE']!;
-              const isExpanded = expandedEvents.has(event.id);
-              const relevance = getRelevanceLabel(event.relevance_weight);
-              const isBoardMember = user?.role === 'BOARD_MEMBER';
-
-              return (
-                <div key={event.id} className="relative flex gap-4 pl-4">
-                  {/* Dot */}
-                  <div className={`absolute left-0 top-3 h-6 w-6 rounded-full border-2 border-background ${colors.dot} flex items-center justify-center`}>
-                    <div className="h-2 w-2 rounded-full bg-background" />
-                  </div>
-
-                  {/* Event Card */}
-                  <div
-                    className={`ml-6 flex-1 cursor-pointer rounded-lg border p-4 transition-all ${colors.bg} hover:shadow-md`}
-                    onClick={() => toggleExpand(event.id)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline" className={`text-[10px] ${colors.bg}`}>
-                            {colors.label}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(event.date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                          {event.severity && (
-                            <Badge variant="outline" className={`text-[10px] ${severityColors[event.severity] ?? ''}`}>
-                              {classificationLabel(event.severity)}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="mt-1 text-sm font-medium">
-                          {event.category}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] ${relevance.color}`}>
-                          ● {relevance.label} relevance
-                        </span>
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className={`text-muted-foreground/50 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    return (
+                      <li key={event.id} className="relative">
+                        <span
+                          aria-hidden="true"
+                          className={`absolute -left-6 top-4 flex size-3.5 items-center justify-center rounded-full ring-4 ${meta.dot} ${meta.soft}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(event.id)}
+                          aria-expanded={isExpanded}
+                          className="w-full rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary/30 hover:bg-primary-softer"
                         >
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <IconBox tone={TONE_TO_ICON[eventIconTone(event.type)]} size="sm">
+                                <EventIcon />
+                              </IconBox>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className={`text-xs font-semibold ${meta.text}`}>
+                                    {meta.label}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDateTime(event.date)}
+                                  </span>
+                                  {event.severity && (
+                                    <StatusBadge
+                                      tone={severityTone(event.severity)}
+                                      label={classificationLabel(event.severity)}
+                                    />
+                                  )}
+                                </div>
+                                <p className="mt-1 text-sm font-medium text-heading">
+                                  {event.category}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <span className={`text-[11px] font-medium ${relevance.color}`}>
+                                Relevansi {relevance.label}
+                              </span>
+                              {isExpanded ? (
+                                <ChevronDown className="size-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="size-4 text-muted-foreground" />
+                              )}
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="mt-3 space-y-2 border-t border-border pt-3">
+                              <p className="text-sm leading-relaxed text-secondary-text">
+                                {isBoardMember
+                                  ? '[Konten dibatasi untuk Anggota Dewan]'
+                                  : event.description}
+                              </p>
+                              {event.reported_by_name && !isBoardMember && (
+                                <p className="text-xs text-muted-foreground">
+                                  Dilaporkan oleh: {event.reported_by_name}
+                                </p>
+                              )}
+                              {event.case_id && (
+                                <a
+                                  href={`/dashboard/cases/${event.case_id}`}
+                                  className="action-link text-xs"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Lihat Kasus
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sisi: progres & kasus */}
+        <div className="space-y-6">
+          {progress && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2.5">
+                  <IconBox tone="green" size="sm">
+                    <Activity />
+                  </IconBox>
+                  Progres Siswa
+                </CardTitle>
+                <CardDescription>
+                  Ringkasan penanganan kasus dan intervensi.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {!progress.has_data ? (
+                  <EmptyState
+                    icon={<Activity />}
+                    title="Belum ada data"
+                    description="Belum ada kasus, intervensi, maupun insiden yang tercatat untuk siswa ini."
+                  />
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Kemajuan keseluruhan
+                        </span>
+                        {progress.risk_level && (
+                          <StatusBadge
+                            tone={severityTone(progress.risk_level)}
+                            label={`Risiko ${label(RISK_LABEL, progress.risk_level)}`}
+                          />
+                        )}
                       </div>
+                      <ProgressPill
+                        value={progress.progress_percentage}
+                        label="Kemajuan keseluruhan siswa"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {progress.progress_percentage}% dari rangkaian penanganan telah selesai.
+                      </p>
                     </div>
 
-                    {/* Expanded Content */}
-                    {isExpanded && (
-                      <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
-                        <p className="text-sm text-muted-foreground">
-                          {isBoardMember ? '[Content restricted for Board Members]' : event.description}
-                        </p>
-                        {event.reported_by_name && !isBoardMember && (
-                          <p className="text-xs text-muted-foreground/70">
-                            Reported by: {event.reported_by_name}
-                          </p>
-                        )}
-                        {event.case_id && (
-                          <a
-                            href={`/dashboard/cases/${event.case_id}`}
-                            className="text-xs text-primary hover:underline"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            View Case →
-                          </a>
-                        )}
+                    <div className="space-y-3 border-t border-border pt-4">
+                      <div className="flex items-center justify-between">
+                        <span className="card-label">Intervensi</span>
+                        <span className="text-sm font-semibold text-heading">
+                          {progress.interventions.completed}/{progress.interventions.total}
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      <ProgressPill
+                        value={interventionRate}
+                        tone="green"
+                        label="Tingkat penyelesaian intervensi"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {progress.interventions.scheduled} intervensi terjadwal ·{' '}
+                        {progress.interventions.completed} selesai
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3 border-t border-border pt-4">
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Terbuka</p>
+                        <p className="text-lg font-bold text-heading">{progress.cases.open}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Dipantau</p>
+                        <p className="text-lg font-bold text-heading">
+                          {progress.cases.monitoring}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted-foreground">Ditutup</p>
+                        <p className="text-lg font-bold text-heading">{progress.cases.closed}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2.5">
+                <IconBox tone="purple" size="sm">
+                  <ClipboardList />
+                </IconBox>
+                Kasus Siswa ({cases.length})
+              </CardTitle>
+              <CardDescription>
+                Semua kasus yang tercatat untuk siswa ini.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {cases.length === 0 ? (
+                <EmptyState
+                  icon={<ClipboardList />}
+                  title="Belum ada kasus"
+                  description="Belum ada kasus yang tercatat untuk siswa ini."
+                />
+              ) : (
+                <div className="space-y-2">
+                  {cases.map((c) => {
+                    const TypeIcon = CASE_TYPE_ICON[c.case_type] ?? ClipboardList;
+                    return (
+                      <a
+                        key={c.case_id}
+                        href={`/dashboard/cases/${c.case_id}`}
+                        className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5 transition-all hover:border-primary/30 hover:bg-primary-softer"
+                      >
+                        <IconBox tone="slate" size="sm">
+                          <TypeIcon />
+                        </IconBox>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-heading">
+                              {label(CASE_TYPE_LABEL, c.case_type)}
+                            </span>
+                            <StatusBadge
+                              tone={severityTone(c.status)}
+                              label={label(CASE_STATUS_LABEL, c.status)}
+                            />
+                            {c.risk_level && (
+                              <StatusBadge
+                                tone={severityTone(c.risk_level)}
+                                label={label(RISK_LABEL, c.risk_level)}
+                              />
+                            )}
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Dibuka {formatDate(c.opened_date)}
+                          </p>
+                          {c.summary && (
+                            <p className="mt-1 line-clamp-2 text-xs text-secondary-text">
+                              {c.summary}
+                            </p>
+                          )}
+                          <p className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                            <span>{c.incident_count} insiden</span>
+                            <span>{c.intervention_count} intervensi</span>
+                            {c.assigned_counselor_name && (
+                              <span>Konselor: {c.assigned_counselor_name}</span>
+                            )}
+                          </p>
+                        </div>
+                        <ExternalLink className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
+                      </a>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-      )}
+      </div>
     </div>
   );
 }

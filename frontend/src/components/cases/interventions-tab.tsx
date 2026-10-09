@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { EmptyState } from '@/components/ui/page-header';
 import {
   Select,
   SelectContent,
@@ -19,30 +22,38 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  Plus,
-  ClipboardList,
-  CheckCircle2,
-  Clock,
-  Star,
-  Phone,
-  Users,
   BookOpen,
-  HeartHandshake,
-  MessageSquare,
-  Pencil,
+  CalendarCheck,
+  CheckCircle2,
   ChevronDown,
-  ChevronUp,
+  ClipboardList,
+  ClipboardCheck,
+  Clock,
+  Gavel,
+  GraduationCap,
+  Handshake,
+  HeartHandshake,
+  HeartPulse,
+  Lightbulb,
+  MessageSquare,
+  NotebookPen,
+  Pencil,
+  Phone,
+  Plus,
+  Stethoscope,
+  Star,
+  Users,
 } from 'lucide-react';
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+/* ─── Tipe data ──────────────────────────────────────────────────────────── */
 
 interface InterventionRow {
   intervention_id: string;
@@ -67,38 +78,51 @@ interface InterventionRow {
   };
 }
 
-// ─── Constants ──────────────────────────────────────────────────────────────────
+/* ─── Konstanta Bahasa Indonesia ─────────────────────────────────────────── */
 
 const INTERVENTION_TYPES = [
-  { value: 'COUNSELING_SESSION', label: 'Counseling Session', icon: '🧠' },
-  { value: 'THERAPY_REFERRAL', label: 'Therapy Referral', icon: '💊' },
-  { value: 'ADVISORY_MEETING', label: 'Advisory / Advice Given', icon: '💬' },
-  { value: 'PARENT_MEETING', label: 'Parent / Guardian Meeting', icon: '👨‍👩‍👧' },
-  { value: 'PARENT_CALL', label: 'Parent / Guardian Call', icon: '📞' },
-  { value: 'DISCIPLINARY_ACTION', label: 'Disciplinary Action', icon: '⚖️' },
-  { value: 'PEER_MEDIATION', label: 'Peer Mediation', icon: '🤝' },
-  { value: 'ACADEMIC_SUPPORT', label: 'Academic Support Plan', icon: '📚' },
-  { value: 'WELLNESS_CHECK', label: 'Wellness Check', icon: '❤️' },
-  { value: 'EXTERNAL_REFERRAL', label: 'External Agency Referral', icon: '🏥' },
-  { value: 'OTHER', label: 'Other', icon: '📋' },
+  { value: 'COUNSELING_SESSION', label: 'Sesi Konseling', icon: HeartHandshake },
+  { value: 'THERAPY_REFERRAL', label: 'Rujukan Terapi', icon: Stethoscope },
+  { value: 'ADVISORY_MEETING', label: 'Memberi Saran / Nasihat', icon: MessageSquare },
+  { value: 'PARENT_MEETING', label: 'Pertemuan Orang Tua / Wali', icon: Users },
+  { value: 'PARENT_CALL', label: 'Telepon Orang Tua / Wali', icon: Phone },
+  { value: 'DISCIPLINARY_ACTION', label: 'Tindakan Disiplin', icon: Gavel },
+  { value: 'PEER_MEDIATION', label: 'Mediasi Antar Teman', icon: Handshake },
+  { value: 'ACADEMIC_SUPPORT', label: 'Rencana Dukungan Akademik', icon: GraduationCap },
+  { value: 'WELLNESS_CHECK', label: 'Pemeriksaan Kesejahteraan', icon: HeartPulse },
+  { value: 'EXTERNAL_REFERRAL', label: 'Rujukan Instansi Luar', icon: ClipboardCheck },
+  { value: 'OTHER', label: 'Lainnya', icon: NotebookPen },
 ] as const;
 
-const CONTACT_METHODS = ['In-Person', 'Phone Call', 'Email', 'WhatsApp / Messaging', 'Letter'];
+const CONTACT_METHODS = [
+  'Tatap Muka',
+  'Telepon',
+  'Surel',
+  'WhatsApp / Pesan',
+  'Surat',
+] as const;
 
 const HANDLER_ROLES = [
-  { value: 'COUNSELOR', label: 'Counselor' },
-  { value: 'TEACHER', label: 'Teacher' },
-  { value: 'SCHOOL_HEAD', label: 'School Head / Principal' },
-  { value: 'EXTERNAL', label: 'External Professional' },
+  { value: 'COUNSELOR', label: 'Konselor' },
+  { value: 'TEACHER', label: 'Guru' },
+  { value: 'SCHOOL_HEAD', label: 'Kepala Sekolah' },
+  { value: 'EXTERNAL', label: 'Tenaga Profesional Luar' },
 ];
 
 const typeIcon = (type: string) =>
-  INTERVENTION_TYPES.find((t) => t.value === type)?.icon ?? '📋';
+  INTERVENTION_TYPES.find((t) => t.value === type)?.icon ?? ClipboardList;
 
 const typeLabel = (type: string) =>
   INTERVENTION_TYPES.find((t) => t.value === type)?.label ?? type;
 
-// ─── Effectiveness Stars ────────────────────────────────────────────────────────
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/* ─── Rating Efektivitas ─────────────────────────────────────────────────── */
 
 function EffectivenessStars({ value }: { value: number | null }) {
   if (!value) return null;
@@ -107,19 +131,15 @@ function EffectivenessStars({ value }: { value: number | null }) {
       {Array.from({ length: 5 }).map((_, i) => (
         <Star
           key={i}
-          className={`w-3 h-3 ${
-            i < value
-              ? 'text-amber-400 fill-amber-400'
-              : 'text-muted-foreground/30'
-          }`}
+          className={`size-3 ${i < value ? 'fill-warning text-warning' : 'text-border'}`}
         />
       ))}
-      <span className="text-[10px] text-muted-foreground ml-1">{value}/5</span>
+      <span className="ml-1 text-xs text-muted-foreground">{value}/5</span>
     </span>
   );
 }
 
-// ─── Intervention Card ──────────────────────────────────────────────────────────
+/* ─── Kartu Intervensi ───────────────────────────────────────────────────── */
 
 function InterventionCard({
   inv,
@@ -133,166 +153,154 @@ function InterventionCard({
   const isCompleted = !!inv.completed_at;
 
   return (
-    <Card className="glass border-border/50 overflow-hidden">
-      {/* Header row */}
-      <div
-        className="flex items-start justify-between gap-3 p-4 cursor-pointer hover:bg-muted/20 transition-colors"
+    <Card>
+      <button
+        type="button"
         onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-start justify-between gap-3 border-b border-border px-5 py-4 text-left transition-colors hover:bg-primary-softer"
       >
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <span className="text-xl mt-0.5 shrink-0">{typeIcon(inv.type)}</span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold">{typeLabel(inv.type)}</p>
-              <Badge
-                variant={isCompleted ? 'default' : 'outline'}
-                className={
-                  isCompleted
-                    ? 'bg-green-500/15 text-green-600 border-green-500/30 text-[10px]'
-                    : 'text-[10px]'
-                }
-              >
-                {isCompleted ? (
-                  <><CheckCircle2 className="w-2.5 h-2.5 mr-1" />Completed</>
-                ) : (
-                  <><Clock className="w-2.5 h-2.5 mr-1" />Pending</>
-                )}
-              </Badge>
-              {meta.parent_notified && (
-                <Badge variant="outline" className="text-[10px] border-blue-400/40 text-blue-500">
-                  <Phone className="w-2.5 h-2.5 mr-1" />Parent Notified
-                </Badge>
-              )}
-              {meta.follow_up_required && (
-                <Badge variant="outline" className="text-[10px] border-orange-400/40 text-orange-500">
-                  Follow-up Required
-                </Badge>
-              )}
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <IconBox tone="purple" size="sm">
+            {createElement(typeIcon(inv.type))}
+          </IconBox>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-heading">{typeLabel(inv.type)}</p>
+              <StatusBadge
+                tone={isCompleted ? 'success' : 'warning'}
+                label={isCompleted ? 'Selesai' : 'Belum Selesai'}
+              />
+              {meta.parent_notified ? (
+                <StatusBadge tone="info" label="Orang Tua diberi tahu" />
+              ) : null}
+              {meta.follow_up_required ? (
+                <StatusBadge tone="danger" label="Perlu Tindak Lanjut" />
+              ) : null}
             </div>
-            <div className="flex flex-wrap gap-3 mt-1 text-[11px] text-muted-foreground">
-              {meta.handler_name && (
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {meta.handler_name ? (
                 <span className="flex items-center gap-1">
-                  <Users className="w-3 h-3" />
+                  <Users className="size-3.5" />
                   {meta.handler_name}
-                  {meta.handled_by_role && ` (${HANDLER_ROLES.find(r => r.value === meta.handled_by_role)?.label ?? meta.handled_by_role})`}
+                  {meta.handled_by_role
+                    ? ` (${HANDLER_ROLES.find((r) => r.value === meta.handled_by_role)?.label ?? meta.handled_by_role})`
+                    : ''}
                 </span>
-              )}
-              {inv.scheduled_at && (
+              ) : null}
+              {inv.scheduled_at ? (
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Scheduled: {new Date(inv.scheduled_at).toLocaleDateString()}
+                  <Clock className="size-3.5" />
+                  Dijadwalkan: {formatDate(inv.scheduled_at)}
                 </span>
-              )}
-              {inv.completed_at && (
-                <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Completed: {new Date(inv.completed_at).toLocaleDateString()}
+              ) : null}
+              {inv.completed_at ? (
+                <span className="flex items-center gap-1 font-medium text-success">
+                  <CheckCircle2 className="size-3.5" />
+                  Diselesaikan: {formatDate(inv.completed_at)}
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           <EffectivenessStars value={inv.effectiveness} />
           {expanded ? (
-            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+            <ChevronDown className="size-4 text-muted-foreground" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            <ChevronDown className="size-4 rotate-[-90deg] text-muted-foreground" />
           )}
         </div>
-      </div>
+      </button>
 
-      {/* Expanded body */}
-      {expanded && (
-        <div className="px-4 pb-4 space-y-4 border-t border-border/40">
-          {/* Description */}
-          <div className="pt-3">
-            <p className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-              <BookOpen className="w-3 h-3" /> Description / How It Was Handled
+      {expanded ? (
+        <CardContent className="space-y-4 pt-4">
+          <div>
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <BookOpen className="size-3.5" />
+              Deskripsi / Cara Ditangani
             </p>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{inv.description}</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-secondary-text">
+              {inv.description}
+            </p>
           </div>
 
-          {/* Parent contact details */}
-          {meta.parent_notified && (
-            <div className="rounded-md bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 p-3 space-y-1">
-              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1 mb-2">
-                <Phone className="w-3 h-3" /> Parent / Guardian Contact
+          {meta.parent_notified ? (
+            <div className="space-y-1.5 rounded-xl border border-info-soft bg-info-soft p-3.5">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-info">
+                <Phone className="size-3.5" />
+                Kontak Orang Tua / Wali
               </p>
-              {meta.parent_contact_name && (
-                <div className="text-xs flex justify-between">
-                  <span className="text-muted-foreground">Contact name</span>
-                  <span className="font-medium">{meta.parent_contact_name}</span>
+              {meta.parent_contact_name ? (
+                <div className="flex justify-between gap-3 text-xs">
+                  <span className="text-muted-foreground">Nama kontak</span>
+                  <span className="font-medium text-heading">{meta.parent_contact_name}</span>
                 </div>
-              )}
-              {meta.parent_contact_method && (
-                <div className="text-xs flex justify-between">
-                  <span className="text-muted-foreground">Method</span>
-                  <span className="font-medium">{meta.parent_contact_method}</span>
+              ) : null}
+              {meta.parent_contact_method ? (
+                <div className="flex justify-between gap-3 text-xs">
+                  <span className="text-muted-foreground">Metode</span>
+                  <span className="font-medium text-heading">{meta.parent_contact_method}</span>
                 </div>
-              )}
+              ) : null}
             </div>
-          )}
+          ) : null}
 
-          {/* Outcome */}
-          {inv.outcome && (
-            <div className="rounded-md bg-muted/40 border border-border/50 p-3">
-              <p className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-                <HeartHandshake className="w-3 h-3" /> Outcome
+          {inv.outcome ? (
+            <div className="rounded-xl border border-border bg-primary-softer p-3.5">
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <HeartHandshake className="size-3.5" />
+                Hasil
               </p>
-              <p className="text-sm whitespace-pre-wrap">{inv.outcome}</p>
-              <div className="mt-2">
-                <EffectivenessStars value={inv.effectiveness} />
-              </div>
+              <p className="whitespace-pre-wrap text-sm text-secondary-text">{inv.outcome}</p>
+              {inv.effectiveness ? (
+                <div className="mt-2">
+                  <EffectivenessStars value={inv.effectiveness} />
+                </div>
+              ) : null}
             </div>
-          )}
+          ) : null}
 
-          {/* Additional notes */}
-          {meta.notes && (
+          {meta.notes ? (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-                <MessageSquare className="w-3 h-3" /> Additional Notes
+              <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <MessageSquare className="size-3.5" />
+                Catatan Tambahan
               </p>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{meta.notes}</p>
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{meta.notes}</p>
             </div>
-          )}
+          ) : null}
 
-          {/* Follow-up */}
-          {meta.follow_up_required && meta.follow_up_date && (
-            <div className="rounded-md bg-orange-50/50 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-900/30 p-3">
-              <p className="text-xs font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Follow-up Required
+          {meta.follow_up_required ? (
+            <div className="rounded-xl border border-warning-soft bg-warning-soft p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-warning">
+                <Clock className="size-3.5" />
+                Perlu Tindak Lanjut
               </p>
-              <p className="text-xs mt-1">
-                Scheduled for{' '}
-                <span className="font-medium">
-                  {new Date(meta.follow_up_date).toLocaleDateString()}
+              <p className="mt-1 text-xs text-secondary-text">
+                Dijadwalkan pada{' '}
+                <span className="font-semibold text-heading">
+                  {formatDate(meta.follow_up_date)}
                 </span>
               </p>
             </div>
-          )}
+          ) : null}
 
-          {/* Mark complete button */}
-          {!isCompleted && (
+          {!isCompleted ? (
             <div className="flex justify-end pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-green-600 border-green-500/40 hover:bg-green-50 dark:hover:bg-green-950/20"
-                onClick={() => onMarkComplete(inv.intervention_id)}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Mark as Completed
+              <Button variant="outline" size="sm" onClick={() => onMarkComplete(inv.intervention_id)}>
+                <CheckCircle2 className="size-4" />
+                Tandai Selesai
               </Button>
             </div>
-          )}
-        </div>
-      )}
+          ) : null}
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
 
-// ─── New Intervention Form ──────────────────────────────────────────────────────
+/* ─── Formulir Intervensi ────────────────────────────────────────────────── */
 
 interface FormState {
   type: string;
@@ -326,7 +334,46 @@ const defaultForm = (): FormState => ({
   notes: '',
 });
 
-// ─── Main Component ─────────────────────────────────────────────────────────────
+function Toggle({
+  checked,
+  onChange,
+  label,
+  description,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-heading">{label}</p>
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/25 ${
+          checked ? 'bg-primary' : 'bg-muted'
+        }`}
+      >
+        <span
+          className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${
+            checked ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+/* ─── Komponen Utama ─────────────────────────────────────────────────────── */
 
 export function InterventionsTab({ caseId }: { caseId: string }) {
   const { user } = useAuth();
@@ -334,9 +381,7 @@ export function InterventionsTab({ caseId }: { caseId: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(defaultForm());
-
-  // ─── Fetch ────────────────────────────────────────────────────────────────────
+  const [form, setForm] = useState<FormState>(defaultForm);
 
   const fetchInterventions = async () => {
     setIsLoading(true);
@@ -349,16 +394,14 @@ export function InterventionsTab({ caseId }: { caseId: string }) {
 
   useEffect(() => {
     fetchInterventions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
-
-  // ─── Form helpers ─────────────────────────────────────────────────────────────
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const isFormValid = form.type.trim() !== '' && form.description.trim() !== '' && form.handlerName.trim() !== '';
-
-  // ─── Submit ───────────────────────────────────────────────────────────────────
+  const isFormValid =
+    form.type.trim() !== '' && form.description.trim() !== '' && form.handlerName.trim() !== '';
 
   const handleSubmit = async () => {
     if (!isFormValid) return;
@@ -374,12 +417,17 @@ export function InterventionsTab({ caseId }: { caseId: string }) {
         handler_name: form.handlerName.trim(),
         handled_by_role: form.handlerRole || undefined,
         parent_notified: form.parentNotified,
-        parent_contact_name: form.parentNotified ? form.parentContactName.trim() || undefined : undefined,
-        parent_contact_method: form.parentNotified ? form.parentContactMethod || undefined : undefined,
-        follow_up_required: form.followUpRequired,
-        follow_up_date: form.followUpRequired && form.followUpDate
-          ? new Date(form.followUpDate).toISOString()
+        parent_contact_name: form.parentNotified
+          ? form.parentContactName.trim() || undefined
           : undefined,
+        parent_contact_method: form.parentNotified
+          ? form.parentContactMethod || undefined
+          : undefined,
+        follow_up_required: form.followUpRequired,
+        follow_up_date:
+          form.followUpRequired && form.followUpDate
+            ? new Date(form.followUpDate).toISOString()
+            : undefined,
         notes: form.notes.trim() || undefined,
       },
     };
@@ -393,15 +441,13 @@ export function InterventionsTab({ caseId }: { caseId: string }) {
       setInterventions((prev) => [res.data!, ...prev]);
       setForm(defaultForm());
       setDialogOpen(false);
-      toast.success('Intervention logged successfully.');
+      toast.success('Intervensi berhasil dicatat.');
     } else {
-      toast.error(res.error ?? 'Failed to log intervention.');
+      toast.error(res.error ?? 'Gagal mencatat intervensi.');
     }
 
     setIsSubmitting(false);
   };
-
-  // ─── Mark complete ────────────────────────────────────────────────────────────
 
   const handleMarkComplete = async (interventionId: string) => {
     const res = await apiClient<InterventionRow>(`/interventions/${interventionId}`, {
@@ -410,323 +456,321 @@ export function InterventionsTab({ caseId }: { caseId: string }) {
     });
     if (res.success && res.data) {
       setInterventions((prev) =>
-        prev.map((i) => (i.intervention_id === interventionId ? res.data! : i))
+        prev.map((i) => (i.intervention_id === interventionId ? res.data! : i)),
       );
-      toast.success('Intervention marked as completed.');
+      toast.success('Intervensi ditandai selesai.');
     } else {
-      toast.error('Failed to update intervention.');
+      toast.error('Gagal memperbarui intervensi.');
     }
   };
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
-
   const canLog = ['COUNSELOR', 'TEACHER', 'SUBSTITUTE_TEACHER', 'SCHOOL_HEAD'].includes(
-    user?.role ?? ''
+    user?.role ?? '',
   );
 
+  const completedCount = interventions.filter((i) => i.completed_at).length;
+  const pendingCount = interventions.length - completedCount;
+  const followUpCount = interventions.filter((i) => i.metadata?.follow_up_required).length;
+  const completionRatio = interventions.length
+    ? (completedCount / interventions.length) * 100
+    : 0;
+
   return (
-    <div className="space-y-4">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <ClipboardList className="w-4 h-4 text-primary" />
-            Interventions
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {interventions.length} recorded &mdash; how this case was handled
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Statistik */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total Intervensi"
+          value={interventions.length}
+          hint="Catatan penanganan pada kasus ini."
+          icon={<ClipboardList className="size-5" />}
+          iconTone="purple"
+        />
+        <StatCard
+          label="Sudah Selesai"
+          value={completedCount}
+          hint="Intervensi yang sudah dituntaskan."
+          icon={<CheckCircle2 className="size-5" />}
+          iconTone="green"
+          progress={completionRatio}
+          progressLabel="Proporsi intervensi selesai"
+        />
+        <StatCard
+          label="Belum Selesai"
+          value={pendingCount}
+          hint="Intervensi yang belum dituntaskan."
+          icon={<Clock className="size-5" />}
+          iconTone="yellow"
+        />
+        <StatCard
+          label="Perlu Tindak Lanjut"
+          value={followUpCount}
+          hint="Intervensi dengan tindak lanjut terjadwal."
+          icon={<CalendarCheck className="size-5" />}
+          iconTone="red"
+        />
+      </div>
 
-        {canLog && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger render={<Button size="sm" className="gap-1.5" />}>
-              <Plus className="w-3.5 h-3.5" />
-              Log Intervention
-            </DialogTrigger>
+      {/* Kartu aksi */}
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            <IconBox tone="purple" size="sm">
+              <ClipboardList />
+            </IconBox>
+            <div>
+              <CardTitle>Catat Intervensi</CardTitle>
+              <CardDescription>
+                Dokumentasikan konseling, rujukan, kontak orang tua, atau tindakan lain yang dilakukan.
+              </CardDescription>
+            </div>
+          </div>
+          {canLog ? (
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger
+                render={
+                  <Button size="sm">
+                    <Plus className="size-4" />
+                    Tambah Intervensi
+                  </Button>
+                }
+              />
+              <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Pencil className="size-4 text-primary" />
+                    Tambah Intervensi
+                  </DialogTitle>
+                  <DialogDescription>
+                    Catat bagaimana kasus ini ditangani — sesi konseling, nasihat, kontak orang
+                    tua, atau tindakan lainnya.
+                  </DialogDescription>
+                </DialogHeader>
 
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Pencil className="w-4 h-4 text-primary" />
-                  Log Intervention
-                </DialogTitle>
-                <DialogDescription>
-                  Record how this case was handled — therapy, advice, parent contact, or other action.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-5 py-2">
-                {/* ── Intervention Type ── */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">
-                    Intervention Type <span className="text-destructive">*</span>
-                  </Label>
-                  <Select value={form.type} onValueChange={(v) => setField('type', v ?? '')}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select type…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INTERVENTION_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.icon}&nbsp;&nbsp;{t.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* ── Who Handled ── */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-5 py-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold">
-                      Handled By (Name) <span className="text-destructive">*</span>
+                      Jenis Intervensi <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      placeholder="e.g. Ms. Siti"
-                      value={form.handlerName}
-                      onChange={(e) => setField('handlerName', e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold">Role</Label>
-                    <Select value={form.handlerRole} onValueChange={(v) => setField('handlerRole', v ?? '')}>
+                    <Select value={form.type} onValueChange={(v) => setField('type', v ?? '')}>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select role…" />
+                        <SelectValue placeholder="Pilih jenis intervensi..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {HANDLER_ROLES.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                        {INTERVENTION_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
 
-                {/* ── Date / Time ── */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Date &amp; Time of Intervention</Label>
-                  <Input
-                    type="datetime-local"
-                    value={form.scheduledAt}
-                    onChange={(e) => setField('scheduledAt', e.target.value)}
-                  />
-                </div>
-
-                {/* ── Description ── */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">
-                    Description / How It Was Handled <span className="text-destructive">*</span>
-                  </Label>
-                  <Textarea
-                    placeholder="Describe what was done — session topics, advice given, actions taken…"
-                    value={form.description}
-                    onChange={(e) => setField('description', e.target.value)}
-                    rows={4}
-                  />
-                </div>
-
-                {/* ── Parent Notified ── */}
-                <div className="rounded-lg border border-border/50 p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
-                      <Phone className="w-3.5 h-3.5 text-blue-500" />
-                      Parent / Guardian Notified
-                    </Label>
-                    <button
-                      type="button"
-                      onClick={() => setField('parentNotified', !form.parentNotified)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                        form.parentNotified
-                          ? 'bg-blue-500'
-                          : 'bg-muted-foreground/30'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                          form.parentNotified ? 'translate-x-4' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {form.parentNotified && (
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Parent / Guardian Name</Label>
-                        <Input
-                          placeholder="e.g. Encik Ahmad"
-                          value={form.parentContactName}
-                          onChange={(e) => setField('parentContactName', e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Contact Method</Label>
-                        <Select
-                          value={form.parentContactMethod}
-                          onValueChange={(v) => setField('parentContactMethod', v ?? '')}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Method…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CONTACT_METHODS.map((m) => (
-                              <SelectItem key={m} value={m}>{m}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Outcome ── */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Outcome <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Textarea
-                    placeholder="Describe the result or response…"
-                    value={form.outcome}
-                    onChange={(e) => setField('outcome', e.target.value)}
-                    rows={3}
-                  />
-                </div>
-
-                {/* ── Effectiveness ── */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">
-                    Effectiveness <span className="text-muted-foreground font-normal">(1 = low, 5 = high)</span>
-                  </Label>
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() =>
-                          setField('effectiveness', form.effectiveness === String(n) ? '' : String(n))
-                        }
-                        className="focus:outline-none"
-                      >
-                        <Star
-                          className={`w-6 h-6 transition-colors ${
-                            Number(form.effectiveness) >= n
-                              ? 'text-amber-400 fill-amber-400'
-                              : 'text-muted-foreground/30 hover:text-amber-200'
-                          }`}
-                        />
-                      </button>
-                    ))}
-                    {form.effectiveness && (
-                      <span className="text-xs text-muted-foreground self-center ml-1">
-                        {form.effectiveness}/5
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Follow-up ── */}
-                <div className="rounded-lg border border-border/50 p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
-                      <Clock className="w-3.5 h-3.5 text-orange-500" />
-                      Follow-up Required
-                    </Label>
-                    <button
-                      type="button"
-                      onClick={() => setField('followUpRequired', !form.followUpRequired)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                        form.followUpRequired ? 'bg-orange-500' : 'bg-muted-foreground/30'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                          form.followUpRequired ? 'translate-x-4' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  {form.followUpRequired && (
-                    <div className="space-y-1.5 pt-1">
-                      <Label className="text-xs font-semibold">Follow-up Date</Label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        Nama Penanggung Jawab <span className="text-destructive">*</span>
+                      </Label>
                       <Input
-                        type="date"
-                        value={form.followUpDate}
-                        onChange={(e) => setField('followUpDate', e.target.value)}
+                        placeholder="Contoh: Ibu Ratih"
+                        value={form.handlerName}
+                        onChange={(e) => setField('handlerName', e.target.value)}
                       />
                     </div>
-                  )}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Peran</Label>
+                      <Select
+                        value={form.handlerRole}
+                        onValueChange={(v) => setField('handlerRole', v ?? '')}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Pilih peran..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {HANDLER_ROLES.map((r) => (
+                            <SelectItem key={r.value} value={r.value}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Waktu Intervensi</Label>
+                    <Input
+                      type="datetime-local"
+                      value={form.scheduledAt}
+                      onChange={(e) => setField('scheduledAt', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">
+                      Deskripsi / Cara Ditangani <span className="text-destructive">*</span>
+                    </Label>
+                    <Textarea
+                      placeholder="Jelaskan apa yang dilakukan — topik sesi, nasihat yang diberikan, tindakan yang diambil..."
+                      value={form.description}
+                      onChange={(e) => setField('description', e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-border p-3.5">
+                    <Toggle
+                      checked={form.parentNotified}
+                      onChange={(v) => setField('parentNotified', v)}
+                      label="Orang Tua / Wali Sudah Diberi Tahu"
+                      description="Catat kontak dengan orang tua atau wali."
+                    />
+                    {form.parentNotified ? (
+                      <div className="grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Nama Orang Tua / Wali</Label>
+                          <Input
+                            placeholder="Contoh: Bapak Ahmad"
+                            value={form.parentContactName}
+                            onChange={(e) => setField('parentContactName', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Metode Kontak</Label>
+                          <Select
+                            value={form.parentContactMethod}
+                            onValueChange={(v) => setField('parentContactMethod', v ?? '')}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Pilih metode..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CONTACT_METHODS.map((m) => (
+                                <SelectItem key={m} value={m}>
+                                  {m}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">
+                      Hasil <span className="font-normal text-muted-foreground">(opsional)</span>
+                    </Label>
+                    <Textarea
+                      placeholder="Jelaskan hasil atau respon yang diterima..."
+                      value={form.outcome}
+                      onChange={(e) => setField('outcome', e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">
+                      Efektivitas{' '}
+                      <span className="font-normal text-muted-foreground">(1 = rendah, 5 = tinggi)</span>
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() =>
+                            setField('effectiveness', form.effectiveness === String(n) ? '' : String(n))
+                          }
+                          aria-label={`Beri nilai efektivitas ${n} dari 5`}
+                          className="rounded-lg p-0.5 transition-transform focus-visible:ring-[3px] focus-visible:ring-ring/25"
+                        >
+                          <Star
+                            className={`size-6 transition-colors ${
+                              Number(form.effectiveness) >= n
+                                ? 'fill-warning text-warning'
+                                : 'text-border hover:text-warning-soft'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                      {form.effectiveness ? (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          {form.effectiveness}/5
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-border p-3.5">
+                    <Toggle
+                      checked={form.followUpRequired}
+                      onChange={(v) => setField('followUpRequired', v)}
+                      label="Perlu Tindak Lanjut"
+                      description="Tandai bila kasus perlu ditangani kembali."
+                    />
+                    {form.followUpRequired ? (
+                      <div className="space-y-1.5 border-t border-border pt-3">
+                        <Label className="text-xs font-semibold">Tanggal Tindak Lanjut</Label>
+                        <Input
+                          type="date"
+                          value={form.followUpDate}
+                          onChange={(e) => setField('followUpDate', e.target.value)}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">
+                      Catatan Tambahan{' '}
+                      <span className="font-normal text-muted-foreground">(opsional)</span>
+                    </Label>
+                    <Textarea
+                      placeholder="Amatan atau konteks lain yang relevan..."
+                      value={form.notes}
+                      onChange={(e) => setField('notes', e.target.value)}
+                      rows={2}
+                    />
+                  </div>
                 </div>
 
-                {/* ── Additional Notes ── */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Additional Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Textarea
-                    placeholder="Any other relevant observations or context…"
-                    value={form.notes}
-                    onChange={(e) => setField('notes', e.target.value)}
-                    rows={2}
-                  />
-                </div>
-              </div>
+                <DialogFooter showCloseButton>
+                  <Button onClick={handleSubmit} disabled={!isFormValid || isSubmitting}>
+                    <ClipboardList className="size-4" />
+                    {isSubmitting ? 'Menyimpan...' : 'Simpan Intervensi'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </CardHeader>
+      </Card>
 
-              <DialogFooter showCloseButton>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={!isFormValid || isSubmitting}
-                  className="gap-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      Saving…
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardList className="w-3.5 h-3.5" />
-                      Log Intervention
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-
-      {/* Loading */}
-      {isLoading && (
-        <div className="py-12 text-center text-sm text-muted-foreground">
-          Loading interventions…
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!isLoading && interventions.length === 0 && (
-        <Card className="glass border-border/50 border-dashed">
-          <CardContent className="flex flex-col items-center py-14 gap-3">
-            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <ClipboardList className="w-6 h-6 text-primary/60" />
-            </div>
-            <p className="text-sm font-medium text-muted-foreground">No interventions recorded yet</p>
-            <p className="text-xs text-muted-foreground/60 text-center max-w-xs">
-              Log how this case has been handled — counseling sessions, parent meetings, therapy referrals, and more.
-            </p>
-            {canLog && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-2 gap-1.5"
-                onClick={() => setDialogOpen(true)}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Log First Intervention
-              </Button>
-            )}
+      {/* Memuat */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="flex items-center justify-center py-16">
+            <div className="size-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
           </CardContent>
         </Card>
-      )}
-
-      {/* Intervention list */}
-      {!isLoading && interventions.length > 0 && (
+      ) : interventions.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Lightbulb />}
+            title="Belum ada intervensi"
+            description="Anda belum memiliki data. Mulai dengan mencatat bagaimana kasus ini ditangani — sesi konseling, pertemuan orang tua, rujukan terapi, dan lainnya."
+            action={
+              canLog ? (
+                <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="size-4" />
+                  Catat Intervensi Pertama
+                </Button>
+              ) : undefined
+            }
+          />
+        </Card>
+      ) : (
         <div className="space-y-3">
           {interventions.map((inv) => (
             <InterventionCard

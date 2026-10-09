@@ -10,6 +10,10 @@ interface User {
   role: string;
   tenant_id: string;
   gender?: string;
+  /** Signed 128px WebP URL from /auth/login, or null when no photo is set. */
+  avatar_url?: string | null;
+  /** Signed 512px WebP URL, or null. */
+  avatar_full_url?: string | null;
 }
 
 interface AuthContextType {

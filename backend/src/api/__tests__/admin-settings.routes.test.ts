@@ -215,13 +215,17 @@ describe('Admin Settings Routes', () => {
     });
   });
 
+  // The route validates `{ ai: { aiApiUrl, aiApiKey } }` (not a flat body) and
+  // pings `${baseUrl}/v1/models` first via `fetchWithTimeout` — the previous
+  // version of these tests sent a flat body and asserted on the raw URL, so
+  // they failed zod validation and never reached the fetch at all.
   describe('POST /api/admin/ai/check-connection', () => {
     it('should allow IT_ADMIN to test AI connection', async () => {
       const token = generateTestToken('tenant-123', 'user-123', 'IT_ADMIN');
 
-      // Mock fetch globally
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
+        status: 200,
         statusText: 'OK'
       });
 
@@ -229,20 +233,22 @@ describe('Admin Settings Routes', () => {
         .post('/api/admin/ai/check-connection')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          aiApiUrl: 'http://localhost:11434/api/generate',
-          aiApiKey: 'test-key'
+          ai: {
+            aiApiUrl: 'http://localhost:11434',
+            aiApiKey: 'test-key'
+          }
         });
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.connected).toBe(true);
-      expect(global.fetch).toHaveBeenCalledWith('http://localhost:11434/api/generate', {
-        method: 'GET',
-        headers: {
-          'Authorization': 'Bearer test-key',
-          'Content-Type': 'application/json'
-        }
-      });
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:11434/v1/models',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({ 'Authorization': 'Bearer test-key' })
+        })
+      );
     });
 
     it('should return error if AI connection fails', async () => {
@@ -250,20 +256,35 @@ describe('Admin Settings Routes', () => {
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
-        statusText: 'Bad Request'
+        status: 401,
+        statusText: 'Unauthorized'
       });
 
       const res = await request(app)
         .post('/api/admin/ai/check-connection')
         .set('Authorization', `Bearer ${token}`)
         .send({
-          aiApiUrl: 'http://localhost:11434/api/generate',
-          aiApiKey: 'test-key'
+          ai: {
+            aiApiUrl: 'http://localhost:11434',
+            aiApiKey: 'wrong-key'
+          }
         });
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
-      expect(res.body.error.message).toContain('Failed to connect');
+      expect(res.body.error.message).toContain('401');
+    });
+
+    it('should reject a body that is not shaped like { ai: { … } }', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'IT_ADMIN');
+
+      const res = await request(app)
+        .post('/api/admin/ai/check-connection')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ aiApiUrl: 'http://localhost:11434', aiApiKey: 'test-key' });
+
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('should prevent non-IT_ADMIN from testing AI connection', async () => {

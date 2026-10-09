@@ -4,8 +4,19 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, FileText, Users } from 'lucide-react';
+import { PageHeader, EmptyState } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatusBadge, severityTone, type StatusTone } from '@/components/ui/status-badge';
+import {
+  DataTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui/data-table';
+import { AlertTriangle, FileText, Users, Lock, ShieldAlert, Loader2, CheckCircle2, CircleDot } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 
@@ -20,6 +31,22 @@ interface Submission {
   submitted_at: string;
   submitted_by_name: string | null;
 }
+
+/** Friendly Indonesian labels for each submission status. */
+const STATUS_LABEL: Record<string, string> = {
+  submitted: 'Terkirim',
+  in_progress: 'Diproses',
+  completed: 'Selesai',
+  closed: 'Ditutup',
+};
+
+/** Semantic tone for each submission status. */
+const STATUS_TONE: Record<string, StatusTone> = {
+  submitted: 'info',
+  in_progress: 'warning',
+  completed: 'success',
+  closed: 'neutral',
+};
 
 export default function EmployeeCounselingAdminPage() {
   const { user } = useAuth();
@@ -39,132 +66,161 @@ export default function EmployeeCounselingAdminPage() {
 
   if (user?.role !== 'IT_ADMIN') {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
+        <PageHeader
+          title="Konseling Karyawan"
+          description="Ringkasan dan catatan akses untuk data konseling karyawan."
+        />
         <Card>
-          <CardContent className="py-10 text-center text-muted-foreground">
-            Halaman ini hanya untuk IT Admin.
+          <CardContent>
+            <EmptyState
+              icon={<Lock />}
+              title="Akses dibatasi"
+              description="Halaman ini hanya dapat dibuka oleh Admin IT. Hubungi Admin IT sekolah bila Anda membutuhkan akses."
+            />
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const highCount = submissions.filter(s => s.is_high_priority).length;
-  const byStatus = submissions.reduce((acc, s) => {
-    acc[s.submission_status] = (acc[s.submission_status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const highCount = submissions.filter((s) => s.is_high_priority).length;
+  const doneCount = submissions.filter(
+    (s) => s.submission_status === 'completed' || s.submission_status === 'closed',
+  ).length;
+  const newCount = submissions.filter((s) => s.submission_status === 'submitted').length;
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">Konseling Karyawan — Admin</h1>
-        <p className="text-muted-foreground">Overview & access log untuk data rahasia.</p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Konseling Karyawan"
+        description="Ringkasan dan catatan akses untuk data konseling karyawan."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total Pengajuan"
+          value={submissions.length}
+          hint="Seluruh pengajuan konseling karyawan"
+          icon={<Users className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Prioritas Tinggi"
+          value={highCount}
+          hint="Perlu ditangani segera oleh konselor"
+          icon={<AlertTriangle className="size-5" />}
+          iconTone="red"
+          progress={
+            submissions.length > 0 ? Math.round((highCount / submissions.length) * 100) : 0
+          }
+          progressLabel="Persentase pengajuan prioritas tinggi"
+        />
+        <StatCard
+          label="Pengajuan Baru"
+          value={newCount}
+          hint="Menunggu tindak lanjut konselor"
+          icon={<FileText className="size-5" />}
+          iconTone="yellow"
+        />
+        <StatCard
+          label="Selesai / Ditutup"
+          value={doneCount}
+          hint="Pengajuan yang sudah diselesaikan"
+          icon={<CheckCircle2 className="size-5" />}
+          iconTone="green"
+          progress={
+            submissions.length > 0 ? Math.round((doneCount / submissions.length) * 100) : 0
+          }
+          progressLabel="Persentase pengajuan selesai"
+        />
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100"><Users className="h-5 w-5 text-blue-600" /></div>
-              <div>
-                <p className="text-2xl font-bold">{submissions.length}</p>
-                <p className="text-xs text-muted-foreground">Total Pengajuan</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-100"><AlertTriangle className="h-5 w-5 text-red-600" /></div>
-              <div>
-                <p className="text-2xl font-bold">{highCount}</p>
-                <p className="text-xs text-muted-foreground">High Priority</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-yellow-100"><FileText className="h-5 w-5 text-yellow-600" /></div>
-              <div>
-                <p className="text-2xl font-bold">{byStatus.submitted || 0}</p>
-                <p className="text-xs text-muted-foreground">Baru</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100"><FileText className="h-5 w-5 text-green-600" /></div>
-              <div>
-                <p className="text-2xl font-bold">{(byStatus.completed || 0) + (byStatus.closed || 0)}</p>
-                <p className="text-xs text-muted-foreground">Selesai / Ditutup</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* All Submissions */}
       <Card>
-        <CardHeader>
-          <CardTitle>Semua Pengajuan</CardTitle>
-          <CardDescription>Daftar lengkap pengajuan konseling karyawan.</CardDescription>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="blue">
+              <FileText />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Semua Pengajuan</CardTitle>
+              <CardDescription>
+                Daftar lengkap pengajuan konseling karyawan yang tercatat di sistem.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Memuat...</p>
-          ) : submissions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Belum ada pengajuan.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b">
-                    <th className="p-2">Karyawan</th>
-                    <th className="p-2">Unit</th>
-                    <th className="p-2">Status</th>
-                    <th className="p-2">Priority</th>
-                    <th className="p-2">Konselor</th>
-                    <th className="p-2">Tanggal</th>
-                    <th className="p-2">Pengaju</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {submissions.map((s) => (
-                    <tr key={s.submission_id} className={`border-b ${s.is_high_priority ? 'bg-red-50/50' : ''}`}>
-                      <td className="p-2 font-medium">{s.employee_name}</td>
-                      <td className="p-2 text-muted-foreground">{s.unit || '-'}</td>
-                      <td className="p-2"><Badge>{s.submission_status}</Badge></td>
-                      <td className="p-2">
-                        {s.is_high_priority ? (
-                          <Badge variant="destructive" className="gap-1"><AlertTriangle className="h-3 w-3" /> High</Badge>
-                        ) : <span className="text-muted-foreground">Normal</span>}
-                      </td>
-                      <td className="p-2 text-muted-foreground">{s.counselor_name || '-'}</td>
-                      <td className="p-2 text-muted-foreground">
-                        {format(new Date(s.submitted_at), 'dd MMM yyyy', { locale: id })}
-                      </td>
-                      <td className="p-2 text-muted-foreground">{s.submitted_by_name || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex flex-col items-center gap-3 py-16">
+              <Loader2 className="size-7 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Memuat pengajuan konseling…</p>
             </div>
+          ) : submissions.length === 0 ? (
+            <EmptyState
+              icon={<FileText />}
+              title="Belum ada pengajuan"
+              description="Belum ada pengajuan konseling karyawan yang masuk. Halaman ini akan terisi otomatis saat karyawan mengirim pengajuan."
+            />
+          ) : (
+            <DataTable>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell scope="col">Karyawan</TableHeaderCell>
+                  <TableHeaderCell scope="col">Unit</TableHeaderCell>
+                  <TableHeaderCell scope="col">Status</TableHeaderCell>
+                  <TableHeaderCell scope="col">Prioritas</TableHeaderCell>
+                  <TableHeaderCell scope="col">Konselor</TableHeaderCell>
+                  <TableHeaderCell scope="col">Tanggal</TableHeaderCell>
+                  <TableHeaderCell scope="col">Pengaju</TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {submissions.map((s) => (
+                  <TableRow key={s.submission_id} interactive>
+                    <TableCell className="font-medium text-heading">{s.employee_name}</TableCell>
+                    <TableCell className="text-muted-foreground">{s.unit || '—'}</TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        tone={STATUS_TONE[s.submission_status] ?? severityTone(s.submission_status)}
+                        label={STATUS_LABEL[s.submission_status] ?? s.submission_status}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {s.is_high_priority ? (
+                        <StatusBadge tone="danger" label="Tinggi" />
+                      ) : (
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <CircleDot className="size-3" />
+                          Normal
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{s.counselor_name || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(new Date(s.submitted_at), 'dd MMM yyyy', { locale: id })}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{s.submitted_by_name || '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </DataTable>
           )}
         </CardContent>
       </Card>
 
-      <Card className="border-amber-200 bg-amber-50/30">
-        <CardContent className="py-4">
-          <p className="text-sm text-amber-800">
-            <strong>Catatan Kerahasiaan:</strong> Data konseling karyawan bersifat rahasia. Access log setiap pembukaan data tercatat otomatis.
-          </p>
+      <Card className="border-warning-soft bg-warning-soft/40">
+        <CardContent className="flex items-start gap-3 p-5">
+          <IconBox tone="yellow" size="sm">
+            <ShieldAlert />
+          </IconBox>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-heading">Catatan Kerahasiaan</p>
+            <p className="text-sm leading-relaxed text-secondary-text">
+              Data konseling karyawan bersifat rahasia. Setiap kali data dibuka, sistem otomatis
+              mencatat log akses untuk keperluan pengawasan.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

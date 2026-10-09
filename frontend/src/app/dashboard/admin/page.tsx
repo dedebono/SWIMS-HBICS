@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -11,15 +11,21 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PageHeader, EmptyState } from '@/components/ui/page-header';
+import { StatCard, ProgressPill } from '@/components/ui/stat-card';
+import { StatusBadge } from '@/components/ui/status-badge';
 import {
   Users,
   UserCheck,
   UserX,
   GraduationCap,
   ShieldCheck,
-  ArrowRight,
   Download,
   Upload,
+  FileUp,
+  Settings,
+  TriangleAlert,
+  CircleCheckBig,
 } from 'lucide-react';
 
 interface SystemSummary {
@@ -46,37 +52,6 @@ function roleLabel(role: string): string {
     .split('_')
     .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
     .join(' ');
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  sub,
-  accent,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number | string;
-  sub?: string;
-  accent: string;
-}) {
-  return (
-    <Card className="glass shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="mt-1 text-3xl font-bold tracking-tight">{value}</p>
-            {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
-          </div>
-          <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accent}`}>
-            {icon}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 export default function AdminDashboardPage() {
@@ -109,6 +84,7 @@ export default function AdminDashboardPage() {
     count: summary!.roleDistribution[r],
   }));
   const maxDist = Math.max(1, ...dist.map((d) => d.count));
+  const totalStaff = dist.reduce((sum, d) => sum + d.count, 0);
 
   // ── Data migration (export / import) ──
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -174,128 +150,149 @@ export default function AdminDashboardPage() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Ringkasan Sistem</h1>
-          <p className="text-sm text-muted-foreground">
-            Gambaran pengguna &amp; akses untuk organisasi Anda.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/dashboard/admin/users"
-            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            User Management <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link
-            href="/dashboard/admin/settings"
-            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            Settings <ArrowRight className="h-4 w-4" />
-          </Link>
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Ringkasan Sistem"
+          description="Gambaran pengguna dan hak akses untuk organisasi Anda."
+        />
+        <div className="flex h-64 items-center justify-center">
+          <div className="size-9 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
         </div>
       </div>
+    );
+  }
 
-      {loading && (
-        <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      )}
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Ringkasan Sistem"
+        description="Gambaran pengguna dan hak akses untuk organisasi Anda."
+        actions={
+          <>
+            <Button variant="outline" render={<Link href="/dashboard/admin/settings" />}>
+              <Settings className="size-4" />
+              Pengaturan
+            </Button>
+            <Button render={<Link href="/dashboard/admin/users" />}>
+              <Users className="size-4" />
+              Kelola Pengguna
+            </Button>
+          </>
+        }
+      />
 
-      {error && !loading && (
-        <Card className="glass shadow-sm">
-          <CardContent className="p-6 text-sm text-red-600">{error}</CardContent>
+      {error ? (
+        <Card>
+          <CardContent className="flex items-start gap-3 p-5">
+            <StatusBadge tone="danger" label="Gagal memuat" />
+            <p className="text-sm text-secondary-text">{error}</p>
+          </CardContent>
         </Card>
-      )}
+      ) : null}
 
-      {summary && !loading && (
+      {summary ? (
         <>
-          {/* Stat cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              icon={<Users className="h-5 w-5" />}
               label="Total Pengguna"
               value={summary.totalUsers}
-              sub={`${summary.activeUsers} aktif`}
-              accent="bg-primary/10 text-primary"
+              hint={`${summary.activeUsers} pengguna aktif`}
+              icon={<Users className="size-5" />}
+              iconTone="blue"
+              progress={
+                summary.totalUsers > 0
+                  ? Math.round((summary.activeUsers / summary.totalUsers) * 100)
+                  : 0
+              }
+              progressLabel="Persentase pengguna aktif"
             />
             <StatCard
-              icon={<UserCheck className="h-5 w-5" />}
               label="Pengguna Aktif"
               value={summary.activeUsers}
-              accent="bg-emerald-100 text-emerald-700"
+              hint="Akun yang dapat masuk ke sistem"
+              icon={<UserCheck className="size-5" />}
+              iconTone="green"
+              progress={
+                summary.totalUsers > 0
+                  ? Math.round((summary.activeUsers / summary.totalUsers) * 100)
+                  : 0
+              }
+              progressLabel="Persentase pengguna aktif"
             />
             <StatCard
-              icon={<UserX className="h-5 w-5" />}
-              label="Pengguna Non-aktif"
+              label="Pengguna Nonaktif"
               value={summary.inactiveUsers}
-              accent="bg-orange-100 text-orange-700"
+              hint="Akun yang dinonaktifkan atau belum pernah masuk"
+              icon={<UserX className="size-5" />}
+              iconTone="yellow"
+              progress={
+                summary.totalUsers > 0
+                  ? Math.round((summary.inactiveUsers / summary.totalUsers) * 100)
+                  : 0
+              }
+              progressLabel="Persentase pengguna nonaktif"
             />
             <StatCard
-              icon={<GraduationCap className="h-5 w-5" />}
-              label="Siswa (data)"
+              label="Data Siswa"
               value={summary.students}
-              sub="Data siswa terdaftar"
-              accent="bg-violet-100 text-violet-700"
+              hint="Jumlah siswa yang terdaftar di sekolah"
+              icon={<GraduationCap className="size-5" />}
+              iconTone="purple"
             />
           </div>
 
-          {/* Role distribution */}
-          <Card className="glass shadow-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Distribusi Peran
-              </CardTitle>
-              <CardDescription>Jumlah akun per peran (staf).</CardDescription>
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle>Distribusi Peran</CardTitle>
+              <CardDescription>
+                Jumlah akun staf per peran. Total {totalStaff} akun staf terdaftar.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               {dist.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Belum ada data pengguna.</p>
+                <EmptyState
+                  icon={<ShieldCheck />}
+                  title="Belum ada data staf"
+                  description="Belum ada akun staf yang tercatat. Tambahkan pengguna melalui menu Kelola Pengguna."
+                />
               ) : (
                 dist.map((d) => (
-                  <div key={d.role} className="flex items-center gap-3">
-                    <div className="w-36 shrink-0 text-sm">{roleLabel(d.role)}</div>
-                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${(d.count / maxDist) * 100}%` }}
-                      />
+                  <div key={d.role} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-heading">{roleLabel(d.role)}</p>
+                      <p className="text-xs font-semibold text-muted-foreground">{d.count} akun</p>
                     </div>
-                    <div className="w-8 shrink-0 text-right text-sm font-medium">
-                      {d.count}
-                    </div>
+                    <ProgressPill
+                      value={(d.count / maxDist) * 100}
+                      tone="blue"
+                      label={`${roleLabel(d.role)}: ${d.count} akun`}
+                    />
                   </div>
                 ))
               )}
             </CardContent>
           </Card>
         </>
-      )}
+      ) : null}
 
       {/* Data migration */}
-      <Card className="glass shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Upload className="h-4 w-4 text-primary" />
-            Migrasi Data
-          </CardTitle>
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle>Migrasi Data</CardTitle>
           <CardDescription>
-            Export semua data ke server produksi baru, lalu import di
-            server tujuan. Termasuk: pengguna, siswa, kasus, insiden, intervensi,
-            observasi, konseling, quisioner, rujukan psikolog, buku pedoman
-            disiplin, dan lainnya. Media (file) tidak disertakan.
+            Ekspor semua data ke server produksi baru, lalu impor di server tujuan.
+            Mencakup pengguna, siswa, kasus, insiden, intervensi, observasi, konseling,
+            kuisioner, rujukan psikolog, buku pedoman disiplin, dan lainnya. Berkas media
+            tidak disertakan.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Button onClick={handleExport} disabled={exporting}>
-              <Download className="mr-2 h-4 w-4" />
-              {exporting ? 'Mengekspor…' : 'Export Data'}
+              <Download className="size-4" />
+              {exporting ? 'Mengekspor…' : 'Ekspor Data'}
             </Button>
             <input
               ref={fileInputRef}
@@ -305,33 +302,48 @@ export default function AdminDashboardPage() {
               onChange={handleFileChange}
             />
             <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-              Pilih File JSON
+              <FileUp className="size-4" />
+              Pilih Berkas JSON
             </Button>
             <Button onClick={handleImport} disabled={!selectedFile || importing}>
-              <Upload className="mr-2 h-4 w-4" />
-              {importing ? 'Mengimpor…' : 'Import Data'}
+              <Upload className="size-4" />
+              {importing ? 'Mengimpor…' : 'Impor Data'}
             </Button>
           </div>
 
-          {selectedFile && (
-            <p className="text-sm text-muted-foreground">File: {selectedFile.name}</p>
-          )}
-          {importError && <p className="text-sm text-red-600">{importError}</p>}
-          {importResult && (
-            <div className="text-sm">
-              <p className="font-medium text-emerald-700">Import selesai:</p>
-              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+          {selectedFile ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted px-4 py-3">
+              <StatusBadge tone="info" label="Berkas dipilih" />
+              <p className="text-sm text-secondary-text">{selectedFile.name}</p>
+            </div>
+          ) : null}
+
+          {importError ? (
+            <div className="flex items-start gap-3 rounded-xl border border-danger-soft bg-danger-soft/40 px-4 py-3">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-danger" />
+              <p className="text-sm text-secondary-text">{importError}</p>
+            </div>
+          ) : null}
+
+          {importResult ? (
+            <div className="space-y-3 rounded-xl border border-success-soft bg-success-soft/40 px-4 py-3.5">
+              <div className="flex items-center gap-2">
+                <CircleCheckBig className="size-4 text-success" />
+                <p className="text-sm font-semibold text-heading">Impor berhasil selesai</p>
+              </div>
+              <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                 {Object.entries(importResult).map(([k, v]) => (
-                  <li key={k}>
-                    {k}: {v}
-                  </li>
+                  <div key={k} className="flex items-center justify-between gap-3 border-b border-border pb-1.5">
+                    <span className="text-sm capitalize text-secondary-text">{k.replace(/_/g, ' ')}</span>
+                    <span className="text-sm font-semibold text-heading">{v}</span>
+                  </div>
                 ))}
-              </ul>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Baris dengan ID sudah ada dilewati (idempoten).
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Baris dengan ID yang sudah ada akan dilewati (idempoten).
               </p>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
     </div>

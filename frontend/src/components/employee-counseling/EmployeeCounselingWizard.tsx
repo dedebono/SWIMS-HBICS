@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,10 +26,23 @@ const AREA_OPTIONS = [
 ];
 const HARAPAN_OPTIONS = ['Mendapatkan ruang untuk bercerita', 'Memahami diri sendiri lebih dalam', 'Mendapatkan solusi/advice', 'Strategi mengatasi masalah', 'Rujukan ke profesional', 'Dukacita / kehilangan'];
 const E_WAKTU_OPTIONS = ['Pagi (07:00-12:00)', 'Siang (12:00-15:00)', 'Sore (15:00-18:00)', 'Online (bebas)'];
-const E_METODE_OPTIONS = ['Tatap muka (offline)', 'Online', 'Tidak ada preferensi'];
+// e_metode / e_konselor_preferensi are enums in the shared schema, so these
+// MUST be {value,label} pairs. Previously E_METODE_OPTIONS held the display
+// text ('Tatap muka (offline)') and that text was submitted as the value,
+// which the API rejected with 422 "Invalid enum value".
+const E_METODE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'tatap_muka', label: 'Tatap muka (offline)' },
+  { value: 'online', label: 'Online' },
+  { value: 'tanpa_preferensi', label: 'Tidak ada preferensi' },
+];
+const E_KONSELOR_OPTIONS: { value: string; label: string }[] = [
+  { value: 'tanpa_preferensi', label: 'Tidak ada preferensi' },
+  { value: 'konselor_pria', label: 'Konselor laki-laki' },
+  { value: 'konselor_wanita', label: 'Konselor perempuan' },
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface FormData {
+export interface FormData {
   employee_name: string;
   unit: string;
   position: string;
@@ -51,23 +64,83 @@ interface FormData {
   consents: { consent_confidentiality: boolean; consent_emergency_protocol: boolean };
 }
 
-interface EmployeeCounselingWizardProps {
+export interface EmployeeCounselingWizardProps {
   onSubmitted?: (submissionId: string) => void;
   tenantSlug?: string;
+  /**
+   * Combined flow (NIK + questionnaire + booking). Pre-fills Section A from the
+   * verified staff record so nobody re-types data the school already holds.
+   */
+  initialData?: Partial<FormData>;
+  /**
+   * Combined flow: render as a plain form with NO submit button and report the
+   * current values upward. The parent owns submission because it has to append
+   * the chosen availability slot to the same request.
+   */
+  embedded?: boolean;
+  onFormChange?: (data: FormData) => void;
+  /** Combined flow: tells the parent whether every section is now answerable. */
+  onValidityChange?: (valid: boolean, firstInvalidStep: number | null) => void;
 }
 
-const EMPTY: FormData = {
+export const EMPTY_FORM: FormData = {
   employee_name: '', unit: '', position: '', contact_number: '',
   q1_alasan: [], q2_deskripsi: '', q3_durasi: '', q4_dampak: 3, q5_area_terdampak: [],
   q6_harapan: [], q7_pernah_konseling: '', q7_pernah_konseling_detail: '',
   q8_safety_threat: '', q9_bantuan_segera: '',
-  e_waktu: [], e_metode: '', e_hari: '', e_konselor_preferensi: '',
+  // e_konselor_preferensi defaults to a VALID enum value so the field stays
+  // optional (the user can ignore it) without sending an empty string, which
+  // the schema rejects.
+  e_waktu: [], e_metode: '', e_hari: '', e_konselor_preferensi: 'tanpa_preferensi',
   consents: { consent_confidentiality: false, consent_emergency_protocol: false },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function toggle<T>(arr: T[], val: T): T[] {
   return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
+}
+
+/**
+ * Builds the exact JSON body POSTed to /employee-counseling/submit.
+ *
+ * Extracted as a pure exported function so it can be unit-tested straight
+ * against the real EmployeeCounselingSubmissionSchema. Previously the payload
+ * was an inline literal: hand-written probes of the API passed (201) while the
+ * live form still 422'd, because the probes did not share the form's shape.
+ * The one bug that slipped through that way was `consents` being nested inside
+ * `answers` — it is a TOP-LEVEL column (see migration 044 and submitIntake's
+ * INSERT), so Zod reported "consents: Required".
+ *
+ * NOTE: the service recomputes is_high_priority via detectHighPriority(answers)
+ * and ignores this field; it is sent only for parity/debugging.
+ */
+export function buildSubmissionPayload(form: FormData) {
+  const isHighPriority = ['ya', 'tidak_yakin'].includes(form.q8_safety_threat) || ['ya', 'tidak_yakin'].includes(form.q9_bantuan_segera);
+  return {
+    employee_name: form.employee_name,
+    unit: form.unit || null,
+    position: form.position || null,
+    contact_number: form.contact_number || null,
+    answers: {
+      q1_alasan: form.q1_alasan,
+      q2_deskripsi: form.q2_deskripsi,
+      q3_durasi: form.q3_durasi,
+      q4_dampak: form.q4_dampak,
+      q5_area_terdampak: form.q5_area_terdampak,
+      q6_harapan: form.q6_harapan,
+      q7_pernah_konseling: form.q7_pernah_konseling,
+      q7_pernah_konseling_detail: form.q7_pernah_konseling_detail,
+      q8_safety_threat: form.q8_safety_threat,
+      q9_bantuan_segera: form.q9_bantuan_segera,
+      e_waktu: form.e_waktu,
+      e_metode: form.e_metode,
+      e_hari: form.e_hari,
+      e_konselor_preferensi: form.e_konselor_preferensi,
+    },
+    // TOP-LEVEL, sibling of `answers` — not inside it.
+    consents: form.consents,
+    is_high_priority: isHighPriority,
+  };
 }
 
 // ─── Section Components ───────────────────────────────────────────────────────
@@ -186,14 +259,14 @@ function SectionC({ data, on }: { data: FormData; on: (d: FormData) => void }) {
       <div className="space-y-2">
         <Label>Apakah Anda pernah berkonsultasi dengan profesional kesehatan mental sebelumnya? *</Label>
         <div className="flex gap-4">
-          {[['ya', 'Ya'], ['tidak', 'Tidak'], ['tidak_sure', 'Tidak yakin']].map(([v, l]) => (
+          {[['pernah', 'Pernah'], ['belum_pernah', 'Belum pernah'], ['sedang_dalam_pendampingan', 'Sedang dalam pendampingan']].map(([v, l]) => (
             <label key={v} className={`flex items-center gap-2 border rounded px-4 py-2 cursor-pointer text-sm ${data.q7_pernah_konseling === v ? 'bg-blue-50 border-blue-400' : 'hover:bg-muted/50'}`}>
               <input type="radio" name="q7" value={v} checked={data.q7_pernah_konseling === v} onChange={() => on({ ...data, q7_pernah_konseling: v })} />
               {l}
             </label>
           ))}
         </div>
-        {data.q7_pernah_konseling === 'ya' && (
+        {data.q7_pernah_konseling === 'pernah' && (
           <Textarea rows={2} placeholder="Ceritakan pengalaman sebelumnya..." value={data.q7_pernah_konseling_detail} onChange={e => on({ ...data, q7_pernah_konseling_detail: e.target.value })} />
         )}
       </div>
@@ -267,7 +340,7 @@ function SectionE({ data, on }: { data: FormData; on: (d: FormData) => void }) {
           <Label htmlFor="e_metode">Metode yang lebih disukai</Label>
           <select id="e_metode" className="border rounded p-2 w-full" value={data.e_metode} onChange={e => on({ ...data, e_metode: e.target.value })}>
             <option value="">Pilih...</option>
-            {E_METODE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+            {E_METODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div className="space-y-2">
@@ -278,7 +351,11 @@ function SectionE({ data, on }: { data: FormData; on: (d: FormData) => void }) {
 
       <div className="space-y-2">
         <Label htmlFor="e_pref">Preferensi Konselor (opsional)</Label>
-        <Input id="e_pref" value={data.e_konselor_preferensi} onChange={e => on({ ...data, e_konselor_preferensi: e.target.value })} placeholder="Contoh: Konselor perempuan, yang pernah menangani..." />
+        {/* Was a free-text Input, but the schema only accepts the three enum
+            values — anything typed here was rejected with 422. */}
+        <select id="e_pref" className="border rounded p-2 w-full" value={data.e_konselor_preferensi} onChange={e => on({ ...data, e_konselor_preferensi: e.target.value })}>
+          {E_KONSELOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
     </div>
   );
@@ -327,9 +404,11 @@ function SectionF({ data, on }: { data: FormData; on: (d: FormData) => void }) {
 }
 
 // ─── Main Wizard ──────────────────────────────────────────────────────────────
-export function EmployeeCounselingWizard({ onSubmitted, tenantSlug }: EmployeeCounselingWizardProps) {
+export function EmployeeCounselingWizard({
+  onSubmitted, tenantSlug, initialData, embedded, onFormChange, onValidityChange,
+}: EmployeeCounselingWizardProps) {
   const [step, setStep] = useState(0); // 0-5 (A-F)
-  const [form, setForm] = useState<FormData>(EMPTY);
+  const [form, setForm] = useState<FormData>(() => ({ ...EMPTY_FORM, ...initialData }));
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
@@ -348,42 +427,53 @@ export function EmployeeCounselingWizard({ onSubmitted, tenantSlug }: EmployeeCo
     if (s === 1) return form.q1_alasan.length > 0;
     if (s === 2) return !!form.q7_pernah_konseling;
     if (s === 3) return !!form.q8_safety_threat && !!form.q9_bantuan_segera;
+    // Section E (Jadwal) had NO guard, so it fell through to the `return true`
+    // below and let the user submit without answering it — `e_metode` is a
+    // schema enum, so its untouched default ('') was submitted and the API
+    // answered 422. e_konselor_preferensi now defaults to a valid enum, so
+    // only the method actually needs to be chosen here.
+    if (s === 4) return !!form.e_metode;
     if (s === 5) return form.consents.consent_confidentiality && form.consents.consent_emergency_protocol;
     return true;
   };
 
+  // Tell the combined-flow parent where the user stands. The parent renders the
+  // "pilih jadwal" step after this form, and needs to know whether it may let
+  // them leave with a half-filled questionnaire.
+  useEffect(() => {
+    onFormChange?.(form);
+    const firstInvalid = [0, 1, 2, 3, 4, 5].find((s) => !validateStep(s));
+    onValidityChange?.(firstInvalid === undefined, firstInvalid ?? null);
+  }, [form]);
+
   const next = () => { if (validateStep(step)) setStep(s => Math.min(s + 1, 5)); else toast.error('Lengkapi pertanyaan wajib terlebih dahulu.'); };
   const back = () => setStep(s => Math.max(s - 1, 0));
 
+  // Human-readable label for each step, used to tell the user exactly which
+  // section still needs an answer instead of a generic "lengkapi dulu".
+  const STEP_LABEL: Record<number, string> = {
+    0: 'A. Info Karyawan', 1: 'B. Kebutuhan', 2: 'C. Harapan',
+    3: 'D. Kondisi Mendesak', 4: 'E. Jadwal', 5: 'F. Persetujuan',
+  };
+
   const handleSubmit = async () => {
-    if (!validateStep(5)) { toast.error('Lengkapi persetujuan terlebih dahulu.'); return; }
+    if (embedded) return; // the combined-flow parent owns the combined submit
+    // Validate EVERY step, not just the one the user happens to be on. The
+    // wizard lets you jump back and forth, so a section answered earlier can
+    // still be incomplete at submit time — which the API rejects with 422.
+    const firstInvalid = [0, 1, 2, 3, 4, 5].find((s) => !validateStep(s));
+    if (firstInvalid !== undefined) {
+      setStep(firstInvalid);
+      toast.error(`Lengkapi Bagian ${STEP_LABEL[firstInvalid]} terlebih dahulu.`);
+      return;
+    }
     setSubmitting(true);
-    const isHighPriority = ['ya', 'tidak_sure'].includes(form.q8_safety_threat) || ['ya', 'tidak_sure'].includes(form.q9_bantuan_segera);
-    const payload = {
-      employee_name: form.employee_name,
-      unit: form.unit || null,
-      position: form.position || null,
-      contact_number: form.contact_number || null,
-      answers: {
-        q1_alasan: form.q1_alasan,
-        q2_deskripsi: form.q2_deskripsi,
-        q3_durasi: form.q3_durasi,
-        q4_dampak: form.q4_dampak,
-        q5_area_terdampak: form.q5_area_terdampak,
-        q6_harapan: form.q6_harapan,
-        q7_pernah_konseling: form.q7_pernah_konseling,
-        q7_pernah_konseling_detail: form.q7_pernah_konseling_detail,
-        q8_safety_threat: form.q8_safety_threat,
-        q9_bantuan_segera: form.q9_bantuan_segera,
-        e_waktu: form.e_waktu,
-        e_metode: form.e_metode,
-        e_hari: form.e_hari,
-        e_konselor_preferensi: form.e_konselor_preferensi,
-        consents: form.consents,
-      },
-      is_high_priority: isHighPriority,
-    };
-    const res = await apiClient<{ submission_id: string }>(`/api/employee-counseling/employee-counseling/submit${tenantSlug ? `?t=${tenantSlug}` : ''}`, { method: 'POST', body: payload });
+    const payload = buildSubmissionPayload(form);
+    // Path must be RELATIVE to apiClient's API_BASE ('/api'). Passing '/api/...'
+    // here produced '/api/api/employee-counseling/...', and the stale
+    // '/employee-counseling/employee-counseling/' prefix then resolved to a
+    // route that does not exist → 404 on submit.
+    const res = await apiClient<{ submission_id: string }>(`/employee-counseling/submit${tenantSlug ? `?t=${tenantSlug}` : ''}`, { method: 'POST', body: payload });
     setSubmitting(false);
     if (res.success && res.data) {
       setSubmissionId(res.data.submission_id);
@@ -448,6 +538,12 @@ export function EmployeeCounselingWizard({ onSubmitted, tenantSlug }: EmployeeCo
         {step < 5 ? (
           <Button onClick={next}>
             Lanjut <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        ) : embedded ? (
+          // In the combined flow the final action is "continue to schedule",
+          // which lives in the parent because it has to POST nik + slot too.
+          <Button onClick={next} variant="default" disabled>
+            Lanjut ke Pilih Jadwal <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         ) : (
           <Button onClick={handleSubmit} disabled={submitting} variant="default">

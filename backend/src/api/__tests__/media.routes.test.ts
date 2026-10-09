@@ -183,35 +183,62 @@ describe('Media Routes', () => {
     });
   });
 
-  describe('GET /api/media/cases/:caseId/media', () => {
-    it('should list all media assets for a case', async () => {
-      const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
-      const mockAssets = [
-        { asset_id: 'asset-1', file_name: 'file1.jpg' },
-        { asset_id: 'asset-2', file_name: 'file2.jpg' }
-      ];
+  // NOTE: these previously targeted `/api/media/cases/:caseId/media`, a route
+  // that has never existed on this router — the app exposes `GET /api/media/:assetId`
+  // (gated by media_assets:read). Both assertions passed vacuously against a
+  // 404 from the not-found handler, so the real route is covered here instead.
+  describe('GET /api/media/:assetId', () => {
+    const ASSET_ID = '123e4567-e89b-12d3-a456-426614174000';
 
-      (mediaService.listAssetsForCase as any).mockResolvedValue(mockAssets);
+    it('should return a signed download url for an authorised caller', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
+      (mediaService.getAssetDownloadUrl as any).mockResolvedValue({
+        url: 'https://mocked-s3-url.com/file',
+        expires_in: 900,
+      });
 
       const res = await request(app)
-        .get('/api/media/cases/123e4567-e89b-12d3-a456-426614174000/media')
+        .get(`/api/media/${ASSET_ID}`)
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data).toEqual(mockAssets);
-      expect(mediaService.listAssetsForCase).toHaveBeenCalledWith('tenant-123', '123e4567-e89b-12d3-a456-426614174000');
+      expect(res.body.data).toHaveProperty('url');
+      expect(mediaService.getAssetDownloadUrl).toHaveBeenCalledWith(
+        'tenant-123',
+        ASSET_ID,
+        'user-123',
+        expect.anything(),
+      );
     });
 
     it('should require media_assets:read permission', async () => {
-      const token = generateTestToken('tenant-123', 'user-123', 'STUDENT');
+      // BOARD_MEMBER is denied media_assets:read in the permission matrix.
+      const token = generateTestToken('tenant-123', 'user-123', 'BOARD_MEMBER');
 
       const res = await request(app)
-        .get('/api/media/cases/123e4567-e89b-12d3-a456-426614174000/media')
+        .get(`/api/media/${ASSET_ID}`)
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
+      expect(mediaService.getAssetDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('should reject an unknown role outright', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'NOT_A_ROLE');
+
+      const res = await request(app)
+        .get(`/api/media/${ASSET_ID}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(403);
+      expect(mediaService.getAssetDownloadUrl).not.toHaveBeenCalled();
+    });
+
+    it('should require authentication', async () => {
+      const res = await request(app).get(`/api/media/${ASSET_ID}`);
+      expect(res.status).toBe(401);
     });
   });
 });

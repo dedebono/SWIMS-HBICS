@@ -2,15 +2,28 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { apiClient } from "@/lib/api-client";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BookOpen, RefreshCw, ChevronDown, ChevronRight,
   Layers, Scale, GraduationCap, FileText, AlertTriangle, FolderOpen, Search, X, Info,
+  UserRound, TriangleAlert, School,
 } from "lucide-react";
+import { PageHeader, EmptyState } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { IconBox, type IconTone } from "@/components/ui/icon-box";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import {
+  DataTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui/data-table";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,26 +60,39 @@ interface RequiredDocument {
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const CAT_COLORS: Record<number, { border: string; bg: string; text: string; dot: string; badge: string; desc: string }> = {
-  1: { border: "border-l-green-500", bg: "bg-green-100 dark:bg-green-950 border border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-200", dot: "bg-green-500", badge: "bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200", desc: "text-green-700/70 dark:text-green-300/70" },
-  2: { border: "border-l-yellow-500", bg: "bg-yellow-100 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800", text: "text-yellow-800 dark:text-yellow-200", dot: "bg-yellow-500", badge: "bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", desc: "text-yellow-700/70 dark:text-yellow-300/70" },
-  3: { border: "border-l-orange-500", bg: "bg-orange-100 dark:bg-orange-950 border border-orange-200 dark:border-orange-800", text: "text-orange-800 dark:text-orange-200", dot: "bg-orange-500", badge: "bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-200", desc: "text-orange-700/70 dark:text-orange-300/70" },
-  4: { border: "border-l-red-500", bg: "bg-red-100 dark:bg-red-950 border border-red-200 dark:border-red-800", text: "text-red-800 dark:text-red-200", dot: "bg-red-500", badge: "bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200", desc: "text-red-700/70 dark:text-red-300/70" },
+/** Category accents: pastel tint + semantic tones (light mode only). */
+const CAT_STYLE: Record<number, { tone: IconTone; badge: StatusTone; surface: string; accent: string }> = {
+  1: { tone: "green", badge: "success", surface: "bg-success-soft/40 border-success-soft", accent: "bg-success" },
+  2: { tone: "yellow", badge: "warning", surface: "bg-warning-soft/40 border-warning-soft", accent: "bg-warning" },
+  3: { tone: "teal", badge: "info", surface: "bg-info-soft/40 border-info-soft", accent: "bg-primary" },
+  4: { tone: "red", badge: "danger", surface: "bg-danger-soft/40 border-danger-soft", accent: "bg-danger" },
 };
 
-const CONSEQUENCE_BADGE: Record<string, string> = {
-  "Tugas Reflektif": "bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100",
-  "Perbaikan Langsung": "bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100",
-  "Pembatasan Sementara": "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100",
-  "Konferensi Keluarga": "bg-violet-200 text-violet-900 dark:bg-violet-900 dark:text-violet-100",
-  "Skorsing": "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100",
-  "Skorsing Ringan": "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100",
-  "Skorsing Berat": "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100",
-  "Ganti Rugi": "bg-teal-200 text-teal-900 dark:bg-teal-900 dark:text-teal-100",
-  "Tugas Karakter": "bg-indigo-200 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-100",
-  "Pelanggaran Surat Pernyataan": "bg-pink-200 text-pink-900 dark:bg-pink-900 dark:text-pink-100",
-  "Koordinasi Pihak Luar": "bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-200",
+const DEFAULT_CAT_STYLE = {
+  tone: "slate" as IconTone,
+  badge: "neutral" as StatusTone,
+  surface: "bg-card border-border",
+  accent: "bg-muted-foreground",
 };
+
+/** Consequence type → semantic badge tone. */
+const CONSEQUENCE_TONE: Record<string, StatusTone> = {
+  "Tugas Reflektif": "info",
+  "Perbaikan Langsung": "success",
+  "Pembatasan Sementara": "warning",
+  "Konferensi Keluarga": "purple",
+  "Skorsing": "warning",
+  "Skorsing Ringan": "warning",
+  "Skorsing Berat": "danger",
+  "Ganti Rugi": "purple",
+  "Tugas Karakter": "info",
+  "Pelanggaran Surat Pernyataan": "purple",
+  "Koordinasi Pihak Luar": "neutral",
+};
+
+function catStyle(id: number) {
+  return CAT_STYLE[id] ?? DEFAULT_CAT_STYLE;
+}
 
 // ─── Search/Filter Bar ─────────────────────────────────────────────────────────
 
@@ -75,24 +101,28 @@ function SearchBar({
   value,
   onChange,
   onClear,
+  label,
 }: {
-  placeholder: string; value: string; onChange: (v: string) => void; onClear?: () => void;
+  placeholder: string; value: string; onChange: (v: string) => void; onClear?: () => void; label: string;
 }) {
   return (
-    <div className="relative">
-      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+    <div className="relative w-full sm:w-72">
+      <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
+        aria-label={label}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="pl-8 h-8 text-xs pr-8"
+        className="pl-9 pr-9"
       />
       {value && (
         <button
+          type="button"
+          aria-label="Bersihkan pencarian"
           onClick={onClear}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground transition-colors hover:text-heading"
         >
-          <X className="h-3 w-3" />
+          <X className="size-3.5" />
         </button>
       )}
     </div>
@@ -104,13 +134,14 @@ function SelectFilter({
   onChange,
   options,
   placeholder,
+  label,
 }: {
   value: string; onChange: (v: string) => void;
-  options: { value: string; label: string }[]; placeholder: string;
+  options: { value: string; label: string }[]; placeholder: string; label: string;
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v ?? "")}>
-      <SelectTrigger className="h-8 text-xs w-auto min-w-[120px]">
+      <SelectTrigger aria-label={label} className="w-full sm:w-auto sm:min-w-[130px]">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -123,13 +154,23 @@ function SelectFilter({
   );
 }
 
+/** Compact result counter chip rendered next to the filters. */
+function ResultCount({ count }: { count: number }) {
+  return (
+    <StatusBadge tone="info" dot={false} label={`${count} hasil`} />
+  );
+}
+
 // ─── Level Badge ───────────────────────────────────────────────────────────────
 
 function LevelBadge({ levels }: { levels: Level[] }) {
+  if (levels.length === 0) {
+    return <span className="text-xs text-muted-foreground">Semua jenjang</span>;
+  }
   return (
-    <div className="flex gap-1 flex-wrap">
+    <div className="flex flex-wrap gap-1.5">
       {levels.map((l) => (
-        <Badge key={l.id} variant="outline" className="text-xs font-mono px-1.5">{l.code}</Badge>
+        <StatusBadge key={l.id} tone="neutral" dot={false} label={l.code} />
       ))}
     </div>
   );
@@ -139,7 +180,6 @@ function LevelBadge({ levels }: { levels: Level[] }) {
 
 export default function TeacherDisciplineHandbookPage() {
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("structure");
 
   // Data
   const [tree, setTree] = useState<HandbookTreeNode[]>([]);
@@ -214,9 +254,8 @@ export default function TeacherDisciplineHandbookPage() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  const catName = (id: number) => categories.find((c) => c.id === id)?.name ?? `Kat. ${id}`;
-  const levelName = (id: number) => levels.find((l) => l.id === id)?.name ?? `Jenjang ${id}`;
-  const levelCode = (id: number) => levels.find((l) => l.id === id)?.code ?? `?`;
+  const catName = (id: number) => categories.find((c) => c.id === id)?.name ?? `Kategori ${id}`;
+  const levelCode = (id: number) => levels.find((l) => l.id === id)?.code ?? "—";
 
   // Unique consequence types
   const consequenceTypes = useMemo(() => {
@@ -345,477 +384,596 @@ export default function TeacherDisciplineHandbookPage() {
     );
   }, [documents, searchDocument, filterDocumentCategory, filterDocumentLevel]);
 
+  // ── Statistics ───────────────────────────────────────────────────────────────
+
+  const totalGroups = tree.reduce((s, n) => s + n.groups.length, 0);
+  const totalBehaviors = tree.reduce((s, n) => s + n.groups.reduce((x, g) => x + g.behaviors.length, 0), 0);
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Buku Pedoman Disiplin"
+          description="Baca dan cari seluruh struktur, SOP, sanksi, serta dokumen pedoman disiplin sekolah."
+        />
+        <div className="flex h-64 items-center justify-center">
+          <div className="size-9 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5 p-6">
+    <div className="space-y-6">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-primary" />
-            Buku Pedoman Disiplin
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
-            <Info className="h-3.5 w-3.5" />
-            Baca & cari semua struktur, SOP, sanksi, dan dokumen. Tidak dapat mengedit.
-          </p>
-        </div>
-        <button
-          onClick={fetchAll}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
-        </button>
+      <PageHeader
+        title="Buku Pedoman Disiplin"
+        description="Baca dan cari seluruh struktur, SOP, sanksi, serta dokumen pedoman disiplin sekolah."
+        actions={
+          <Button variant="outline" size="sm" onClick={fetchAll}>
+            <RefreshCw className="size-4" />
+            Muat Ulang
+          </Button>
+        }
+      />
+
+      {/* ── Ringkasan ── */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Kategori Pelanggaran"
+          value={categories.length}
+          hint="Tingkatan pelanggaran yang diatur sekolah"
+          icon={<Scale className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Kelompok Perilaku"
+          value={totalGroups}
+          hint="Grup perilaku di seluruh kategori"
+          icon={<Layers className="size-5" />}
+          iconTone="purple"
+        />
+        <StatCard
+          label="Butir Perilaku"
+          value={totalBehaviors}
+          hint="Detail perilaku yang tercatat"
+          icon={<FileText className="size-5" />}
+          iconTone="teal"
+        />
+        <StatCard
+          label="Referensi Pedoman"
+          value={guidelines.length + consequences.length + documents.length}
+          hint={`${guidelines.length} SOP · ${consequences.length} sanksi · ${documents.length} dokumen`}
+          icon={<BookOpen className="size-5" />}
+          iconTone="green"
+        />
+      </div>
+
+      {/* ── Catatan ── */}
+      <div className="flex items-start gap-3 rounded-2xl border border-border bg-info-soft/40 p-4">
+        <IconBox tone="blue" size="sm">
+          <Info />
+        </IconBox>
+        <p className="text-sm leading-relaxed text-secondary-text">
+          Halaman ini bersifat baca saja. Struktur, SOP penanganan, sanksi, dan dokumen disusun oleh Admin
+          melalui Buku Pedoman Disiplin. Gunakan pencarian dan filter untuk menemukan materi yang Anda butuhkan.
+        </p>
       </div>
 
       {/* ── Tab Navigation ── */}
-      <div className="rounded-lg border bg-card">
-        <TabsPrimitive.Root value={activeTab} onValueChange={setActiveTab}>
-          <TabsPrimitive.List className="flex w-full overflow-x-auto rounded-t-lg border-b bg-card/60 md:grid md:grid-cols-6">
-            {[
-              { value: "structure", icon: Layers, label: "Struktur" },
-              { value: "categories", icon: Scale, label: "Kategori" },
-              { value: "levels", icon: GraduationCap, label: "Jenjang" },
-              { value: "guidelines", icon: FileText, label: "SOP" },
-              { value: "consequences", icon: AlertTriangle, label: "Sanksi" },
-              { value: "documents", icon: FolderOpen, label: "Dokumen" },
-            ].map(({ value, icon: Icon, label }) => (
-              <TabsPrimitive.Tab
-                key={value}
-                value={value}
-                className="flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all outline-none cursor-pointer border-b-2 border-transparent data-selected:text-primary data-selected:border-primary data-selected:bg-primary/5 md:flex-1"
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{label}</span>
-              </TabsPrimitive.Tab>
-            ))}
-          </TabsPrimitive.List>
+      <Card>
+        <CardContent>
+          <Tabs defaultValue="structure">
+            <TabsList>
+              <TabsTrigger value="structure">
+                <Layers />
+                Struktur
+              </TabsTrigger>
+              <TabsTrigger value="categories">
+                <Scale />
+                Kategori
+              </TabsTrigger>
+              <TabsTrigger value="levels">
+                <GraduationCap />
+                Jenjang
+              </TabsTrigger>
+              <TabsTrigger value="guidelines">
+                <FileText />
+                SOP
+              </TabsTrigger>
+              <TabsTrigger value="consequences">
+                <AlertTriangle />
+                Sanksi
+              </TabsTrigger>
+              <TabsTrigger value="documents">
+                <FolderOpen />
+                Dokumen
+              </TabsTrigger>
+            </TabsList>
 
-          {/* ══════════════ STRUKTUR ══════════════ */}
-          <TabsPrimitive.Panel value="structure" className="p-5 space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SearchBar
-                placeholder="Cari kategori, kelompok, perilaku, jenjang..."
-                value={searchStructure}
-                onChange={setSearchStructure}
-                onClear={() => setSearchStructure("")}
-              />
-              {searchStructure && (
-                <Badge variant="secondary" className="text-xs">
-                  {filteredTree.reduce((s, n) => s + n.groups.reduce((g, grp) => g + grp.behaviors.length, 0), 0)} hasil
-                </Badge>
-              )}
-            </div>
-
-            {filteredTree.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Layers className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Tidak ada hasil untuk "{searchStructure}"</p>
+            {/* ══════════════ STRUKTUR ══════════════ */}
+            <TabsContent value="structure" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SearchBar
+                  label="Cari struktur perilaku"
+                  placeholder="Cari kategori, kelompok, perilaku, jenjang…"
+                  value={searchStructure}
+                  onChange={setSearchStructure}
+                  onClear={() => setSearchStructure("")}
+                />
+                {searchStructure && (
+                  <ResultCount
+                    count={filteredTree.reduce((s, n) => s + n.groups.reduce((g, grp) => g + grp.behaviors.length, 0), 0)}
+                  />
+                )}
               </div>
-            ) : (
-              filteredTree.map((node) => {
-                const colors = CAT_COLORS[node.category.id] ?? {
-                  border: "border-l-gray-400", bg: "bg-muted border border-border",
-                  text: "text-foreground", dot: "bg-gray-400",
-                  badge: "bg-muted text-muted-foreground", desc: "text-muted-foreground",
-                };
-                const totalBehaviors = node.groups.reduce((s, g) => s + g.behaviors.length, 0);
-                return (
-                  <div key={node.category.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg}`}>
-                    {/* Category header */}
-                    <div className="flex items-center justify-between px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-2.5 h-2.5 rounded-full ${colors.dot}`} />
-                        <div>
-                          <span className={`font-semibold text-sm ${colors.text}`}>{node.category.name}</span>
-                          {node.category.general_description && (
-                            <p className={`text-xs mt-0.5 ${colors.desc}`}>{node.category.general_description}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-1.5 flex-wrap justify-end">
-                        <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>
-                          {node.groups.length} kelompok
-                        </Badge>
-                        <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>
-                          {totalBehaviors} perilaku
-                        </Badge>
-                      </div>
-                    </div>
 
-                    {/* Groups */}
-                    {node.groups.length > 0 && (
-                      <div className="border-t px-4 py-3 space-y-2">
-                        {node.groups.map((grp) => {
-                          const grpKey = `${node.category.id}-grp-${grp.group.id}`;
-                          return (
-                            <div key={grpKey} className="rounded-lg border overflow-hidden">
-                              <button
-                                className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/50 hover:bg-muted/80 transition-colors"
-                                onClick={() => toggle(grpKey)}
-                              >
-                                <div className="flex items-center gap-2.5 text-left">
-                                  <span className="text-sm font-medium">{grp.group.group_name}</span>
-                                  <Badge variant="outline" className="text-xs font-medium">
-                                    {grp.behaviors.length} butir
-                                  </Badge>
-                                </div>
-                                {expanded.has(grpKey)
-                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                                  : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-                              </button>
-
-                              {expanded.has(grpKey) && (
-                                <div className="border-t">
-                                  {grp.behaviors.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground italic px-4 py-3">Tidak ada butir perilaku.</p>
-                                  ) : grp.behaviors.map((b) => (
-                                    <div key={b.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0">
-                                      <span className="flex-1 leading-relaxed">{b.behavior_text}</span>
-                                      <LevelBadge levels={b.levels} />
-                                    </div>
-                                  ))}
-                                </div>
+              {filteredTree.length === 0 ? (
+                <EmptyState
+                  icon={<Layers />}
+                  title="Tidak ada hasil"
+                  description={`Tidak ada struktur perilaku yang cocok dengan "${searchStructure}". Coba kata kunci lain.`}
+                />
+              ) : (
+                <div className="space-y-4">
+                  {filteredTree.map((node) => {
+                    const style = catStyle(node.category.id);
+                    const totalBehaviorsInCat = node.groups.reduce((s, g) => s + g.behaviors.length, 0);
+                    return (
+                      <div key={node.category.id} className={`overflow-hidden rounded-xl border ${style.surface}`}>
+                        {/* Category header */}
+                        <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <span className={`size-2.5 shrink-0 rounded-full ${style.accent}`} />
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-heading">{node.category.name}</p>
+                              {node.category.general_description && (
+                                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                  {node.category.general_description}
+                                </p>
                               )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                            <StatusBadge tone={style.badge} dot={false} label={`${node.groups.length} kelompok`} />
+                            <StatusBadge tone="neutral" dot={false} label={`${totalBehaviorsInCat} perilaku`} />
+                          </div>
+                        </div>
 
-                    {node.groups.length === 0 && (
-                      <div className="border-t px-4 py-2">
-                        <p className="text-xs text-muted-foreground italic">Belum ada kelompok perilaku</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </TabsPrimitive.Panel>
+                        {/* Groups */}
+                        {node.groups.length > 0 ? (
+                          <div className="space-y-2 border-t border-border/60 px-4 py-3">
+                            {node.groups.map((grp) => {
+                              const grpKey = `${node.category.id}-grp-${grp.group.id}`;
+                              return (
+                                <div key={grpKey} className="overflow-hidden rounded-xl border border-border bg-card">
+                                  <button
+                                    type="button"
+                                    aria-expanded={expanded.has(grpKey)}
+                                    className="flex w-full items-center justify-between gap-3 bg-muted/50 px-4 py-2.5 text-left transition-colors hover:bg-muted/80"
+                                    onClick={() => toggle(grpKey)}
+                                  >
+                                    <div className="flex min-w-0 items-center gap-2.5">
+                                      {expanded.has(grpKey) ? (
+                                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                                      )}
+                                      <span className="truncate text-sm font-medium text-heading">
+                                        {grp.group.group_name}
+                                      </span>
+                                      <StatusBadge
+                                        tone="neutral"
+                                        dot={false}
+                                        label={`${grp.behaviors.length} butir`}
+                                      />
+                                    </div>
+                                  </button>
 
-          {/* ══════════════ KATEGORI ══════════════ */}
-          <TabsPrimitive.Panel value="categories" className="p-5 space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SearchBar
-                placeholder="Cari nama/deskripsi kategori..."
-                value={searchCategory}
-                onChange={setSearchCategory}
-                onClear={() => setSearchCategory("")}
-              />
-              <SelectFilter
-                value={filterCategoryJenjang}
-                onChange={setFilterCategoryJenjang}
-                options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
-                placeholder="Jenjang"
-              />
-              {searchCategory && (
-                <Badge variant="secondary" className="text-xs">{filteredCategories.length} hasil</Badge>
+                                  {expanded.has(grpKey) && (
+                                    <div className="border-t border-border">
+                                      {grp.behaviors.length === 0 ? (
+                                        <p className="px-4 py-3 text-sm text-muted-foreground">
+                                          Belum ada butir perilaku pada kelompok ini.
+                                        </p>
+                                      ) : (
+                                        grp.behaviors.map((b) => (
+                                          <div
+                                            key={b.id}
+                                            className="flex flex-col gap-2.5 border-b border-border px-4 py-3 text-sm last:border-0 lg:flex-row lg:items-start lg:gap-4"
+                                          >
+                                            <p className="flex-1 leading-relaxed text-secondary-text">
+                                              {b.behavior_text}
+                                            </p>
+                                            <div className="shrink-0">
+                                              <LevelBadge levels={b.levels} />
+                                            </div>
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="border-t border-border/60 px-4 py-3">
+                            <p className="text-xs text-muted-foreground">Belum ada kelompok perilaku</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-            </div>
+            </TabsContent>
 
-            {filteredCategories.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Scale className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Tidak ada hasil</p>
+            {/* ══════════════ KATEGORI ══════════════ */}
+            <TabsContent value="categories" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SearchBar
+                  label="Cari kategori"
+                  placeholder="Cari nama atau deskripsi kategori…"
+                  value={searchCategory}
+                  onChange={setSearchCategory}
+                  onClear={() => setSearchCategory("")}
+                />
+                <SelectFilter
+                  label="Filter jenjang"
+                  value={filterCategoryJenjang}
+                  onChange={setFilterCategoryJenjang}
+                  options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
+                  placeholder="Jenjang"
+                />
+                {searchCategory && <ResultCount count={filteredCategories.length} />}
               </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {filteredCategories.map((c) => {
-                  const colors = CAT_COLORS[c.id] ?? {
-                    border: "border-l-gray-400", bg: "bg-muted border border-border",
-                    text: "text-foreground", dot: "bg-gray-400",
-                    badge: "bg-muted text-muted-foreground", desc: "text-muted-foreground",
-                  };
-                  const node = tree.find((n) => n.category.id === c.id);
-                  const groupCount = node?.groups.length ?? 0;
-                  const behaviorCount = node?.groups.reduce((s, g) => s + g.behaviors.length, 0) ?? 0;
-                  return (
-                    <div key={c.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg} p-4`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                            <span className={`font-semibold text-sm ${colors.text}`}>{c.name}</span>
-                            <Badge variant="outline" className="text-[10px] font-mono">#{c.id}</Badge>
-                          </div>
-                          {c.general_description && (
-                            <p className={`text-xs mb-2 ${colors.desc}`}>{c.general_description}</p>
-                          )}
-                          <div className="flex gap-2 flex-wrap">
-                            <Badge className={`text-xs font-medium ${colors.badge}`}>{groupCount} kelompok</Badge>
-                            <Badge className={`text-xs font-medium ${colors.badge}`}>{behaviorCount} perilaku</Badge>
+
+              {filteredCategories.length === 0 ? (
+                <EmptyState
+                  icon={<Scale />}
+                  title="Tidak ada hasil"
+                  description="Tidak ada kategori yang cocok dengan pencarian atau filter Anda."
+                />
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {filteredCategories.map((c) => {
+                    const style = catStyle(c.id);
+                    const node = tree.find((n) => n.category.id === c.id);
+                    const groupCount = node?.groups.length ?? 0;
+                    const behaviorCount = node?.groups.reduce((s, g) => s + g.behaviors.length, 0) ?? 0;
+                    return (
+                      <div key={c.id} className="rounded-2xl border border-border bg-card p-4 shadow-card">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                              <span className={`size-2 shrink-0 rounded-full ${style.accent}`} />
+                              <span className="text-sm font-semibold text-heading">{c.name}</span>
+                              <StatusBadge tone="neutral" dot={false} label={`#${c.id}`} />
+                            </div>
+                            {c.general_description && (
+                              <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+                                {c.general_description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              <StatusBadge tone={style.badge} dot={false} label={`${groupCount} kelompok`} />
+                              <StatusBadge tone="neutral" dot={false} label={`${behaviorCount} perilaku`} />
+                            </div>
                           </div>
                         </div>
+
+                        {(c.impact_victim || c.impact_perpetrator || c.impact_school) && (
+                          <div className="mt-3 space-y-1.5 border-t border-border pt-3">
+                            {c.impact_victim && (
+                              <div className="flex items-start gap-2">
+                                <IconBox tone="red" size="sm" className="size-6 rounded-md">
+                                  <UserRound className="size-3" />
+                                </IconBox>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                  <span className="font-medium text-secondary-text">Korban: </span>
+                                  {c.impact_victim}
+                                </p>
+                              </div>
+                            )}
+                            {c.impact_perpetrator && (
+                              <div className="flex items-start gap-2">
+                                <IconBox tone="yellow" size="sm" className="size-6 rounded-md">
+                                  <TriangleAlert className="size-3" />
+                                </IconBox>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                  <span className="font-medium text-secondary-text">Pelaku: </span>
+                                  {c.impact_perpetrator}
+                                </p>
+                              </div>
+                            )}
+                            {c.impact_school && (
+                              <div className="flex items-start gap-2">
+                                <IconBox tone="blue" size="sm" className="size-6 rounded-md">
+                                  <School className="size-3" />
+                                </IconBox>
+                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                  <span className="font-medium text-secondary-text">Sekolah: </span>
+                                  {c.impact_school}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {(c.impact_victim || c.impact_perpetrator || c.impact_school) && (
-                        <div className={`mt-3 pt-2 border-t space-y-1 ${colors.desc}`}>
-                          {c.impact_victim && <p className="text-[10px]">👤 {c.impact_victim}</p>}
-                          {c.impact_perpetrator && <p className="text-[10px]">⚠️ {c.impact_perpetrator}</p>}
-                          {c.impact_school && <p className="text-[10px]">🏫 {c.impact_school}</p>}
-                        </div>
-                      )}
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ══════════════ JENJANG ══════════════ */}
+            <TabsContent value="levels" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SearchBar
+                  label="Cari jenjang"
+                  placeholder="Cari kode atau nama jenjang…"
+                  value={searchLevel}
+                  onChange={setSearchLevel}
+                  onClear={() => setSearchLevel("")}
+                />
+                {searchLevel && <ResultCount count={filteredLevels.length} />}
+              </div>
+
+              {filteredLevels.length === 0 ? (
+                <EmptyState
+                  icon={<GraduationCap />}
+                  title="Tidak ada hasil"
+                  description="Tidak ada jenjang pendidikan yang cocok dengan pencarian Anda."
+                />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {filteredLevels.map((l) => (
+                    <div
+                      key={l.id}
+                      className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 shadow-card"
+                    >
+                      <IconBox tone="blue" size="sm" className="mt-0.5">
+                        <GraduationCap className="size-4" />
+                      </IconBox>
+                      <div className="min-w-0">
+                        <p className="font-heading text-xl font-bold tracking-tight text-heading">{l.code}</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{l.name}</p>
+                        <p className="mt-1.5">
+                          <StatusBadge tone="neutral" dot={false} label={`Urutan ${l.sort_order}`} />
+                        </p>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </TabsPrimitive.Panel>
-
-          {/* ══════════════ JENJANG ══════════════ */}
-          <TabsPrimitive.Panel value="levels" className="p-5 space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SearchBar
-                placeholder="Cari kode atau nama jenjang..."
-                value={searchLevel}
-                onChange={setSearchLevel}
-                onClear={() => setSearchLevel("")}
-              />
-              {searchLevel && (
-                <Badge variant="secondary" className="text-xs">{filteredLevels.length} hasil</Badge>
+                  ))}
+                </div>
               )}
-            </div>
+            </TabsContent>
 
-            {filteredLevels.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <GraduationCap className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Tidak ada hasil</p>
+            {/* ══════════════ SOP ══════════════ */}
+            <TabsContent value="guidelines" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SearchBar
+                  label="Cari SOP"
+                  placeholder="Cari isi SOP…"
+                  value={searchGuideline}
+                  onChange={setSearchGuideline}
+                  onClear={() => setSearchGuideline("")}
+                />
+                <SelectFilter
+                  label="Filter kategori SOP"
+                  value={filterGuidelineCategory}
+                  onChange={setFilterGuidelineCategory}
+                  options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+                  placeholder="Kategori"
+                />
+                <SelectFilter
+                  label="Filter jenjang SOP"
+                  value={filterGuidelineLevel}
+                  onChange={setFilterGuidelineLevel}
+                  options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
+                  placeholder="Jenjang"
+                />
+                <SelectFilter
+                  label="Filter tahap SOP"
+                  value={filterGuidelineTarget}
+                  onChange={setFilterGuidelineTarget}
+                  options={targetTypes.map((t) => ({ value: t, label: t }))}
+                  placeholder="Tahap"
+                />
+                {(searchGuideline || filterGuidelineCategory !== "__all__" || filterGuidelineLevel !== "__all__" || filterGuidelineTarget !== "__all__") && (
+                  <ResultCount count={filteredGuidelines.length} />
+                )}
               </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {filteredLevels.map((l) => (
-                  <Card key={l.id} className="p-4">
-                    <span className="text-2xl font-bold font-mono text-primary">{l.code}</span>
-                    <p className="text-xs text-muted-foreground mt-0.5">{l.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">Urutan: {l.sort_order}</p>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsPrimitive.Panel>
 
-          {/* ══════════════ SOP ══════════════ */}
-          <TabsPrimitive.Panel value="guidelines" className="p-5 space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SearchBar
-                placeholder="Cari isi SOP..."
-                value={searchGuideline}
-                onChange={setSearchGuideline}
-                onClear={() => setSearchGuideline("")}
-              />
-              <SelectFilter
-                value={filterGuidelineCategory}
-                onChange={setFilterGuidelineCategory}
-                options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
-                placeholder="Kategori"
-              />
-              <SelectFilter
-                value={filterGuidelineLevel}
-                onChange={setFilterGuidelineLevel}
-                options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
-                placeholder="Jenjang"
-              />
-              <SelectFilter
-                value={filterGuidelineTarget}
-                onChange={setFilterGuidelineTarget}
-                options={targetTypes.map((t) => ({ value: t, label: t }))}
-                placeholder="Tahap"
-              />
-              {(searchGuideline || filterGuidelineCategory !== "__all__" || filterGuidelineLevel !== "__all__" || filterGuidelineTarget !== "__all__") && (
-                <Badge variant="secondary" className="text-xs">{filteredGuidelines.length} hasil</Badge>
-              )}
-            </div>
-
-            {filteredGuidelines.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <FileText className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Tidak ada hasil</p>
-              </div>
-            ) : (
-              <div className="rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/60 border-b">
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Tahap</th>
-                      <th className="text-center px-4 py-2.5 font-semibold text-muted-foreground w-14">Langkah</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Isi SOP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {filteredGuidelines.length === 0 ? (
+                <EmptyState
+                  icon={<FileText />}
+                  title="Tidak ada hasil"
+                  description="Tidak ada SOP yang cocok dengan pencarian atau filter Anda."
+                />
+              ) : (
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col" className="w-10">#</TableHeaderCell>
+                      <TableHeaderCell scope="col">Kategori</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenjang</TableHeaderCell>
+                      <TableHeaderCell scope="col">Tahap</TableHeaderCell>
+                      <TableHeaderCell scope="col" className="w-14 text-center">Langkah</TableHeaderCell>
+                      <TableHeaderCell scope="col">Isi SOP</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filteredGuidelines.map((g, i) => (
-                      <tr key={g.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"}`}>
-                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                        <td className="px-4 py-3 font-medium">{catName(g.category_id)}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(g.level_id)}</Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant="secondary" className="text-xs">{g.target_type}</Badge>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge className="text-xs bg-primary/15 text-primary border-0 font-bold">{g.step_number}</Badge>
-                        </td>
-                        <td className="px-4 py-3 max-w-md">
-                          <p className="leading-relaxed">{g.guideline_text}</p>
-                        </td>
-                      </tr>
+                      <TableRow key={g.id} interactive>
+                        <TableCell className="text-muted-foreground tabular-nums">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-heading">{catName(g.category_id)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone="neutral" dot={false} label={levelCode(g.level_id)} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge tone="info" dot={false} label={g.target_type} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <StatusBadge tone="purple" dot={false} label={`${g.step_number}`} />
+                        </TableCell>
+                        <TableCell className="max-w-md">
+                          <p className="leading-relaxed text-secondary-text">{g.guideline_text}</p>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsPrimitive.Panel>
-
-          {/* ══════════════ SANKSI ══════════════ */}
-          <TabsPrimitive.Panel value="consequences" className="p-5 space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SearchBar
-                placeholder="Cari sanksi..."
-                value={searchConsequence}
-                onChange={setSearchConsequence}
-                onClear={() => setSearchConsequence("")}
-              />
-              <SelectFilter
-                value={filterConsequenceCategory}
-                onChange={setFilterConsequenceCategory}
-                options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
-                placeholder="Kategori"
-              />
-              <SelectFilter
-                value={filterConsequenceLevel}
-                onChange={setFilterConsequenceLevel}
-                options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
-                placeholder="Jenjang"
-              />
-              <SelectFilter
-                value={filterConsequenceType}
-                onChange={setFilterConsequenceType}
-                options={consequenceTypes.map((t) => ({ value: t, label: t }))}
-                placeholder="Jenis Sanksi"
-              />
-              {(searchConsequence || filterConsequenceCategory !== "__all__" || filterConsequenceLevel !== "__all__" || filterConsequenceType !== "__all__") && (
-                <Badge variant="secondary" className="text-xs">{filteredConsequences.length} hasil</Badge>
+                  </TableBody>
+                </DataTable>
               )}
-            </div>
+            </TabsContent>
 
-            {filteredConsequences.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Tidak ada hasil</p>
+            {/* ══════════════ SANKSI ══════════════ */}
+            <TabsContent value="consequences" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SearchBar
+                  label="Cari sanksi"
+                  placeholder="Cari jenis atau detail sanksi…"
+                  value={searchConsequence}
+                  onChange={setSearchConsequence}
+                  onClear={() => setSearchConsequence("")}
+                />
+                <SelectFilter
+                  label="Filter kategori sanksi"
+                  value={filterConsequenceCategory}
+                  onChange={setFilterConsequenceCategory}
+                  options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+                  placeholder="Kategori"
+                />
+                <SelectFilter
+                  label="Filter jenjang sanksi"
+                  value={filterConsequenceLevel}
+                  onChange={setFilterConsequenceLevel}
+                  options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
+                  placeholder="Jenjang"
+                />
+                <SelectFilter
+                  label="Filter jenis sanksi"
+                  value={filterConsequenceType}
+                  onChange={setFilterConsequenceType}
+                  options={consequenceTypes.map((t) => ({ value: t, label: t }))}
+                  placeholder="Jenis Sanksi"
+                />
+                {(searchConsequence || filterConsequenceCategory !== "__all__" || filterConsequenceLevel !== "__all__" || filterConsequenceType !== "__all__") && (
+                  <ResultCount count={filteredConsequences.length} />
+                )}
               </div>
-            ) : (
-              <div className="rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/60 border-b">
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenis Sanksi</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Detail Sanksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+
+              {filteredConsequences.length === 0 ? (
+                <EmptyState
+                  icon={<AlertTriangle />}
+                  title="Tidak ada hasil"
+                  description="Tidak ada sanksi yang cocok dengan pencarian atau filter Anda."
+                />
+              ) : (
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col" className="w-10">#</TableHeaderCell>
+                      <TableHeaderCell scope="col">Kategori</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenjang</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenis Sanksi</TableHeaderCell>
+                      <TableHeaderCell scope="col">Detail Sanksi</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filteredConsequences.map((c, i) => (
-                      <tr key={c.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"}`}>
-                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                        <td className="px-4 py-3 font-medium">{catName(c.category_id)}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(c.level_id)}</Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge className={`text-xs font-medium ${CONSEQUENCE_BADGE[c.consequence_type] ?? "bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}`}>
-                            {c.consequence_type}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 max-w-md">
-                          <p className="leading-relaxed">{c.consequence_text}</p>
-                        </td>
-                      </tr>
+                      <TableRow key={c.id} interactive>
+                        <TableCell className="text-muted-foreground tabular-nums">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-heading">{catName(c.category_id)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone="neutral" dot={false} label={levelCode(c.level_id)} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            tone={CONSEQUENCE_TONE[c.consequence_type] ?? "neutral"}
+                            label={c.consequence_type}
+                          />
+                        </TableCell>
+                        <TableCell className="max-w-md">
+                          <p className="leading-relaxed text-secondary-text">{c.consequence_text}</p>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsPrimitive.Panel>
-
-          {/* ══════════════ DOKUMEN ══════════════ */}
-          <TabsPrimitive.Panel value="documents" className="p-5 space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <SearchBar
-                placeholder="Cari nama dokumen..."
-                value={searchDocument}
-                onChange={setSearchDocument}
-                onClear={() => setSearchDocument("")}
-              />
-              <SelectFilter
-                value={filterDocumentCategory}
-                onChange={setFilterDocumentCategory}
-                options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
-                placeholder="Kategori"
-              />
-              <SelectFilter
-                value={filterDocumentLevel}
-                onChange={setFilterDocumentLevel}
-                options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
-                placeholder="Jenjang"
-              />
-              {(searchDocument || filterDocumentCategory !== "__all__" || filterDocumentLevel !== "__all__") && (
-                <Badge variant="secondary" className="text-xs">{filteredDocuments.length} hasil</Badge>
+                  </TableBody>
+                </DataTable>
               )}
-            </div>
+            </TabsContent>
 
-            {filteredDocuments.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <FolderOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Tidak ada hasil</p>
+            {/* ══════════════ DOKUMEN ══════════════ */}
+            <TabsContent value="documents" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SearchBar
+                  label="Cari dokumen"
+                  placeholder="Cari nama atau deskripsi dokumen…"
+                  value={searchDocument}
+                  onChange={setSearchDocument}
+                  onClear={() => setSearchDocument("")}
+                />
+                <SelectFilter
+                  label="Filter kategori dokumen"
+                  value={filterDocumentCategory}
+                  onChange={setFilterDocumentCategory}
+                  options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+                  placeholder="Kategori"
+                />
+                <SelectFilter
+                  label="Filter jenjang dokumen"
+                  value={filterDocumentLevel}
+                  onChange={setFilterDocumentLevel}
+                  options={levels.map((l) => ({ value: String(l.id), label: l.code }))}
+                  placeholder="Jenjang"
+                />
+                {(searchDocument || filterDocumentCategory !== "__all__" || filterDocumentLevel !== "__all__") && (
+                  <ResultCount count={filteredDocuments.length} />
+                )}
               </div>
-            ) : (
-              <div className="rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/60 border-b">
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Nama Dokumen</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Deskripsi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+
+              {filteredDocuments.length === 0 ? (
+                <EmptyState
+                  icon={<FolderOpen />}
+                  title="Tidak ada hasil"
+                  description="Tidak ada dokumen yang cocok dengan pencarian atau filter Anda."
+                />
+              ) : (
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col" className="w-10">#</TableHeaderCell>
+                      <TableHeaderCell scope="col">Kategori</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenjang</TableHeaderCell>
+                      <TableHeaderCell scope="col">Nama Dokumen</TableHeaderCell>
+                      <TableHeaderCell scope="col">Deskripsi</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filteredDocuments.map((d, i) => (
-                      <tr key={d.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"}`}>
-                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                        <td className="px-4 py-3 font-medium">{catName(d.category_id)}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(d.level_id)}</Badge>
-                        </td>
-                        <td className="px-4 py-3">{d.document_name}</td>
-                        <td className="px-4 py-3 max-w-xs">
-                          <p className="text-muted-foreground text-xs">{d.description ?? "—"}</p>
-                        </td>
-                      </tr>
+                      <TableRow key={d.id} interactive>
+                        <TableCell className="text-muted-foreground tabular-nums">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-heading">{catName(d.category_id)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone="neutral" dot={false} label={levelCode(d.level_id)} />
+                        </TableCell>
+                        <TableCell className="font-medium text-heading">{d.document_name}</TableCell>
+                        <TableCell className="max-w-xs text-xs text-muted-foreground">
+                          {d.description ?? "—"}
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsPrimitive.Panel>
-
-        </TabsPrimitive.Root>
-      </div>
+                  </TableBody>
+                </DataTable>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

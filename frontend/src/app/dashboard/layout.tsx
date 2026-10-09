@@ -30,17 +30,17 @@ export default function DashboardLayout({
 
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground text-sm">Loading...</p>
+          <div className="size-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+          <p className="text-sm font-medium text-muted-foreground">Memuat…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar currentPath={pathname} userRole={user.role} />
@@ -48,8 +48,8 @@ export default function DashboardLayout({
 
       {/* Mobile sidebar drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-72 max-w-[80vw] p-0" showCloseButton={false}>
-          <SheetTitle className="sr-only">Menu</SheetTitle>
+        <SheetContent side="left" className="w-72 max-w-[85vw] p-0" showCloseButton={false}>
+          <SheetTitle className="sr-only">Menu navigasi</SheetTitle>
           <Sidebar
             currentPath={pathname}
             userRole={user.role}
@@ -60,8 +60,8 @@ export default function DashboardLayout({
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar user={user} onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 overflow-auto p-4 sm:p-6">
-          {children}
+        <main className="scroll-slim flex-1 overflow-auto">
+          <div className="mx-auto w-full max-w-[100rem] p-5 sm:p-7 lg:p-10">{children}</div>
         </main>
       </div>
     </div>

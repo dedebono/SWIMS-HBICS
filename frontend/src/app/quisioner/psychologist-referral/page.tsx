@@ -4,11 +4,33 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
+import {
+  AlertTriangle,
+  BadgeCheck,
+  BadgeDollarSign,
+  CalendarCheck2,
+  CalendarClock,
+  CheckCircle2,
+  CircleDollarSign,
+  Link2Off,
+  Stethoscope,
+  UserRound,
+  Wallet,
+  XCircle,
+} from 'lucide-react';
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { IconBox } from '@/components/ui/icon-box';
+import { EmptyState, PageHeader } from '@/components/ui/page-header';
+import { StatusBadge, severityTone } from '@/components/ui/status-badge';
 
 interface Psychologist {
   psychologist_id: string;
@@ -34,8 +56,34 @@ const STATUS_LABELS: Record<string, string> = {
   payment_pending: 'Menunggu Pembayaran',
   payment_confirmed: 'Pembayaran Dikonfirmasi',
   schedule_confirmed: 'Jadwal Terkonfirmasi',
-  expired: 'Link Expired',
+  expired: 'Tautan Kedaluwarsa',
 };
+
+const FLOW_STEPS = [
+  { key: 'pending', label: 'Pilihan' },
+  { key: 'psychologist_selected', label: 'Psikolog' },
+  { key: 'payment_confirmed', label: 'Pembayaran' },
+  { key: 'schedule_confirmed', label: 'Jadwal' },
+];
+
+function stepIndexFor(status?: string | null): number {
+  switch (status) {
+    case 'pending':
+      return 0;
+    case 'school_psychologist':
+    case 'private_psychologist':
+      return 1;
+    case 'psychologist_selected':
+    case 'payment_pending':
+      return 2;
+    case 'payment_confirmed':
+      return 3;
+    case 'schedule_confirmed':
+      return 4;
+    default:
+      return 0;
+  }
+}
 
 export default function PsychologistReferralPage() {
   const searchParams = useSearchParams();
@@ -141,18 +189,22 @@ export default function PsychologistReferralPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="size-9 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
       </div>
     );
   }
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="pt-6 text-center text-muted-foreground">
-            Link tidak valid. Silakan gunakan link yang dikirim melalui WhatsApp.
+      <div className="mx-auto w-full max-w-lg px-4 py-10">
+        <Card>
+          <CardContent className="pt-5">
+            <EmptyState
+              icon={<Link2Off className="size-6" />}
+              title="Tautan tidak valid"
+              description="Silakan gunakan tautan yang dikirim melalui WhatsApp dari sekolah."
+            />
           </CardContent>
         </Card>
       </div>
@@ -164,11 +216,14 @@ export default function PsychologistReferralPage() {
 
   if (isExpiredOrInvalid) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <Card className="max-w-md w-full">
-          <CardHeader><CardTitle>Link Expired</CardTitle></CardHeader>
-          <CardContent className="text-muted-foreground">
-            Link ini sudah tidak berlaku. Silakan hubungi sekolah untuk link baru.
+      <div className="mx-auto w-full max-w-lg px-4 py-10">
+        <Card>
+          <CardContent className="pt-5">
+            <EmptyState
+              icon={<AlertTriangle className="size-6" />}
+              title="Tautan kedaluwarsa"
+              description="Tautan ini sudah tidak berlaku. Silakan hubungi sekolah untuk meminta tautan baru."
+            />
           </CardContent>
         </Card>
       </div>
@@ -176,214 +231,326 @@ export default function PsychologistReferralPage() {
   }
 
   const selectedPsychologist = psychologists.find(p => p.psychologist_id === record?.selected_psychologist_id);
+  const activeStep = stepIndexFor(record?.choice_status);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4">
-      <div className="max-w-xl mx-auto space-y-4">
-        {/* Header */}
-        <div className="text-center py-4">
-          <h1 className="text-xl font-bold text-slate-800">Sistem Rujukan Psikolog</h1>
-          <p className="text-sm text-muted-foreground">SDK Harapan Bangsa</p>
-        </div>
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6">
+        <div className="space-y-6">
+          <PageHeader
+            title="Sistem Rujukan Psikolog"
+            description="SDK Harapan Bangsa"
+            actions={
+              <StatusBadge
+                tone={severityTone(record?.choice_status)}
+                label={STATUS_LABELS[record?.choice_status ?? ''] ?? record?.choice_status}
+              />
+            }
+          />
 
-        {/* STEP 1: Pending — Initial Notification */}
-        {record?.choice_status === 'pending' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Rekomendasi Konsultasi dengan Psikolog</CardTitle>
-              <CardDescription>
-                Berdasarkan hasil asesmen dan pendampingan yang telah dilakukan, sekolah merekomendasikan
-                konsultasi lanjutan dengan Psikolog untuk mendukung perkembangan dan kebutuhan anak.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm font-medium">Bapak/Ibu dapat memilih:</p>
-              <Button
-                className="w-full justify-start text-left h-auto py-4"
-                variant="outline"
-                onClick={() => postChoice('school_psychologist')}
-                disabled={submitting}
-              >
-                <span className="text-green-600 font-bold mr-2">✓</span>
-                YA, lihat Psikolog Rekomendasi Sekolah
-              </Button>
-              <Button
-                className="w-full justify-start text-left h-auto py-4"
-                variant="outline"
-                onClick={() => postChoice('private_psychologist')}
-                disabled={submitting}
-              >
-                <span className="text-blue-600 font-bold mr-2">✗</span>
-                TIDAK, saya akan menggunakan Psikolog Pribadi
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+          {record && (
+            <Card>
+              <CardContent className="pt-5">
+                <ol className="flex flex-wrap items-center gap-2">
+                  {FLOW_STEPS.map((s, i) => {
+                    const done = activeStep > i;
+                    const active = activeStep === i;
+                    return (
+                      <li key={s.key} className="flex items-center gap-2">
+                        <span
+                          className={[
+                            'inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-semibold',
+                            active ? 'bg-primary text-primary-foreground' : '',
+                            done ? 'bg-success-soft text-success' : '',
+                            !active && !done ? 'bg-muted text-muted-foreground' : '',
+                          ].join(' ')}
+                        >
+                          <span className="inline-flex size-4 items-center justify-center rounded-full bg-white/25 text-[0.625rem]">
+                            {i + 1}
+                          </span>
+                          {s.label}
+                        </span>
+                        {i < FLOW_STEPS.length - 1 ? (
+                          <span className="h-px w-4 bg-border" aria-hidden="true" />
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </CardContent>
+            </Card>
+          )}
 
-        {/* STEP 2a: Private Psychologist */}
-        {record?.choice_status === 'private_psychologist' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Konsultasi dengan Psikolog Pribadi</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Terima kasih atas konfirmasi Bapak/Ibu.<br /><br />
-                Apabila anak anda melakukan konsultasi dengan Psikolog pribadi, kami mengharapkan
-                kesediaan Bapak/Ibu untuk menyampaikan kepada sekolah hasil atau catatan konsultasi
-                yang relevan dengan kebutuhan pendampingan anak di sekolah.<br /><br />
-                Informasi tersebut akan digunakan secara terbatas untuk membantu sekolah memberikan
-                dukungan yang sesuai bagi Ananda.
-              </p>
-              {!acknowledgePrivate ? (
-                <Button onClick={() => setAcknowledgePrivate(true)} className="w-full">
-                  Saya Mengerti
+          {/* STEP 1: Menunggu Pilihan — Pemberitahuan awal */}
+          {record?.choice_status === 'pending' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="blue">
+                    <Stethoscope className="size-5" />
+                  </IconBox>
+                  <div className="space-y-0.5">
+                    <CardTitle>Rekomendasi Konsultasi dengan Psikolog</CardTitle>
+                    <CardDescription>
+                      Berdasarkan hasil asesmen dan pendampingan yang telah dilakukan, sekolah
+                      merekomendasikan konsultasi lanjutan dengan Psikolog untuk mendukung
+                      perkembangan dan kebutuhan anak.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm font-semibold text-heading">Bapak/Ibu dapat memilih:</p>
+                <Button
+                  className="h-auto w-full justify-start gap-2.5 py-4 text-left"
+                  variant="outline"
+                  onClick={() => postChoice('school_psychologist')}
+                  disabled={submitting}
+                >
+                  <CheckCircle2 className="size-4 shrink-0 text-success" />
+                  <span className="text-sm">Ya, lihat Psikolog Rekomendasi Sekolah</span>
                 </Button>
-              ) : (
-                <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
-                  ✓ Terima kasih. Sekolah akan menunggu informasi dari Bapak/Ibu.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                <Button
+                  className="h-auto w-full justify-start gap-2.5 py-4 text-left"
+                  variant="outline"
+                  onClick={() => postChoice('private_psychologist')}
+                  disabled={submitting}
+                >
+                  <XCircle className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="text-sm">Tidak, saya akan menggunakan Psikolog Pribadi</span>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-        {/* STEP 2b: Choose School Psychologist */}
-        {record?.choice_status === 'school_psychologist' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Pilih Psikolog Rekomendasi Sekolah</CardTitle>
-              <CardDescription>
-                Silakan memilih Psikolog yang sesuai dengan kebutuhan anak anda.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {psychologists.map(p => (
-                <div key={p.psychologist_id} className="border rounded-lg p-4 flex gap-4 items-start">
-                  <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center text-lg">
-                    👤
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{p.full_name}</p>
-                    <p className="text-xs text-muted-foreground">{p.expertise}</p>
-                    <p className="text-sm font-semibold mt-1">{formatRupiah(p.consultation_fee)}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => selectPsychologist(p.psychologist_id)}
-                    disabled={submitting}
-                  >
-                    Pilih
+          {/* STEP 2a: Psikolog Pribadi */}
+          {record?.choice_status === 'private_psychologist' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="purple">
+                    <UserRound className="size-5" />
+                  </IconBox>
+                  <CardTitle>Konsultasi dengan Psikolog Pribadi</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm leading-relaxed text-secondary-text">
+                  Terima kasih atas konfirmasi Bapak/Ibu. Apabila anak anda melakukan konsultasi dengan
+                  Psikolog pribadi, kami mengharapkan kesediaan Bapak/Ibu untuk menyampaikan kepada
+                  sekolah hasil atau catatan konsultasi yang relevan dengan kebutuhan pendampingan anak
+                  di sekolah. Informasi tersebut akan digunakan secara terbatas untuk membantu sekolah
+                  memberikan dukungan yang sesuai bagi Ananda.
+                </p>
+                {!acknowledgePrivate ? (
+                  <Button onClick={() => setAcknowledgePrivate(true)} className="w-full">
+                    Saya Mengerti
                   </Button>
+                ) : (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-border bg-success-soft p-3.5 text-sm text-secondary-text">
+                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+                    <span>
+                      Terima kasih. Sekolah akan menunggu informasi dari Bapak/Ibu.
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* STEP 2b: Pilih Psikolog Sekolah */}
+          {record?.choice_status === 'school_psychologist' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="teal">
+                    <Stethoscope className="size-5" />
+                  </IconBox>
+                  <div className="space-y-0.5">
+                    <CardTitle>Pilih Psikolog Rekomendasi Sekolah</CardTitle>
+                    <CardDescription>
+                      Silakan memilih Psikolog yang sesuai dengan kebutuhan anak anda.
+                    </CardDescription>
+                  </div>
                 </div>
-              ))}
-              {psychologists.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Belum ada psikolog rekomendasi sekolah.
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {psychologists.length === 0 ? (
+                  <EmptyState
+                    icon={<UserRound className="size-6" />}
+                    title="Belum ada psikolog rekomendasi"
+                    description="Belum ada psikolog rekomendasi sekolah yang terdaftar. Silakan hubungi sekolah untuk informasi lebih lanjut."
+                  />
+                ) : (
+                  psychologists.map((p) => (
+                    <div
+                      key={p.psychologist_id}
+                      className="flex flex-wrap items-start gap-3.5 rounded-xl border border-border bg-card p-4"
+                    >
+                      <IconBox tone="purple">
+                        <UserRound className="size-5" />
+                      </IconBox>
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <p className="text-sm font-semibold text-heading">{p.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{p.expertise}</p>
+                        <p className="pt-1.5 inline-flex items-center gap-1.5 text-sm font-semibold text-heading">
+                          <CircleDollarSign className="size-3.5 text-primary" />
+                          {formatRupiah(p.consultation_fee)}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => selectPsychologist(p.psychologist_id)}
+                        disabled={submitting}
+                      >
+                        Pilih
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* STEP 3: Psikolog Dipilih → Pembayaran */}
+          {record?.choice_status === 'psychologist_selected' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="green">
+                    <BadgeCheck className="size-5" />
+                  </IconBox>
+                  <div className="space-y-0.5">
+                    <CardTitle>Psikolog Berhasil Dipilih</CardTitle>
+                    <CardDescription>
+                      Bapak/Ibu telah memilih{' '}
+                      <strong className="text-heading">{selectedPsychologist?.full_name}</strong> untuk
+                      mendampingi anak anda.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-2.5 rounded-xl border border-border bg-warning-soft p-3.5">
+                  <Wallet className="mt-0.5 size-4 shrink-0 text-warning" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-heading">
+                      Silakan melakukan pembayaran sebesar{' '}
+                      <strong>{formatRupiah(record.payment_amount ?? 0)}</strong> sesuai petunjuk.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Setelah pembayaran berhasil dikonfirmasi, Bapak/Ibu dapat melanjutkan ke
+                      penjadwalan.
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={confirmPayment} disabled={submitting} className="w-full">
+                  <BadgeDollarSign className="size-4" />
+                  {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* STEP 3b: Pembayaran Diproses */}
+          {record?.choice_status === 'payment_pending' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="yellow">
+                    <Wallet className="size-5" />
+                  </IconBox>
+                  <CardTitle>Pembayaran sedang Diproses</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Pembayaran sedang diproses. Mohon tunggu konfirmasi dari sekolah sebelum melanjutkan
+                  ke penjadwalan.
                 </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
 
-        {/* STEP 3: Psychologist Selected → Payment */}
-        {record?.choice_status === 'psychologist_selected' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Psikolog Berhasil Dipilih</CardTitle>
-              <CardDescription>
-                Bapak/Ibu telah memilih <strong>{selectedPsychologist?.full_name}</strong> untuk mendampingi anak anda.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded p-3">
-                <p className="text-sm font-medium text-amber-800">
-                  Silakan melakukan pembayaran sebesar <strong>{formatRupiah(record.payment_amount ?? 0)}</strong> sesuai petunjuk.
+          {/* STEP 4: Pembayaran Dikonfirmasi → Jadwal */}
+          {record?.choice_status === 'payment_confirmed' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="green">
+                    <CircleDollarSign className="size-5" />
+                  </IconBox>
+                  <div className="space-y-0.5">
+                    <CardTitle>Pembayaran Berhasil Dikonfirmasi</CardTitle>
+                    <CardDescription>
+                      Pembayaran konsultasi telah berhasil dikonfirmasi. Silakan memilih jadwal
+                      konsultasi yang tersedia.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start gap-2.5 rounded-xl border border-border bg-success-soft p-3.5 text-sm text-secondary-text">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+                  <span>
+                    Pembayaran telah dikonfirmasi. Silakan klik di bawah untuk memilih jadwal.
+                  </span>
+                </div>
+                <Button onClick={confirmSchedule} disabled={submitting} className="w-full">
+                  <CalendarClock className="size-4" />
+                  {submitting ? 'Memproses…' : 'Lihat Jadwal Tersedia'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* STEP 5: Jadwal Terkonfirmasi */}
+          {record?.choice_status === 'schedule_confirmed' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <IconBox tone="green" size="lg">
+                    <CalendarCheck2 className="size-6" />
+                  </IconBox>
+                  <CardTitle>Jadwal Konsultasi Terkonfirmasi</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Jadwal konsultasi Ananda telah berhasil dikonfirmasi.
                 </p>
-                <p className="text-xs text-amber-600 mt-1">
-                  Setelah pembayaran berhasil dikonfirmasi, Bapak/Ibu dapat melanjutkan ke penjadwalan.
+                <dl className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                    <dt className="text-sm text-muted-foreground">Psikolog</dt>
+                    <dd className="text-sm font-semibold text-heading">
+                      {selectedPsychologist?.full_name}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                    <dt className="text-sm text-muted-foreground">Biaya</dt>
+                    <dd className="text-sm font-semibold text-heading">
+                      {formatRupiah(record.payment_amount ?? 0)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                    <dt className="text-sm text-muted-foreground">Status</dt>
+                    <dd>
+                      <StatusBadge
+                        tone={severityTone(record.choice_status)}
+                        label={STATUS_LABELS[record.choice_status] ?? record.choice_status}
+                      />
+                    </dd>
+                  </div>
+                </dl>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Mohon hadir sesuai jadwal. Apabila terdapat perubahan, silakan lakukan penjadwalan
+                  ulang.
                 </p>
-              </div>
-              <Button onClick={confirmPayment} disabled={submitting} className="w-full">
-                {submitting ? 'Memproses...' : 'Konfirmasi Pembayaran'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* STEP 3b: Payment Pending */}
-        {record?.choice_status === 'payment_pending' && (
-          <Card>
-            <CardHeader><CardTitle>Pembayaran sedang Diproses</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Pembayaran sedang diproses. Mohon tunggu konfirmasi dari sekolah.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* STEP 4: Payment Confirmed → Schedule */}
-        {record?.choice_status === 'payment_confirmed' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Pembayaran Berhasil Dikonfirmasi</CardTitle>
-              <CardDescription>
-                Pembayaran konsultasi telah berhasil dikonfirmasi.
-                Silakan memilih jadwal konsultasi yang tersedia.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800">
-                ✓ Pembayaran telah dikonfirmasi. Silakan klik di bawah untuk memilih jadwal.
-              </div>
-              <Button onClick={confirmSchedule} disabled={submitting} className="w-full">
-                {submitting ? 'Memproses...' : 'Lihat Jadwal Tersedia'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* STEP 5: Schedule Confirmed */}
-        {record?.choice_status === 'schedule_confirmed' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-green-700">✓ Jadwal Konsultasi Terkonfirmasi</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Jadwal konsultasi Ananda telah berhasil dikonfirmasi.
-              </p>
-              <div className="bg-slate-100 rounded p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Psikolog:</span>
-                  <span className="font-medium">{selectedPsychologist?.full_name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Biaya:</span>
-                  <span className="font-medium">{formatRupiah(record.payment_amount ?? 0)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status:</span>
-                  <Badge variant="default" className="text-xs">Jadwal Terkonfirmasi</Badge>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Mohon hadir sesuai jadwal. Apabila terdapat perubahan, silakan lakukan penjadwalan ulang.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Status badge */}
-        {record && (
-          <div className="text-center">
-            <Badge variant="outline" className="text-xs">
-              Status: {STATUS_LABELS[record.choice_status] ?? record.choice_status}
-            </Badge>
-          </div>
-        )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

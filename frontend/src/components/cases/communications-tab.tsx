@@ -1,10 +1,17 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { EmptyState } from '@/components/ui/page-header';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -12,7 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { MessageSquare, Send, Users, User, RefreshCw } from 'lucide-react';
+import {
+  MessageSquare,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  User,
+  Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 interface CaseCommunicationRow {
@@ -24,6 +38,26 @@ interface CaseCommunicationRow {
   contact_role: string;
   created_at: string;
   author_name?: string;
+}
+
+const CHANNEL_LABEL: Record<string, string> = {
+  PHONE: 'Telepon',
+  EMAIL: 'Surel',
+  IN_PERSON: 'Tatap muka',
+  APP: 'Aplikasi',
+  INTERNAL: 'Internal',
+};
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function CommunicationsTab({ caseId }: { caseId: string }) {
@@ -47,9 +81,10 @@ export function CommunicationsTab({ caseId }: { caseId: string }) {
 
   useEffect(() => {
     fetchComms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseId]);
 
-  const filteredComms = comms.filter(c => {
+  const filteredComms = comms.filter((c) => {
     if (commsType === 'parent') return c.contact_role === 'PARENT' || c.contact_role === 'GUARDIAN';
     return c.contact_role === 'TEACHER' || c.contact_role === 'INTERNAL';
   });
@@ -62,7 +97,7 @@ export function CommunicationsTab({ caseId }: { caseId: string }) {
 
     if (commsType === 'parent') {
       if (!contactName.trim()) {
-        toast.error('Please enter the parent/guardian contact name.');
+        toast.error('Mohon isi nama orang tua atau wali.');
         setIsSubmitting(false);
         return;
       }
@@ -70,7 +105,7 @@ export function CommunicationsTab({ caseId }: { caseId: string }) {
       body.contact_role = contactRole;
       body.channel = 'IN_PERSON';
     } else {
-      body.contact_name = `${user?.full_name || 'Staff'} (Internal Note)`;
+      body.contact_name = `${user?.full_name || 'Staf'} (Catatan Internal)`;
       body.contact_role = 'INTERNAL';
       body.channel = 'INTERNAL';
       body.metadata = { is_internal: true, author_id: user?.user_id };
@@ -85,136 +120,210 @@ export function CommunicationsTab({ caseId }: { caseId: string }) {
       setComms([res.data, ...comms]);
       setMessage('');
       setContactName('');
+      toast.success('Catatan komunikasi berhasil disimpan.');
     } else {
-      toast.error(res.error || 'Failed to log communication.');
+      toast.error(res.error || 'Gagal menyimpan catatan komunikasi.');
     }
     setIsSubmitting(false);
   };
 
   if (isLoading) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">Loading communications...</div>;
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-16">
+          <div className="size-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Type switcher */}
-      <div className="flex gap-2 border-b border-border/50 pb-2">
-        <button
-          type="button"
-          onClick={() => setCommsType('parent')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${
-            commsType === 'parent'
-              ? 'bg-primary/10 text-primary font-medium'
-              : 'text-muted-foreground hover:bg-muted/50'
-          }`}
-        >
-          <User className="w-3.5 h-3.5 inline mr-1.5" />
-          Parent / Guardian Comms
-        </button>
-        <button
-          type="button"
-          onClick={() => setCommsType('internal')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${
-            commsType === 'internal'
-              ? 'bg-primary/10 text-primary font-medium'
-              : 'text-muted-foreground hover:bg-muted/50'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5 inline mr-1.5" />
-          Staff Notes (Internal)
-        </button>
-        <Button variant="ghost" size="sm" className="ml-auto h-9 w-9 p-0" onClick={fetchComms} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-        </Button>
-      </div>
-
-      {filteredComms.length === 0 ? (
-        <Card className="glass border-border/50">
-          <CardContent className="flex flex-col items-center py-12">
-            <MessageSquare className="h-8 w-8 text-muted-foreground opacity-50 mb-2" />
-            <p className="text-muted-foreground text-sm">
-              {commsType === 'parent' ? 'No parent communications logged yet.' : 'No internal staff notes yet.'}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 pb-2">
-          {filteredComms.map((comm) => (
-            <Card key={comm.comm_id} className={`glass border-border/50 ${
-              comm.contact_role === 'INTERNAL' ? 'bg-blue-50/30 dark:bg-blue-950/20 border-blue-200/50 dark:border-blue-800/50' : 'bg-muted/20'
-            }`}>
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <p className="text-xs font-semibold flex items-center gap-1.5">
-                    {comm.contact_role === 'INTERNAL' ? (
-                      <><Users className="w-3 h-3 text-blue-500" /> Staff Note {comm.author_name ? `(${comm.author_name})` : ''}</>
-                    ) : (
-                      <><User className="w-3 h-3 text-green-500" /> Parent Contact {comm.author_name ? `(${comm.author_name})` : ''}</>
-                    )}
-                  </p>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(comm.created_at).toLocaleString()}
-                  </span>
-                </div>
-                <p className="text-sm whitespace-pre-wrap">{comm.message}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Append New Record */}
-      <div className="pt-4 border-t border-border/50 space-y-3">
-        <h4 className="text-sm font-medium">
-          {commsType === 'parent' ? 'Log Parent Communication' : 'Add Internal Staff Note'}
-        </h4>
-
-        {commsType === 'parent' && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Contact Name</Label>
-              <input
-                type="text"
-                placeholder="e.g. Jane Doe (Mother)"
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Contact Role</Label>
-              <Select value={contactRole} onValueChange={(v) => setContactRole(v ?? 'PARENT')}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PARENT">Parent</SelectItem>
-                  <SelectItem value="GUARDIAN">Guardian</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-
-        {commsType === 'internal' && (
-          <p className="text-xs text-muted-foreground">
-            Internal notes are visible to all staff who can access this case.
-          </p>
-        )}
-
-        <Textarea
-          placeholder={commsType === 'parent' ? "Type message to parent/guardian..." : "Type internal staff note..."}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          rows={3}
-        />
-        <div className="flex justify-end">
-          <Button size="sm" onClick={handleSubmit} disabled={!message.trim() || isSubmitting}>
-            {isSubmitting ? 'Sending...' : commsType === 'parent' ? 'Log Communication' : 'Add Note'}
-            <Send className="ml-2 w-3 h-3" />
+    <div className="space-y-6">
+      <Tabs
+        value={commsType}
+        onValueChange={(v) => setCommsType((v as 'parent' | 'internal') ?? 'parent')}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="parent">
+              <User className="size-4" />
+              Orang Tua / Wali
+            </TabsTrigger>
+            <TabsTrigger value="internal">
+              <Users className="size-4" />
+              Catatan Internal
+            </TabsTrigger>
+          </TabsList>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={fetchComms}
+            disabled={isLoading}
+            aria-label="Muat ulang catatan komunikasi"
+            title="Muat ulang"
+          >
+            <RefreshCw className="size-4" />
           </Button>
         </div>
-      </div>
+
+        <TabsContent value="parent" className="space-y-4">
+          {filteredComms.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<MessageSquare />}
+                title="Belum ada komunikasi"
+                description="Catatan komunikasi dengan orang tua atau wali akan tampil di sini."
+              />
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {filteredComms.map((comm) => (
+                <Card key={comm.comm_id}>
+                  <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-border">
+                    <div className="flex items-center gap-3">
+                      <IconBox tone="green" size="sm">
+                        <User />
+                      </IconBox>
+                      <div>
+                        <CardTitle className="text-sm">Kontak Orang Tua / Wali</CardTitle>
+                        <CardDescription>
+                          {comm.contact_name}
+                          {comm.author_name ? ` • dicatat oleh ${comm.author_name}` : ''}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <StatusBadge
+                      tone="success"
+                      label={CHANNEL_LABEL[comm.channel?.toUpperCase()] ?? comm.channel ?? 'Internal'}
+                    />
+                  </CardHeader>
+                  <CardContent>
+                    <p className="whitespace-pre-wrap text-sm text-secondary-text">{comm.message}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {formatDateTime(comm.created_at)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="internal" className="space-y-4">
+          {filteredComms.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<MessageSquare />}
+                title="Belum ada catatan internal"
+                description="Catatan antar staf yang dapat dilihat seluruh tim kasus akan tampil di sini."
+              />
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {filteredComms.map((comm) => (
+                <Card key={comm.comm_id}>
+                  <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-border">
+                    <div className="flex items-center gap-3">
+                      <IconBox tone="blue" size="sm">
+                        <ShieldCheck />
+                      </IconBox>
+                      <div>
+                        <CardTitle className="text-sm">Catatan Staf</CardTitle>
+                        <CardDescription>
+                          {comm.author_name ? `oleh ${comm.author_name}` : 'Dokumentasi internal tim'}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <StatusBadge tone="info" label="Internal" />
+                  </CardHeader>
+                  <CardContent>
+                    <p className="whitespace-pre-wrap text-sm text-secondary-text">{comm.message}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {formatDateTime(comm.created_at)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Tambah catatan baru */}
+      <Card>
+        <CardHeader className="border-b border-border">
+          <CardTitle>
+            {commsType === 'parent' ? 'Catat Komunikasi Orang Tua' : 'Tambah Catatan Internal Staf'}
+          </CardTitle>
+          <CardDescription>
+            {commsType === 'parent'
+              ? 'Catat hasil komunikasi dengan orang tua atau wali pada kasus ini.'
+              : 'Catatan internal dapat dilihat semua staf yang memiliki akses ke kasus ini.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {commsType === 'parent' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="comm-contact-name" className="text-xs font-semibold">
+                  Nama Kontak
+                </Label>
+                <Input
+                  id="comm-contact-name"
+                  placeholder="Contoh: Ibu Ratih (Ibu)"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Hubungan</Label>
+                <Select value={contactRole} onValueChange={(v) => setContactRole(v ?? 'PARENT')}>
+                  <SelectTrigger aria-label="Hubungan kontak">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PARENT">Orang Tua</SelectItem>
+                    <SelectItem value="GUARDIAN">Wali</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <p className="flex items-center gap-2 rounded-xl border border-border bg-primary-softer px-3 py-2 text-xs text-secondary-text">
+              <ShieldCheck className="size-4 text-primary" />
+              Catatan internal hanya dapat dilihat staf yang memiliki akses ke kasus ini.
+            </p>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="comm-message" className="text-xs font-semibold">
+              Isi Catatan
+            </Label>
+            <Textarea
+              id="comm-message"
+              placeholder={
+                commsType === 'parent'
+                  ? 'Tuliskan ringkasan komunikasi dengan orang tua atau wali...'
+                  : 'Tuliskan catatan internal untuk fellow staf...'
+              }
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={4}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSubmit} disabled={!message.trim() || isSubmitting}>
+              <Send className="size-4" />
+              {isSubmitting
+                ? 'Menyimpan...'
+                : commsType === 'parent'
+                  ? 'Simpan Komunikasi'
+                  : 'Simpan Catatan'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

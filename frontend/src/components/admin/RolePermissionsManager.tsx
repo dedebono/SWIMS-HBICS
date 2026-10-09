@@ -1,16 +1,28 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { ShieldCheck, RefreshCw, Save, ChevronDown, ChevronRight } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ShieldCheck,
+  RefreshCw,
+  Save,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  KeyRound,
+  ListChecks,
+  Layers,
+  ClipboardCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 import { LOGIN_ROLES } from "@/lib/constants";
+import { IconBox } from "@/components/ui/icon-box";
+import { StatCard } from "@/components/ui/stat-card";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -19,30 +31,50 @@ import { LOGIN_ROLES } from "@/lib/constants";
 // purpose: students have no login and no permission matrix.
 const ROLES = LOGIN_ROLES;
 
+/** Label Bahasa Indonesia untuk setiap peran (nilai API tetap `LOGIN_ROLES`). */
+const ROLE_LABELS_ID: Record<string, string> = {
+  TEACHER: "Guru",
+  COUNSELOR: "Konselor",
+  SCHOOL_NURSE: "Perawat Sekolah",
+  SCHOOL_HEAD: "Kepala Sekolah",
+  BOARD_MEMBER: "Anggota Dewan",
+  IT_ADMIN: "Admin TI",
+  PERSONAL: "Personal",
+  PSYCHOLOGIST: "Psikolog",
+};
+
 // Must cover every resource the backend enforces with checkPermission(), otherwise
 // those rows are invisible here and can only be changed via SQL.
-const RESOURCES: { key: string; label: string }[] = [
-  { key: "cases", label: "Cases" },
-  { key: "incidents", label: "Incidents" },
-  { key: "interventions", label: "Interventions" },
-  { key: "media_assets", label: "Media Assets" },
-  { key: "alerts", label: "Alerts" },
-  { key: "reports", label: "Reports" },
-  { key: "consents", label: "Consents" },
-  { key: "audit_logs", label: "Audit Logs" },
-  { key: "positive_observations", label: "Positive Observations" },
-  { key: "students", label: "Students" },
-  { key: "appointments", label: "Appointments" },
-  { key: "availability", label: "Availability Slots" },
-  { key: "quisioner", label: "Quisioner" },
-  { key: "staff_quisioner", label: "Staff Quisioner" },
-  { key: "employee_counseling", label: "Employee Counseling" },
-  { key: "admin", label: "Admin" },
+const RESOURCES: { key: string; label: string; hint: string }[] = [
+  { key: "cases", label: "Kasus", hint: "Pengelolaan berkas kasus siswa" },
+  { key: "incidents", label: "Insiden", hint: "Laporan insiden dari siswa dan kelas" },
+  { key: "interventions", label: "Intervensi", hint: "Rencana dan tindak lanjut kasus" },
+  { key: "media_assets", label: "Aset Media", hint: "Foto, video, dan lampiran Berkas" },
+  { key: "alerts", label: "Peringatan", hint: "Peringatan otomatis sistem" },
+  { key: "reports", label: "Laporan", hint: "Rekap dan laporan periodik" },
+  { key: "consents", label: "Persetujuan", hint: "Persetujuan orang tua dan siswa" },
+  { key: "audit_logs", label: "Log Audit", hint: "Riwayat perubahan data" },
+  { key: "positive_observations", label: "Observasi Positif", hint: "Catatan perilaku positif" },
+  { key: "students", label: "Siswa", hint: "Data induk siswa" },
+  { key: "appointments", label: "Janji Temu", hint: "Jadwal konseling dan pertemuan" },
+  { key: "availability", label: "Slot Ketersediaan", hint: "Jam layanan tiap staf" },
+  { key: "quisioner", label: "Kuesioner", hint: "Kuesioner siswa" },
+  { key: "staff_quisioner", label: "Kuesioner Staf", hint: "Kuesioner karyawan" },
+  { key: "employee_counseling", label: "Konseling Karyawan", hint: "Layanan konseling staf" },
+  { key: "admin", label: "Administrasi", hint: "Pengaturan sistem lanjutan" },
 ];
 
 const CRUD_ACTIONS = ["create", "read", "update", "delete"] as const;
 // The 'admin' resource additionally exposes a 'manage' action.
 const ADMIN_EXTRA_ACTIONS = ["manage"] as const;
+
+const ACTION_LABELS: Record<string, string> = {
+  create: "Tambah",
+  read: "Lihat",
+  update: "Ubah",
+  delete: "Hapus",
+  manage: "Kelola",
+};
 
 type RoleSlice = Record<string, Record<string, boolean>>;
 type Matrix = Record<string, RoleSlice>;
@@ -53,10 +85,7 @@ function actionsForResource(resource: string): string[] {
 }
 
 function roleLabel(role: string): string {
-  return role
-    .split("_")
-    .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
-    .join(" ");
+  return ROLE_LABELS_ID[role] ?? role;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────────
@@ -76,13 +105,13 @@ export default function RolePermissionsManager() {
       const res = await apiClient<{ data?: Matrix }>("/admin/role-permissions");
       if (res.success && res.data) {
         setMatrix(res.data as Matrix);
-        if (showToast) toast.success("Role permissions refreshed.");
+        if (showToast) toast.success("Izin peran berhasil dimuat ulang.");
       } else {
-        toast.error("Failed to load role permissions");
+        toast.error("Gagal memuat izin peran.");
       }
     } catch (err) {
       console.error(err);
-      toast.error("An error occurred while fetching role permissions");
+      toast.error("Terjadi kesalahan saat memuat izin peran.");
     } finally {
       setIsLoading(false);
     }
@@ -132,12 +161,12 @@ export default function RolePermissionsManager() {
       });
       if (res.success && res.data) {
         setMatrix((prev) => ({ ...prev, [selectedRole]: res.data as RoleSlice }));
-        toast.success(`${roleLabel(selectedRole)} permissions updated.`);
+        toast.success(`Izin peran ${roleLabel(selectedRole)} berhasil diperbarui.`);
       } else {
-        toast.error(res.error || "Failed to update permissions.");
+        toast.error(res.error || "Gagal memperbarui izin.");
       }
     } catch (err) {
-      toast.error("An unexpected error occurred.");
+      toast.error("Terjadi kesalahan tak terduga.");
     } finally {
       setIsSaving(false);
     }
@@ -152,132 +181,224 @@ export default function RolePermissionsManager() {
       });
       if (res.success && res.data) {
         setMatrix((prev) => ({ ...prev, [selectedRole]: res.data as RoleSlice }));
-        toast.success(`${roleLabel(selectedRole)} permissions reset to defaults.`);
+        toast.success(`Izin peran ${roleLabel(selectedRole)} dikembalikan ke pengaturan awal.`);
       } else {
-        toast.error(res.error || "Failed to reset permissions.");
+        toast.error(res.error || "Gagal mengembalikan izin ke pengaturan awal.");
       }
     } catch (err) {
-      toast.error("An unexpected error occurred.");
+      toast.error("Terjadi kesalahan tak terduga.");
     } finally {
       setIsResetting(false);
     }
   };
 
+  const totalPermissionSlots = RESOURCES.reduce(
+    (sum, r) => sum + actionsForResource(r.key).length,
+    0
+  );
+
+  const enabledCount = useMemo(() => {
+    let count = 0;
+    for (const r of RESOURCES) {
+      const actions = actionsForResource(r.key);
+      for (const a of actions) {
+        if (draft[r.key]?.[a]) count += 1;
+      }
+    }
+    return count;
+  }, [draft]);
+
   return (
-    <Card className="glass shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setOpen(o => !o)} aria-label="Toggle role permissions">
-            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </Button>
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              Role Permissions
-            </CardTitle>
-            <CardDescription>
-              Configure what each role can do across the system. Changes apply immediately to all users with that role in your organization.
-              Scoping rules (e.g. teachers see only their class, nurses see only medical cases) still apply on top of these toggles.
-            </CardDescription>
+    <Card>
+      <CardHeader className="border-b">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <IconBox tone="purple">
+              <ShieldCheck />
+            </IconBox>
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpen((o) => !o)}
+                  aria-label={open ? "Tutup pengaturan izin peran" : "Buka pengaturan izin peran"}
+                  className="flex items-center gap-2 rounded-lg text-left"
+                >
+                  {open ? (
+                    <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                  Kelola Izin Peran
+                </button>
+                <StatusBadge tone="neutral" dot={false} label={`${ROLES.length} peran`} />
+              </CardTitle>
+              <CardDescription>
+                Atur apa saja yang boleh dilakukan setiap peran di sistem. Perubahan langsung berlaku untuk
+                semua pengguna dengan peran tersebut. Aturan pembatasan cakupan (misalnya guru hanya melihat
+                kelasnya sendiri) tetap berlaku di atas pengaturan ini.
+              </CardDescription>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadMatrix(true)}
+            disabled={isLoading}
+            className="shrink-0 self-start sm:self-auto"
+          >
+            <RefreshCw className={isLoading ? "size-4 animate-spin" : "size-4"} />
+            Muat Ulang
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => loadMatrix(true)} disabled={isLoading} className="shrink-0">
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
       </CardHeader>
 
       {open && (
-      <>
-      <CardContent>
-        <div className="pt-2 flex flex-col md:flex-row md:items-end gap-4 mb-4">
-          <div className="space-y-2 w-full md:w-72">
-            <Label>Role</Label>
-            <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v ?? selectedRole)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select role" />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {roleLabel(r)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        {isLoading ? (
-          <div className="text-center py-16">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-primary/50" />
-            <p className="text-sm text-muted-foreground mt-2">Loading permissions...</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left border-separate border-spacing-0">
-              <thead>
-                <tr className="text-xs text-muted-foreground uppercase bg-muted/50">
-                  <th className="px-4 py-3 rounded-tl-md">Resource</th>
-                  {CRUD_ACTIONS.map((a) => (
-                    <th key={a} className="px-4 py-3 text-center capitalize">{a}</th>
+        <>
+          <CardContent className="space-y-6">
+            {/* ── Ringkasan ── */}
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                label="Peran Dikelola"
+                value={ROLES.length}
+                hint="Peran yang memiliki matriks izin"
+                icon={<ShieldCheck className="size-5" />}
+                iconTone="purple"
+              />
+              <StatCard
+                label="Modul Akses"
+                value={RESOURCES.length}
+                hint="Jenis data yang diatur haknya"
+                icon={<Layers className="size-5" />}
+                iconTone="blue"
+              />
+              <StatCard
+                label="Izin Aktif"
+                value={enabledCount}
+                hint={`Peran ${roleLabel(selectedRole)}`}
+                icon={<ListChecks className="size-5" />}
+                iconTone="green"
+                progress={
+                  totalPermissionSlots > 0
+                    ? Math.round((enabledCount / totalPermissionSlots) * 100)
+                    : 0
+                }
+                progressLabel="Persentase izin aktif"
+              />
+              <StatCard
+                label="Slot Izin"
+                value={totalPermissionSlots}
+                hint="Total kombinasi modul dan aksi"
+                icon={<KeyRound className="size-5" />}
+                iconTone="slate"
+              />
+            </div>
+
+            {isLoading ? (
+              <div className="flex flex-col items-center gap-3 py-16">
+                <Loader2 className="size-7 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Memuat matriks izin…</p>
+              </div>
+            ) : (
+              <Tabs
+                value={selectedRole}
+                onValueChange={(v: string) => setSelectedRole(v ?? selectedRole)}
+              >
+                <TabsList className="w-full sm:w-fit">
+                  {ROLES.map((r) => (
+                    <TabsTrigger key={r} value={r}>
+                      {roleLabel(r)}
+                    </TabsTrigger>
                   ))}
-                  <th className="px-4 py-3 text-center rounded-tr-md">Manage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {RESOURCES.map((r, idx) => {
-                  const isLast = idx === RESOURCES.length - 1;
-                  return (
-                    <tr key={r.key} className="border-t border-muted/50">
-                      <td className="px-4 py-3 font-medium">{r.label}</td>
-                      {CRUD_ACTIONS.map((a) => (
-                        <td key={a} className="px-4 py-3 text-center">
-                          <div className="flex justify-center">
-                            <Switch
-                              checked={Boolean(draft[r.key]?.[a])}
-                              onCheckedChange={(v) => toggle(r.key, a, v)}
-                              aria-label={`${r.label} ${a}`}
-                            />
+                </TabsList>
+
+                {ROLES.map((r) => (
+                  <TabsContent key={r} value={r}>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {RESOURCES.map((res) => {
+                        const actions = actionsForResource(res.key);
+                        const enabled = actions.filter((a) => draft[res.key]?.[a]).length;
+                        return (
+                          <div
+                            key={res.key}
+                            className="rounded-2xl border border-border bg-card p-5 shadow-card"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex min-w-0 items-start gap-3">
+                                <IconBox
+                                  tone={enabled > 0 ? "blue" : "slate"}
+                                  size="sm"
+                                  className="mt-0.5"
+                                >
+                                  {res.key === "admin" ? (
+                                    <ShieldCheck className="size-4" />
+                                  ) : (
+                                    <ClipboardCheck className="size-4" />
+                                  )}
+                                </IconBox>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-heading">{res.label}</p>
+                                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                                    {res.hint}
+                                  </p>
+                                </div>
+                              </div>
+                              <StatusBadge
+                                tone={enabled === actions.length ? "success" : enabled > 0 ? "info" : "neutral"}
+                                dot={false}
+                                label={`${enabled}/${actions.length}`}
+                              />
+                            </div>
+
+                            <div className="mt-4 grid gap-3 border-t border-border pt-5 sm:grid-cols-2">
+                              {actions.map((a) => (
+                                <label
+                                  key={a}
+                                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2 transition-colors hover:bg-muted/70"
+                                >
+                                  <span className="text-[0.8125rem] font-medium text-secondary-text">
+                                    {ACTION_LABELS[a] ?? a}
+                                  </span>
+                                  <Switch
+                                    checked={Boolean(draft[res.key]?.[a])}
+                                    onCheckedChange={(v) => toggle(res.key, a, v)}
+                                    aria-label={`${ACTION_LABELS[a] ?? a} — ${res.label}`}
+                                    disabled={r !== selectedRole}
+                                  />
+                                </label>
+                              ))}
+                            </div>
                           </div>
-                        </td>
-                      ))}
-                      <td className={`px-4 py-3 text-center ${isLast ? "rounded-br-md" : ""}`}>
-                        <div className="flex justify-center">
-                          <Switch
-                            checked={Boolean(draft[r.key]?.["manage"])}
-                            onCheckedChange={(v) => toggle(r.key, "manage", v)}
-                            aria-label={`${r.label} manage`}
-                            disabled={r.key !== "admin"}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
+                        );
+                      })}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
+          </CardContent>
 
-      <Separator />
-
-      <CardFooter className="border-t p-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        <Button
-          variant="outline"
-          onClick={handleReset}
-          disabled={isResetting || isSaving || isLoading}
-          className="sm:mr-auto"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isResetting ? "animate-spin" : ""}`} />
-          Reset to defaults
-        </Button>
-        <Button onClick={handleSave} disabled={!isDirty || isSaving || isResetting || isLoading}>
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? "Saving..." : "Save changes"}
-        </Button>
-      </CardFooter>
-      </>
+          <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={isResetting || isSaving || isLoading}
+              className="sm:mr-auto"
+            >
+              <RefreshCw className={isResetting ? "size-4 animate-spin" : "size-4"} />
+              Kembalikan ke Pengaturan Awal
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              {isDirty
+                ? `Ada perubahan pada izin peran ${roleLabel(selectedRole)} yang belum disimpan.`
+                : `Izin peran ${roleLabel(selectedRole)} sudah tersimpan.`}
+            </p>
+            <Button onClick={handleSave} disabled={!isDirty || isSaving || isResetting || isLoading}>
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              {isSaving ? "Menyimpan…" : "Simpan Perubahan"}
+            </Button>
+          </CardFooter>
+        </>
       )}
     </Card>
   );

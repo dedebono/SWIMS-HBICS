@@ -1,65 +1,102 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Search, AlertTriangle, FileCheck2 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState, PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import {
+  ClipboardCheck,
+  FileCheck2,
+  ShieldAlert,
+  ClipboardList,
+  Sparkles,
+} from "lucide-react";
 
 export default function CaseReviewerDashboard() {
   const { user } = useAuth();
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Case Review Audit
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Perform audits, risk verifications, and compliance checks on resolved cases.
-        </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Audit Kasus"
+        description={
+          user?.full_name
+            ? `Halo ${user.full_name}, lakukan audit, verifikasi tingkat risiko, dan pemeriksaan kepatuhan atas kasus yang telah diselesaikan.`
+            : "Lakukan audit, verifikasi tingkat risiko, dan pemeriksaan kepatuhan atas kasus yang telah diselesaikan."
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard
+          label="Audit Tertunda"
+          value={5}
+          hint="Terpilih secara acak untuk minggu ini"
+          icon={<ClipboardCheck className="size-5" />}
+          iconTone="purple"
+          trend="flat"
+          trendLabel="Perlu ditinjau"
+          progress={40}
+          progressLabel="Progres audit minggu ini"
+        />
+        <StatCard
+          label="Tingkat Risiko Disputed"
+          value={1}
+          hint="Memerlukan arbitrasi manual"
+          icon={<ShieldAlert className="size-5" />}
+          iconTone="yellow"
+          trend="down"
+          trendLabel="-2 dari minggu lalu"
+        />
+        <StatCard
+          label="Kasus Disetujui"
+          value={142}
+          hint="Kepatuhan terverifikasi tahun berjalan"
+          icon={<FileCheck2 className="size-5" />}
+          iconTone="green"
+          trend="up"
+          trendLabel="+12%"
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="glass border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Audits</CardTitle>
-            <Search className="h-5 w-5 text-indigo-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">5</div>
-            <p className="text-xs text-muted-foreground mt-1">Randomly selected this week</p>
-          </CardContent>
-        </Card>
-        
-        <Card className="glass border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Disputed Risk Levels</CardTitle>
-            <AlertTriangle className="h-5 w-5 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">1</div>
-            <p className="text-xs text-muted-foreground mt-1">Requires manual arbitration</p>
-          </CardContent>
-        </Card>
-
-        <Card className="glass border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Cases Approved</CardTitle>
-            <FileCheck2 className="h-5 w-5 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">142</div>
-            <p className="text-xs text-muted-foreground mt-1">YTD compliance verified</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="glass">
+      <Card>
         <CardHeader>
-          <CardTitle>Audit Queue</CardTitle>
-          <CardDescription>Select a case to begin your compliance review.</CardDescription>
+          <CardTitle>Antrean Audit</CardTitle>
+          <CardDescription>
+            Pilih kasus untuk memulai pemeriksaan kepatuhan Anda.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="h-64 flex items-center justify-center border-t">
-          <p className="text-muted-foreground text-sm">Your audit queue is currently empty.</p>
+        <CardContent>
+          <EmptyState
+            icon={<ClipboardList className="size-6" />}
+            title="Antrean audit sedang kosong"
+            description="Belum ada kasus yang menunggu pemeriksaan. Kasus yang selesai akan otomatis masuk ke antrean ini."
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pengingat Workflow</CardTitle>
+          <CardDescription>Ikuti alur kerja audit agar hasil pemeriksaan tetap konsisten.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="grid gap-3 sm:grid-cols-3">
+            {[
+              "Verifikasi ulang tingkat risiko setiap kasus yang sudah ditutup.",
+              "Catat temuan audit beserta rekomendasi tindak lanjut.",
+              "Kirim kasus berisiko tinggi ke tahan Review concurring.",
+            ].map((tip) => (
+              <li
+                key={tip}
+                className="flex items-start gap-3 rounded-xl border border-border bg-card p-4"
+              >
+                <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
+                  <Sparkles className="size-4" />
+                </span>
+                <p className="text-sm leading-relaxed text-secondary-text">{tip}</p>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
     </div>

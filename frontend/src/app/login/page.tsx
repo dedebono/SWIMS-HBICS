@@ -1,13 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AlertCircle, ArrowRight, Building2, CheckCircle2, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+
+const benefitPoints = [
+  'Kasus siswa terstruktur dari laporan sampai penyelesaian',
+  'Kontrol akses berbasis peran untuk guru, wali, dan tata usaha',
+  'Laporan siap PDF untuk kepala sekolah dan komite',
+  'Data dilindungi sesuai UU PDP No. 27 Tahun 2022',
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,7 +36,7 @@ export default function LoginPage() {
         setCaptchaData(res.data);
       }
     } catch (err) {
-      console.error('Failed to load captcha', err);
+      console.error('Gagal memuat captcha', err);
     }
   };
 
@@ -41,10 +50,10 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      if (!captchaData) throw new Error('Captcha is still loading');
-      
+      if (!captchaData) throw new Error('Verifikasi keamanan belum selesai dimuat. Mohon coba lagi.');
+
       const loggedInUser = await login(email, password, tenantSlug, captchaData.id, captchaAnswer);
-      
+
       switch (loggedInUser.role) {
         case 'IT_ADMIN':
           router.push('/dashboard/admin');
@@ -68,133 +77,190 @@ export default function LoginPage() {
           router.push('/dashboard/personal');
           break;
         default:
-          // TEACHER, SUBSTITUTE_TEACHER, etc.
           router.push('/dashboard');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Gagal masuk. Silakan periksa kembali data Anda.');
       setCaptchaAnswer('');
-      await fetchCaptcha(); // Refresh captcha on failure
+      await fetchCaptcha();
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      {/* Background gradient */}
-      <div className="fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-chart-4/5" />
-        <div className="absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-chart-2/5 blur-3xl" />
-      </div>
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[1.05fr_1fr]">
+      {/* Panel branding kiri */}
+      <aside className="relative hidden overflow-hidden bg-heading lg:flex lg:flex-col lg:justify-between lg:p-12">
+        <div className="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-16 size-80 rounded-full bg-primary/15 blur-3xl" />
 
-      <div className="w-full max-w-md">
-        {/* Logo / Branding */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-chart-4 shadow-lg shadow-primary/25">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-foreground">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+        <div className="relative">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-button">
+              <ShieldCheck className="size-6" aria-hidden="true" />
+            </div>
+            <div className="leading-tight">
+              <p className="font-heading text-lg font-bold text-primary-foreground">SWIMS</p>
+              <p className="text-xs text-primary-foreground/70">Sistem Informasi Wellness &amp; Incident</p>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">SWIMS</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Student Wellbeing & Incident Management System
-          </p>
         </div>
 
-        <Card className="glass border-border/50">
-          <CardHeader>
-            <CardTitle className="text-xl">Sign In</CardTitle>
-            <CardDescription>
-              Enter your credentials to access the dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="relative max-w-md space-y-6">
+          <h2 className="font-heading text-3xl font-extrabold leading-tight text-primary-foreground">
+            Platform kesejahteraan siswa yang aman, tertata, dan mudah dipantau
+          </h2>
+          <p className="text-sm leading-relaxed text-primary-foreground/75">
+            SWIMS menyatukan laporan insiden, kasus kesehatan, dan catatan perkembangan siswa dalam satu
+            sistem yang ramah untuk guru dan wali.
+          </p>
+
+          <ul className="space-y-3">
+            {benefitPoints.map((point) => (
+              <li key={point} className="flex items-start gap-3 text-sm text-primary-foreground/85">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative flex items-center gap-2 text-xs text-primary-foreground/60">
+          <Lock className="size-3.5" aria-hidden="true" />
+          Data terenkripsi saat disimpan dan saat dikirim.
+        </p>
+      </aside>
+
+      {/* Panel form kanan */}
+      <main className="flex items-center justify-center px-4 py-10 sm:px-8">
+        <div className="w-full max-w-md space-y-6">
+          <div className="space-y-3 lg:hidden">
+            <div className="flex items-center gap-3">
+              <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-button">
+                <ShieldCheck className="size-6" aria-hidden="true" />
+              </div>
+              <div className="leading-tight">
+                <p className="font-heading text-lg font-bold text-heading">SWIMS</p>
+                <p className="text-xs text-muted-foreground">Sistem Informasi Wellness &amp; Incident</p>
+              </div>
+            </div>
+          </div>
+
+          <Card className="p-8">
+            <div className="space-y-1.5">
+              <h1 className="page-title">Masuk ke Akun Anda</h1>
+              <p className="page-subtitle">
+                Gunakan identitas sekolah dan email yang terdaftar untuk melanjutkan.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="mt-6 space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="tenant-slug">School</Label>
+                <Label htmlFor="tenant-slug">
+                  <Building2 className="size-4 text-muted-foreground" aria-hidden="true" />
+                  Kode Sekolah
+                </Label>
                 <Input
                   id="tenant-slug"
-                  placeholder="e.g. springfield"
+                  placeholder="contoh: sdn-merdeka-01"
                   value={tenantSlug}
                   onChange={(e) => setTenantSlug(e.target.value)}
                   required
                   autoFocus
+                  autoComplete="organization"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">
+                  <Mail className="size-4 text-muted-foreground" aria-hidden="true" />
+                  Email
+                </Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="your.name@school.edu"
+                  placeholder="nama@sekolah.sch.id"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  autoComplete="email"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">
+                  <Lock className="size-4 text-muted-foreground" aria-hidden="true" />
+                  Kata Sandi
+                </Label>
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Masukkan kata sandi"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  autoComplete="current-password"
                 />
               </div>
 
-              {captchaData && (
-                <div className="space-y-2 rounded-lg border bg-muted/50 p-3">
-                  <Label htmlFor="captcha">Security Verification</Label>
+              {captchaData ? (
+                <div className="space-y-2 rounded-xl border border-border bg-primary-softer p-4">
+                  <Label htmlFor="captcha">
+                    <Sparkles className="size-4 text-primary" aria-hidden="true" />
+                    Verifikasi Keamanan
+                  </Label>
                   <div className="flex items-center gap-3">
-                    <div className="font-mono text-lg font-bold tracking-wider text-primary">
+                    <span className="rounded-lg bg-card px-3 py-2 font-mono text-base font-bold tracking-wider text-primary shadow-card">
                       {captchaData.question}
-                    </div>
+                    </span>
                     <Input
                       id="captcha"
                       type="text"
-                      placeholder="Answer"
+                      inputMode="numeric"
+                      placeholder="Jawaban"
                       value={captchaAnswer}
                       onChange={(e) => setCaptchaAnswer(e.target.value)}
                       required
-                      className="flex-1 font-mono"
+                      className="font-mono"
                     />
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {error}
+              {error ? (
+                <div className="flex items-start gap-2.5 rounded-lg border border-danger/20 bg-danger-soft px-4 py-3 text-sm text-danger">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <span>{error}</span>
                 </div>
-              )}
+              ) : null}
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="h-11 w-full" disabled={isLoading}>
                 {isLoading ? (
                   <span className="flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Signing in...
+                    <span className="size-4 animate-spin rounded-full border-[3px] border-primary-foreground/30 border-t-primary-foreground" />
+                    Sedang masuk...
                   </span>
                 ) : (
-                  'Sign In'
+                  'Masuk'
                 )}
               </Button>
             </form>
-          </CardContent>
-        </Card>
+          </Card>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Protected by Indonesian PDP Law No. 27/2022 • Data encrypted at rest
-        </p>
-      </div>
+          <p className="text-center text-sm text-muted-foreground">
+            Belum punya akun sekolah?{' '}
+            <Link href="/register" className="font-semibold text-primary hover:underline">
+              Daftar_INSTansi
+              <ArrowRight className="ml-1 inline size-3.5" aria-hidden="true" />
+            </Link>
+          </p>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Dengan masuk, Anda menyetujui pengelolaan data sesuai UU PDP No. 27 Tahun 2022.
+          </p>
+        </div>
+      </main>
     </div>
   );
 }

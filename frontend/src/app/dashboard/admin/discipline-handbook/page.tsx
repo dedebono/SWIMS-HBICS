@@ -9,13 +9,24 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader, EmptyState } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { IconBox, type IconTone } from "@/components/ui/icon-box";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import {
-  BookOpen, Plus, Pencil, Trash2, RefreshCw, Save, ChevronDown, ChevronRight, ChevronUp,
-  Layers, Scale, GraduationCap, FileText, AlertTriangle, FolderOpen, Users,
-  ExternalLink, X, Download, Upload
+  DataTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui/data-table";
+import {
+  BookOpen, Plus, Pencil, Trash2, RefreshCw, Save, ChevronDown, ChevronRight,
+  Layers, Scale, GraduationCap, FileText, AlertTriangle, FolderOpen,
+  ExternalLink, Download, Upload, Loader2, ListTree, TriangleAlert,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -34,42 +45,118 @@ interface RequiredDocument { id: number; category_id: number; level_id: number; 
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CAT_COLORS: Record<number, { border: string; bg: string; text: string; dot: string; badge: string; desc: string }> = {
-  1: { border: "border-l-green-500", bg: "bg-green-100 dark:bg-green-950 border border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-200", dot: "bg-green-500", badge: "bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200", desc: "text-green-700/70 dark:text-green-300/70" },
-  2: { border: "border-l-yellow-500", bg: "bg-yellow-100 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800", text: "text-yellow-800 dark:text-yellow-200", dot: "bg-yellow-500", badge: "bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", desc: "text-yellow-700/70 dark:text-yellow-300/70" },
-  3: { border: "border-l-orange-500", bg: "bg-orange-100 dark:bg-orange-950 border border-orange-200 dark:border-orange-800", text: "text-orange-800 dark:text-orange-200", dot: "bg-orange-500", badge: "bg-orange-200 text-orange-800 dark:bg-orange-900 dark:text-orange-200", desc: "text-orange-700/70 dark:text-orange-300/70" },
-  4: { border: "border-l-red-500", bg: "bg-red-100 dark:bg-red-950 border border-red-200 dark:border-red-800", text: "text-red-800 dark:text-red-200", dot: "bg-red-500", badge: "bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200", desc: "text-red-700/70 dark:text-red-300/70" },
+/** Category accents: pastel tint + semantic tones (light mode only). */
+const CATEGORY_STYLE: Record<number, { tone: IconTone; badge: StatusTone; surface: string; accent: string }> = {
+  1: {
+    tone: "green",
+    badge: "success",
+    surface: "bg-success-soft/40 border-success-soft",
+    accent: "bg-success",
+  },
+  2: {
+    tone: "yellow",
+    badge: "warning",
+    surface: "bg-warning-soft/40 border-warning-soft",
+    accent: "bg-warning",
+  },
+  3: {
+    tone: "teal",
+    badge: "info",
+    surface: "bg-info-soft/40 border-info-soft",
+    accent: "bg-primary",
+  },
+  4: {
+    tone: "red",
+    badge: "danger",
+    surface: "bg-danger-soft/40 border-danger-soft",
+    accent: "bg-danger",
+  },
 };
 
-const CONSEQUENCE_BADGE: Record<string, string> = {
-  "Tugas Reflektif": "bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100",
-  "Perbaikan Langsung": "bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100",
-  "Pembatasan Sementara": "bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100",
-  "Konferensi Keluarga": "bg-violet-200 text-violet-900 dark:bg-violet-900 dark:text-violet-100",
-  "Skorsing": "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100",
-  "Skorsing Ringan": "bg-orange-200 text-orange-900 dark:bg-orange-900 dark:text-orange-100",
-  "Skorsing Berat": "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100",
-  "Ganti Rugi": "bg-teal-200 text-teal-900 dark:bg-teal-900 dark:text-teal-100",
-  "Tugas Karakter": "bg-indigo-200 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-100",
-  "Pelanggaran Surat Pernyataan": "bg-pink-200 text-pink-900 dark:bg-pink-900 dark:text-pink-100",
-  "Koordinasi Pihak Luar": "bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-200",
+const DEFAULT_CATEGORY_STYLE = {
+  tone: "slate" as IconTone,
+  badge: "neutral" as StatusTone,
+  surface: "bg-muted border-border",
+  accent: "bg-muted-foreground",
+};
+
+/** Consequence type → semantic badge tone. */
+const CONSEQUENCE_TONE: Record<string, StatusTone> = {
+  "Tugas Reflektif": "info",
+  "Perbaikan Langsung": "success",
+  "Pembatasan Sementara": "warning",
+  "Konferensi Keluarga": "purple",
+  "Skorsing": "warning",
+  "Skorsing Ringan": "warning",
+  "Skorsing Berat": "danger",
+  "Ganti Rugi": "purple",
+  "Tugas Karakter": "info",
+  "Pelanggaran Surat Pernyataan": "purple",
+  "Koordinasi Pihak Luar": "neutral",
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function LevelBadge({ levels }: { levels: Level[] }) {
-  return <div className="flex gap-1 flex-wrap">{levels.map(l => <Badge key={l.id} variant="outline" className="text-xs font-mono px-1.5">{l.code}</Badge>)}</div>;
+function categoryStyle(id: number) {
+  return CATEGORY_STYLE[id] ?? DEFAULT_CATEGORY_STYLE;
 }
 
-function SectionHeader({ icon: Icon, title, count, action }: { icon: any; title: string; count: number; action?: React.ReactNode }) {
+/** Compact code chips for education levels. */
+function LevelBadge({ levels }: { levels: Level[] }) {
+  if (levels.length === 0) {
+    return <span className="text-xs text-muted-foreground">Semua jenjang</span>;
+  }
   return (
-    <div className="flex items-center justify-between py-2 px-1 border-b">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="font-semibold text-sm">{title}</span>
-        <Badge variant="secondary" className="text-xs">{count}</Badge>
-      </div>
-      {action}
+    <div className="flex flex-wrap gap-1.5">
+      {levels.map((l) => (
+        <StatusBadge key={l.id} tone="neutral" dot={false} label={l.code} />
+      ))}
+    </div>
+  );
+}
+
+/** Small icon-button pair used for edit / delete row actions. */
+function RowActions({
+  editLabel,
+  onEdit,
+  deleteLabel,
+  onDelete,
+}: {
+  /** Omit when the row has no edit affordance. */
+  editLabel?: string;
+  onEdit?: () => void;
+  deleteLabel: string;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-1.5">
+      {editLabel && onEdit ? (
+        <Button variant="ghost" size="icon-sm" aria-label={editLabel} onClick={onEdit}>
+          <Pencil className="size-4" />
+        </Button>
+      ) : null}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="text-danger hover:bg-danger-soft hover:text-danger"
+        aria-label={deleteLabel}
+        onClick={onDelete}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+/** Header row for a tab panel: helper text on the left, action button right. */
+function PanelHeader({ hint, actionLabel, onAction }: { hint: string; actionLabel: string; onAction: () => void }) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground">{hint}</p>
+      <Button size="sm" onClick={onAction} className="self-start sm:self-auto">
+        <Plus className="size-4" />
+        {actionLabel}
+      </Button>
     </div>
   );
 }
@@ -78,7 +165,6 @@ function SectionHeader({ icon: Icon, title, count, action }: { icon: any; title:
 
 export default function AdminDisciplineHandbookPage() {
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("structure");
 
   // Data
   const [tree, setTree] = useState<HandbookTreeNode[]>([]);
@@ -110,7 +196,7 @@ export default function AdminDisciplineHandbookPage() {
       if (g.success) setGuidelines(g.data ?? []);
       if (cs.success) setConsequences(cs.data ?? []);
       if (d.success) setDocuments(d.data ?? []);
-    } catch { toast.error("Gagal memuat data buku pedoman"); }
+    } catch { toast.error("Gagal memuat data buku pedoman."); }
     finally { setLoading(false); }
   }, []);
 
@@ -119,38 +205,37 @@ export default function AdminDisciplineHandbookPage() {
   async function doPost(endpoint: string, body: any, onSuccess?: () => void) {
     try {
       const res = await apiClient(endpoint, { method: "POST", body });
-      if (res.success) { toast.success("Berhasil disimpan"); closeDlg(); fetchAll(); onSuccess?.(); }
-      else toast.error(res.error || "Gagal menyimpan");
-    } catch { toast.error("Terjadi kesalahan"); }
+      if (res.success) { toast.success("Berhasil disimpan."); closeDlg(); fetchAll(); onSuccess?.(); }
+      else toast.error(res.error || "Gagal menyimpan.");
+    } catch { toast.error("Terjadi kesalahan saat menyimpan."); }
   }
 
   async function doPut(endpoint: string, body: any, onSuccess?: () => void) {
     try {
       const res = await apiClient(endpoint, { method: "PUT", body });
-      if (res.success) { toast.success("Berhasil diupdate"); closeDlg(); fetchAll(); onSuccess?.(); }
-      else toast.error(res.error || "Gagal mengupdate");
-    } catch { toast.error("Terjadi kesalahan saat update"); }
+      if (res.success) { toast.success("Berhasil diperbarui."); closeDlg(); fetchAll(); onSuccess?.(); }
+      else toast.error(res.error || "Gagal memperbarui.");
+    } catch { toast.error("Terjadi kesalahan saat memperbarui."); }
   }
 
   async function doDelete(endpoint: string, id: number, label: string) {
     if (!confirm(`Hapus "${label}"?`)) return;
     try {
       const res = await apiClient(`${endpoint}/${id}`, { method: "DELETE" });
-      if (res.success) { toast.success("Berhasil dihapus"); fetchAll(); }
-      else toast.error(res.error || "Gagal menghapus");
-    } catch { toast.error("Terjadi kesalahan"); }
+      if (res.success) { toast.success("Berhasil dihapus."); fetchAll(); }
+      else toast.error(res.error || "Gagal menghapus.");
+    } catch { toast.error("Terjadi kesalahan saat menghapus."); }
   }
 
-  const catName = (id: number) => categories.find(c => c.id === id)?.name ?? `Kat. ${id}`;
-  const levelName = (id: number) => levels.find(l => l.id === id)?.name ?? `Jenjang ${id}`;
-  const levelCode = (id: number) => levels.find(l => l.id === id)?.code ?? `?`;
+  const catName = (id: number) => categories.find(c => c.id === id)?.name ?? `Kategori ${id}`;
+  const levelCode = (id: number) => levels.find(l => l.id === id)?.code ?? "—";
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleExport() {
     try {
       const res = await apiClient<any>('/discipline-handbook/export');
-      if (!res.success) { toast.error('Gagal export'); return; }
+      if (!res.success) { toast.error('Gagal mengekspor data.'); return; }
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -158,14 +243,14 @@ export default function AdminDisciplineHandbookPage() {
       a.download = `buku-pedoman-disiplin-${new Date().toISOString().slice(0,10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Berhasil export');
-    } catch { toast.error('Gagal export'); }
+      toast.success('Data berhasil diekspor.');
+    } catch { toast.error('Gagal mengekspor data.'); }
   }
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!confirm(`Import data dari "${file.name}"? Semua data handbook saat ini akan diganti.`)) {
+    if (!confirm(`Impor data dari "${file.name}"? Seluruh data buku pedoman saat ini akan diganti.`)) {
       e.target.value = '';
       return;
     }
@@ -174,12 +259,12 @@ export default function AdminDisciplineHandbookPage() {
       const data = JSON.parse(text);
       const res = await apiClient('/discipline-handbook/import', { method: 'POST', body: data });
       if (res.success) {
-        toast.success('Berhasil import');
+        toast.success('Data berhasil diimpor.');
         fetchAll();
       } else {
-        toast.error(res.error || 'Gagal import');
+        toast.error(res.error || 'Gagal mengimpor data.');
       }
-    } catch { toast.error('File tidak valid'); }
+    } catch { toast.error('Berkas tidak valid.'); }
     e.target.value = '';
   }
 
@@ -188,482 +273,670 @@ export default function AdminDisciplineHandbookPage() {
   const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   const toggleCat = (id: number) => setCatCollapsed(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
+  const totalGroups = tree.reduce((s, n) => s + n.groups.length, 0);
+  const totalBehaviors = tree.reduce((s, n) => s + n.groups.reduce((x, g) => x + g.behaviors.length, 0), 0);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Buku Pedoman Disiplin"
+          description="Kelola kategori, jenjang, SOP penanganan, sanksi, dan dokumen."
+        />
+        <div className="flex h-64 items-center justify-center">
+          <div className="size-9 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5 p-6">
+    <div className="space-y-6">
+      <PageHeader
+        title="Buku Pedoman Disiplin"
+        description="Kelola kategori, jenjang, SOP penanganan, sanksi, dan dokumen."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={fetchAll}>
+              <RefreshCw className="size-4" />
+              Muat Ulang
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="size-4" />
+              Ekspor
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="size-4" />
+              Impor
+            </Button>
+            <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+          </>
+        }
+      />
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BookOpen className="h-6 w-6 text-primary" />
-            Buku Pedoman Disiplin
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Kelola kategori, jenjang, SOP penanganan, sanksi, dan dokumen.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fetchAll}><RefreshCw className="h-3.5 w-3.5 mr-1.5" />Refresh</Button>
-          <Button variant="outline" size="sm" onClick={handleExport}><Download className="h-3.5 w-3.5 mr-1.5" />Export</Button>
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="h-3.5 w-3.5 mr-1.5" />Import</Button>
-          <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
-        </div>
+      {/* ── Ringkasan ── */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Kategori Pelanggaran"
+          value={categories.length}
+          hint="Empat tingkatan pelanggaran"
+          icon={<Scale className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Kelompok Perilaku"
+          value={totalGroups}
+          hint="Grup perilaku di seluruh kategori"
+          icon={<ListTree className="size-5" />}
+          iconTone="purple"
+        />
+        <StatCard
+          label="Butir Perilaku"
+          value={totalBehaviors}
+          hint="Detail perilaku yang tercatat"
+          icon={<FileText className="size-5" />}
+          iconTone="teal"
+        />
+        <StatCard
+          label="Jenjang Pendidikan"
+          value={levels.length}
+          hint={`${guidelines.length} SOP · ${consequences.length} sanksi · ${documents.length} dokumen`}
+          icon={<GraduationCap className="size-5" />}
+          iconTone="green"
+        />
       </div>
 
-      {/* ── Tab Navigation ── */}
-      <div className="rounded-lg border bg-card">
-        <TabsPrimitive.Root value={activeTab} onValueChange={setActiveTab}>
-          <TabsPrimitive.List className="flex w-full overflow-x-auto rounded-t-lg border-b bg-card/60 md:grid md:grid-cols-6">
-            {[
-              { value: "structure", icon: Layers, label: "Struktur" },
-              { value: "categories", icon: Scale, label: "Kategori" },
-              { value: "levels", icon: GraduationCap, label: "Jenjang" },
-              { value: "guidelines", icon: FileText, label: "SOP" },
-              { value: "consequences", icon: AlertTriangle, label: "Sanksi" },
-              { value: "documents", icon: FolderOpen, label: "Dokumen" },
-            ].map(({ value, icon: Icon, label }) => (
-              <TabsPrimitive.Tab
-                key={value}
-                value={value}
-                className="flex shrink-0 items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all outline-none cursor-pointer border-b-2 border-transparent data-selected:text-primary data-selected:border-primary data-selected:bg-primary/5 md:flex-1"
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{label}</span>
-              </TabsPrimitive.Tab>
-            ))}
-          </TabsPrimitive.List>
-
-          {/* ══════════════ STRUKTUR ══════════════ */}
-          <TabsPrimitive.Panel value="structure" className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Hierarki kategori → kelompok → butir perilaku</p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => openDlg("add-group")}><Plus className="h-3 w-3 mr-1" />Kelompok</Button>
-                <Button size="sm" variant="outline" onClick={() => openDlg("add-behavior")}><Plus className="h-3 w-3 mr-1" />Perilaku</Button>
-              </div>
+      {/* ── Tabs ── */}
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="blue">
+              <BookOpen />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Isi Buku Pedoman</CardTitle>
+              <CardDescription>
+                Pilih bagian yang ingin Anda kelola: struktur, kategori, jenjang, SOP, sanksi, atau dokumen.
+              </CardDescription>
             </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="structure">
+            <TabsList>
+              <TabsTrigger value="structure">
+                <Layers />
+                Struktur
+              </TabsTrigger>
+              <TabsTrigger value="categories">
+                <Scale />
+                Kategori
+              </TabsTrigger>
+              <TabsTrigger value="levels">
+                <GraduationCap />
+                Jenjang
+              </TabsTrigger>
+              <TabsTrigger value="guidelines">
+                <FileText />
+                SOP
+              </TabsTrigger>
+              <TabsTrigger value="consequences">
+                <AlertTriangle />
+                Sanksi
+              </TabsTrigger>
+              <TabsTrigger value="documents">
+                <FolderOpen />
+                Dokumen
+              </TabsTrigger>
+            </TabsList>
 
-            {tree.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground">
-                <Layers className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Belum ada struktur. Tambahkan kategori dan jenjang terlebih dahulu.</p>
-              </div>
-            )}
+            {/* ══════════════ STRUKTUR ══════════════ */}
+            <TabsContent value="structure" className="space-y-4">
+              <PanelHeader
+                hint="Hierarki kategori → kelompok → butir perilaku."
+                actionLabel="Tambah Kelompok"
+                onAction={() => openDlg("add-group")}
+              />
 
-            {tree.map(node => {
-              const colors = CAT_COLORS[node.category.id] ?? { border: "border-l-gray-400", bg: "bg-muted border border-border", text: "text-foreground", dot: "bg-gray-400", badge: "bg-muted text-muted-foreground", desc: "text-muted-foreground" };
-              const totalBehaviors = node.groups.reduce((s, g) => s + g.behaviors.length, 0);
-              return (
-                <div key={node.category.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg}`}>
-                  {/* Category header */}
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <button
-                      className="flex items-center gap-2.5 text-left flex-1"
-                      onClick={() => toggleCat(node.category.id)}
-                    >
-                      {catCollapsed.has(node.category.id)
-                        ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                      }
-                      <div>
-                        <span className={`font-semibold text-sm ${colors.text}`}>{node.category.name}</span>
-                        {node.category.general_description && (
-                          <p className={`text-xs mt-0.5 ${colors.desc}`}>{node.category.general_description}</p>
-                        )}
-                      </div>
-                    </button>
-                    <div className="flex items-center gap-3">
-                      <div className="flex gap-1.5 flex-wrap justify-end">
-                        <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>{node.groups.length} kelompok</Badge>
-                        <Badge variant="outline" className={`text-xs font-medium ${colors.badge}`}>{totalBehaviors} perilaku</Badge>
-                      </div>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-category", node.category)}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                    </div>
+              {tree.length === 0 ? (
+                <EmptyState
+                  icon={<Layers />}
+                  title="Belum ada struktur"
+                  description="Tambahkan kategori dan jenjang terlebih dahulu, lalu susun kelompok serta butir perilaku."
+                  action={
+                    <Button onClick={() => openDlg("add-category")}>
+                      <Plus className="size-4" />
+                      Tambah Kategori
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openDlg("add-behavior")}>
+                      <Plus className="size-4" />
+                      Tambah Perilaku
+                    </Button>
                   </div>
-
-                  {/* Groups — collapsible per category */}
-                  {!catCollapsed.has(node.category.id) && (
-                    <div className="border-t px-4 py-3 space-y-2">
-                      <div className="flex justify-end">
-                        {(() => {
-                          const grpKeys = node.groups.map(g => `${node.category.id}-grp-${g.group.id}`);
-                          const allOpen = grpKeys.every(k => expanded.has(k));
-                          return (
-                            <button
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                              onClick={() => setExpanded(prev => {
-                                const n = new Set(prev);
-                                if (allOpen) grpKeys.forEach(k => n.delete(k));
-                                else grpKeys.forEach(k => n.add(k));
-                                return n;
-                              })}
-                            >
-                              {allOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                              {allOpen ? "Hide All" : "Show All"}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                      {node.groups.map(grp => {
-                        const grpKey = `${node.category.id}-grp-${grp.group.id}`;
-                        return (
-                          <div key={grpKey} className="rounded-lg border overflow-hidden">
-                            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/50 hover:bg-muted/80 transition-colors">
-                              <button
-                                className="flex items-center gap-2.5 text-left flex-1"
-                                onClick={() => toggle(grpKey)}
-                              >
-                                {expanded.has(grpKey)
-                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                                  : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                                }
-                                <span className="text-sm font-medium">{grp.group.group_name}</span>
-                                <Badge variant="outline" className="text-xs font-medium">{grp.behaviors.length} butir</Badge>
-                              </button>
-                              <Button size="icon" variant="ghost" className="h-5 w-5 text-red-500 hover:text-red-600 shrink-0" onClick={() => {
-                                const msg = grp.behaviors.length > 0
-                                  ? `Hapus kelompok "${grp.group.group_name}" beserta ${grp.behaviors.length} perilaku di dalamnya?`
-                                  : `Hapus kelompok "${grp.group.group_name}"?`;
-                                if (confirm(msg)) doDelete("/discipline-handbook/groups", grp.group.id, grp.group.group_name);
-                              }}>
-                                <Trash2 className="h-2.5 w-2.5" />
-                              </Button>
-                            </div>
-
-                            {expanded.has(grpKey) && (
-                              <div className="border-t">
-                                {grp.behaviors.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground italic px-4 py-3">Belum ada butir perilaku — klik edit untuk menambahkan.</p>
-                                ) : grp.behaviors.map(b => (
-                                  <div key={b.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-0">
-                                    <span className="flex-1 leading-relaxed">{b.behavior_text}</span>
-                                    <LevelBadge levels={b.levels} />
-                                    <div className="flex gap-0.5 shrink-0">
-                                      <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => openDlg("edit-behavior", { ...b, group_name: grp.group.group_name })}>
-                                        <Pencil className="h-2.5 w-2.5" />
-                                      </Button>
-                                      <Button size="icon" variant="ghost" className="h-5 w-5 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/behaviors", b.id, b.behavior_text.slice(0, 30))}>
-                                        <Trash2 className="h-2.5 w-2.5" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                  {tree.map((node) => {
+                    const style = categoryStyle(node.category.id);
+                    const totalBehaviorsInCat = node.groups.reduce((s, g) => s + g.behaviors.length, 0);
+                    return (
+                      <div key={node.category.id} className={`overflow-hidden rounded-xl border ${style.surface}`}>
+                        <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            onClick={() => toggleCat(node.category.id)}
+                          >
+                            {catCollapsed.has(node.category.id) ? (
+                              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
                             )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {node.groups.length === 0 && (
-                    <div className="border-t px-4 py-2">
-                      <p className="text-xs text-muted-foreground italic">Belum ada kelompok perilaku</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </TabsPrimitive.Panel>
-
-          {/* ══════════════ KATEGORI ══════════════ */}
-          <TabsPrimitive.Panel value="categories" className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">4 tingkatan pelanggaran: Ringan, Sedang, Berat, Sangat Berat</p>
-              <Button size="sm" onClick={() => openDlg("add-category")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
-            </div>
-
-            {categories.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Scale className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Belum ada kategori.</p>
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {categories.map(c => {
-                  const colors = CAT_COLORS[c.id] ?? { border: "border-l-gray-400", bg: "bg-muted border border-border", text: "text-foreground", dot: "bg-gray-400", badge: "bg-muted text-muted-foreground", desc: "text-muted-foreground" };
-                  const node = tree.find(n => n.category.id === c.id);
-                  const groupCount = node?.groups.length ?? 0;
-                  const behaviorCount = node?.groups.reduce((s, g) => s + g.behaviors.length, 0) ?? 0;
-                  return (
-                    <div key={c.id} className={`rounded-lg border border-l-4 ${colors.border} ${colors.bg} p-4`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                            <span className={`font-semibold text-sm ${colors.text}`}>{c.name}</span>
-                            <Badge variant="outline" className="text-[10px] font-mono">#{c.id}</Badge>
-                          </div>
-                          {c.general_description && <p className={`text-xs mb-1 ${colors.desc}`}>{c.general_description}</p>}
-                          {c.characteristics && <p className={`text-[10px] mb-2 italic ${colors.desc}`}>📋 {c.characteristics}</p>}
-                          <div className="flex gap-2 flex-wrap">
-                            <Badge className={`text-xs font-medium ${colors.badge}`}>{groupCount} kelompok</Badge>
-                            <Badge className={`text-xs font-medium ${colors.badge}`}>{behaviorCount} perilaku</Badge>
+                            <span className={`size-2.5 shrink-0 rounded-full ${style.accent}`} />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-heading">
+                                {node.category.name}
+                              </span>
+                              {node.category.general_description ? (
+                                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+                                  {node.category.general_description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                            <StatusBadge tone={style.badge} dot={false} label={`${node.groups.length} kelompok`} />
+                            <StatusBadge tone="neutral" dot={false} label={`${totalBehaviorsInCat} perilaku`} />
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Ubah kategori ${node.category.name}`}
+                              onClick={() => openDlg("edit-category", node.category)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex gap-1 shrink-0">
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-category", c)}>
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => {
-                            const msg = groupCount > 0
-                              ? `Hapus "${c.name}" beserta ${groupCount} kelompok dan semua data terkait?`
-                              : `Hapus "${c.name}"?`;
-                            if (confirm(msg)) doDelete("/discipline-handbook/categories", c.id, c.name);
-                          }}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+
+                        {!catCollapsed.has(node.category.id) ? (
+                          <div className="space-y-2 border-t border-border/60 px-4 py-3">
+                            {node.groups.map((grp) => {
+                              const grpKey = `${node.category.id}-grp-${grp.group.id}`;
+                              return (
+                                <div key={grpKey} className="overflow-hidden rounded-xl border border-border bg-card">
+                                  <div className="flex items-center justify-between gap-3 bg-muted/60 px-4 py-2.5">
+                                    <button
+                                      type="button"
+                                      className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                                      onClick={() => toggle(grpKey)}
+                                    >
+                                      {expanded.has(grpKey) ? (
+                                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                                      ) : (
+                                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                                      )}
+                                      <span className="truncate text-sm font-medium text-heading">
+                                        {grp.group.group_name}
+                                      </span>
+                                      <StatusBadge
+                                        tone="neutral"
+                                        dot={false}
+                                        label={`${grp.behaviors.length} butir`}
+                                      />
+                                    </button>
+                                    <RowActions
+                                      deleteLabel={`Hapus kelompok ${grp.group.group_name}`}
+                                      onDelete={() => {
+                                        const msg = grp.behaviors.length > 0
+                                          ? `Hapus kelompok "${grp.group.group_name}" beserta ${grp.behaviors.length} perilaku di dalamnya?`
+                                          : `Hapus kelompok "${grp.group.group_name}"?`;
+                                        if (confirm(msg)) doDelete("/discipline-handbook/groups", grp.group.id, grp.group.group_name);
+                                      }}
+                                    />
+                                  </div>
+
+                                  {expanded.has(grpKey) ? (
+                                    <div className="border-t border-border">
+                                      {grp.behaviors.length === 0 ? (
+                                        <p className="px-4 py-3 text-sm text-muted-foreground">
+                                          Belum ada butir perilaku pada kelompok ini.
+                                        </p>
+                                      ) : (
+                                        grp.behaviors.map((b) => (
+                                          <div
+                                            key={b.id}
+                                            className="flex flex-col gap-3 border-b border-border px-4 py-3 text-sm last:border-0 lg:flex-row lg:items-start"
+                                          >
+                                            <p className="flex-1 leading-relaxed text-secondary-text">
+                                              {b.behavior_text}
+                                            </p>
+                                            <div className="shrink-0">
+                                              <LevelBadge levels={b.levels} />
+                                            </div>
+                                            <RowActions
+                                              editLabel={`Ubah perilaku ${b.behavior_text.slice(0, 40)}`}
+                                              onEdit={() =>
+                                                openDlg("edit-behavior", { ...b, group_name: grp.group.group_name })
+                                              }
+                                              deleteLabel={`Hapus perilaku ${b.behavior_text.slice(0, 40)}`}
+                                              onDelete={() =>
+                                                doDelete("/discipline-handbook/behaviors", b.id, b.behavior_text.slice(0, 30))
+                                              }
+                                            />
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                            {node.groups.length === 0 ? (
+                              <p className="py-2 text-xs text-muted-foreground">
+                                Belum ada kelompok perilaku pada kategori ini.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
-                      {/* Impact summary */}
-                      {(c.impact_victim || c.impact_perpetrator || c.impact_school) && (
-                        <div className={`mt-3 pt-2 border-t space-y-1 ${colors.desc}`}>
-                          {c.impact_victim && <p className="text-[10px]">👤 {c.impact_victim}</p>}
-                          {c.impact_perpetrator && <p className="text-[10px]">⚠️ {c.impact_perpetrator}</p>}
-                          {c.impact_school && <p className="text-[10px]">🏫 {c.impact_school}</p>}
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ══════════════ KATEGORI ══════════════ */}
+            <TabsContent value="categories" className="space-y-4">
+              <PanelHeader
+                hint="Empat tingkatan pelanggaran: ringan, sedang, berat, dan sangat berat."
+                actionLabel="Tambah Kategori"
+                onAction={() => openDlg("add-category")}
+              />
+
+              {categories.length === 0 ? (
+                <EmptyState
+                  icon={<Scale />}
+                  title="Belum ada kategori"
+                  description="Buat kategori pelanggaran terlebih dahulu agar SOP dan sanksi dapat ditautkan."
+                  action={
+                    <Button onClick={() => openDlg("add-category")}>
+                      <Plus className="size-4" />
+                      Tambah Kategori
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {categories.map((c) => {
+                    const style = categoryStyle(c.id);
+                    const node = tree.find(n => n.category.id === c.id);
+                    const groupCount = node?.groups.length ?? 0;
+                    const behaviorCount = node?.groups.reduce((s, g) => s + g.behaviors.length, 0) ?? 0;
+                    return (
+                      <div key={c.id} className={`flex flex-col rounded-xl border p-4 ${style.surface}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`size-2.5 shrink-0 rounded-full ${style.accent}`} />
+                              <span className="text-sm font-semibold text-heading">{c.name}</span>
+                              <StatusBadge tone="neutral" dot={false} label={`#${c.id}`} />
+                            </div>
+                            {c.general_description ? (
+                              <p className="text-xs leading-relaxed text-secondary-text">
+                                {c.general_description}
+                              </p>
+                            ) : null}
+                            <div className="flex flex-wrap gap-2">
+                              <StatusBadge tone={style.badge} dot={false} label={`${groupCount} kelompok`} />
+                              <StatusBadge tone="neutral" dot={false} label={`${behaviorCount} perilaku`} />
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Ubah kategori ${c.name}`}
+                              onClick={() => openDlg("edit-category", c)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-danger hover:bg-danger-soft hover:text-danger"
+                              aria-label={`Hapus kategori ${c.name}`}
+                              onClick={() => {
+                                const msg = groupCount > 0
+                                  ? `Hapus "${c.name}" beserta ${groupCount} kelompok dan semua data terkait?`
+                                  : `Hapus "${c.name}"?`;
+                                if (confirm(msg)) doDelete("/discipline-handbook/categories", c.id, c.name);
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
                         </div>
-                      )}
+
+                        {(c.characteristics || c.impact_victim || c.impact_perpetrator || c.impact_school) ? (
+                          <div className="mt-3 space-y-1.5 border-t border-border/60 pt-3">
+                            {c.characteristics ? (
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-semibold text-secondary-text">Ciri-ciri: </span>
+                                {c.characteristics}
+                              </p>
+                            ) : null}
+                            {c.impact_victim ? (
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-semibold text-secondary-text">Dampak bagi korban: </span>
+                                {c.impact_victim}
+                              </p>
+                            ) : null}
+                            {c.impact_perpetrator ? (
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-semibold text-secondary-text">Dampak bagi pelaku: </span>
+                                {c.impact_perpetrator}
+                              </p>
+                            ) : null}
+                            {c.impact_school ? (
+                              <p className="text-xs leading-relaxed text-muted-foreground">
+                                <span className="font-semibold text-secondary-text">Dampak bagi sekolah: </span>
+                                {c.impact_school}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ══════════════ JENJANG ══════════════ */}
+            <TabsContent value="levels" className="space-y-4">
+              <PanelHeader
+                hint="Jenjang pendidikan yang berlaku untuk SOP dan sanksi."
+                actionLabel="Tambah Jenjang"
+                onAction={() => openDlg("add-level")}
+              />
+
+              {levels.length === 0 ? (
+                <EmptyState
+                  icon={<GraduationCap />}
+                  title="Belum ada jenjang"
+                  description="Tambahkan jenjang pendidikan seperti TK, SD, SMP, atau SMA agar SOP dapat diterapkan per jenjang."
+                  action={
+                    <Button onClick={() => openDlg("add-level")}>
+                      <Plus className="size-4" />
+                      Tambah Jenjang
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {[...levels].sort((a, b) => a.sort_order - b.sort_order).map((l) => (
+                    <div
+                      key={l.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/30"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-heading text-2xl font-bold text-primary">{l.code}</span>
+                        <p className="mt-0.5 text-sm text-heading">{l.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Urutan tampil: {l.sort_order}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Ubah jenjang ${l.name}`}
+                          onClick={() => openDlg("edit-level", l)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-danger hover:bg-danger-soft hover:text-danger"
+                          aria-label={`Hapus jenjang ${l.name}`}
+                          onClick={() => {
+                            const gCount = guidelines.filter(g => g.level_id === l.id).length;
+                            const cCount = consequences.filter(c => c.level_id === l.id).length;
+                            const dCount = documents.filter(d => d.level_id === l.id).length;
+                            const total = gCount + cCount + dCount;
+                            const msg = total > 0
+                              ? `Hapus "${l.name}"? Jenjang ini dipakai pada ${total} data (SOP: ${gCount}, Sanksi: ${cCount}, Dokumen: ${dCount}).`
+                              : `Hapus "${l.name}"?`;
+                            if (confirm(msg)) doDelete("/discipline-handbook/levels", l.id, l.name);
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </TabsPrimitive.Panel>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
 
-          {/* ══════════════ JENJANG ══════════════ */}
-          <TabsPrimitive.Panel value="levels" className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Jenjang pendidikan yang berlaku untuk SOP dan sanksi</p>
-              <Button size="sm" onClick={() => openDlg("add-level")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
-            </div>
+            {/* ══════════════ SOP ══════════════ */}
+            <TabsContent value="guidelines" className="space-y-4">
+              <PanelHeader
+                hint="Panduan penanganan per kategori, jenjang, dan tahap."
+                actionLabel="Tambah SOP"
+                onAction={() => openDlg("add-guideline")}
+              />
 
-            {levels.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <GraduationCap className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Belum ada jenjang.</p>
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {levels.sort((a, b) => a.sort_order - b.sort_order).map(l => (
-                  <div key={l.id} className="rounded-lg border p-4 flex items-start justify-between gap-2 hover:border-primary/40 transition-colors">
-                    <div>
-                      <span className="text-2xl font-bold font-mono text-primary">{l.code}</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">{l.name}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Urutan: {l.sort_order}</p>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-level", l)}>
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => {
-                        const gCount = guidelines.filter(g => g.level_id === l.id).length;
-                        const cCount = consequences.filter(c => c.level_id === l.id).length;
-                        const dCount = documents.filter(d => d.level_id === l.id).length;
-                        const total = gCount + cCount + dCount;
-                        const msg = total > 0
-                          ? `Hapus "${l.name}"? Terpakai di ${total} data (SOP:${gCount} Sanksi:${cCount} Dokumen:${dCount})`
-                          : `Hapus "${l.name}"?`;
-                        if (confirm(msg)) doDelete("/discipline-handbook/levels", l.id, l.name);
-                      }}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsPrimitive.Panel>
-
-          {/* ══════════════ SOP ══════════════ */}
-          <TabsPrimitive.Panel value="guidelines" className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Panduan penanganan per kategori, jenjang, dan tahap</p>
-              <Button size="sm" onClick={() => openDlg("add-guideline")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
-            </div>
-
-            {guidelines.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <FileText className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Belum ada SOP.</p>
-              </div>
-            ) : (
-              <div className="rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/60 border-b">
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Tahap</th>
-                      <th className="text-center px-4 py-2.5 font-semibold text-muted-foreground w-14">Langkah</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Isi SOP</th>
-                      <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-14">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {guidelines.length === 0 ? (
+                <EmptyState
+                  icon={<FileText />}
+                  title="Belum ada SOP"
+                  description="Tambahkan langkah-langkah penanganan untuk setiap kategori dan jenjang."
+                  action={
+                    <Button onClick={() => openDlg("add-guideline")}>
+                      <Plus className="size-4" />
+                      Tambah SOP
+                    </Button>
+                  }
+                />
+              ) : (
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col" className="w-12">No</TableHeaderCell>
+                      <TableHeaderCell scope="col">Kategori</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenjang</TableHeaderCell>
+                      <TableHeaderCell scope="col">Tahap</TableHeaderCell>
+                      <TableHeaderCell scope="col" className="w-20 text-center">Langkah</TableHeaderCell>
+                      <TableHeaderCell scope="col">Isi SOP</TableHeaderCell>
+                      <TableHeaderCell scope="col" className="w-20 text-right">Aksi</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {guidelines.map((g, i) => (
-                      <tr key={g.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} hover:bg-primary/5 transition-colors`}>
-                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                        <td className="px-4 py-3 font-medium">{catName(g.category_id)}</td>
-                        <td className="px-4 py-3"><Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(g.level_id)}</Badge></td>
-                        <td className="px-4 py-3"><Badge variant="secondary" className="text-xs">{g.target_type}</Badge></td>
-                        <td className="px-4 py-3 text-center"><Badge className="text-xs bg-primary/15 text-primary border-0 font-bold">{g.step_number}</Badge></td>
-                        <td className="px-4 py-3 max-w-xs">
+                      <TableRow key={g.id} interactive>
+                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-heading">{catName(g.category_id)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone="neutral" dot={false} label={levelCode(g.level_id)} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge tone="info" label={g.target_type} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <StatusBadge tone="purple" dot={false} label={String(g.step_number)} />
+                        </TableCell>
+                        <TableCell className="max-w-xs">
                           <p className="line-clamp-2 leading-relaxed">{g.guideline_text}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-guideline", g)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/guidelines", g.id, `SOP #${g.id}`)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell>
+                          <RowActions
+                            editLabel={`Ubah SOP langkah ${g.step_number} kategori ${catName(g.category_id)}`}
+                            onEdit={() => openDlg("edit-guideline", g)}
+                            deleteLabel={`Hapus SOP langkah ${g.step_number} kategori ${catName(g.category_id)}`}
+                            onDelete={() => doDelete("/discipline-handbook/guidelines", g.id, `SOP #${g.id}`)}
+                          />
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsPrimitive.Panel>
+                  </TableBody>
+                </DataTable>
+              )}
+            </TabsContent>
 
-          {/* ══════════════ SANKSI ══════════════ */}
-          <TabsPrimitive.Panel value="consequences" className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Jenis sanksi dan detail konsekuensi per kategori dan jenjang</p>
-              <Button size="sm" onClick={() => openDlg("add-consequence")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
-            </div>
+            {/* ══════════════ SANKSI ══════════════ */}
+            <TabsContent value="consequences" className="space-y-4">
+              <PanelHeader
+                hint="Jenis sanksi dan detail konsekuensi per kategori dan jenjang."
+                actionLabel="Tambah Sanksi"
+                onAction={() => openDlg("add-consequence")}
+              />
 
-            {consequences.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Belum ada sanksi.</p>
-              </div>
-            ) : (
-              <div className="rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/60 border-b">
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenis Sanksi</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Detail Sanksi</th>
-                      <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-14">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {consequences.length === 0 ? (
+                <EmptyState
+                  icon={<TriangleAlert />}
+                  title="Belum ada sanksi"
+                  description="Tambahkan jenis sanksi beserta detail konsekuensinya untuk setiap kategori dan jenjang."
+                  action={
+                    <Button onClick={() => openDlg("add-consequence")}>
+                      <Plus className="size-4" />
+                      Tambah Sanksi
+                    </Button>
+                  }
+                />
+              ) : (
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col" className="w-12">No</TableHeaderCell>
+                      <TableHeaderCell scope="col">Kategori</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenjang</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenis Sanksi</TableHeaderCell>
+                      <TableHeaderCell scope="col">Detail Sanksi</TableHeaderCell>
+                      <TableHeaderCell scope="col" className="w-20 text-right">Aksi</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {consequences.map((c, i) => (
-                      <tr key={c.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} hover:bg-primary/5 transition-colors`}>
-                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                        <td className="px-4 py-3 font-medium">{catName(c.category_id)}</td>
-                        <td className="px-4 py-3"><Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(c.level_id)}</Badge></td>
-                        <td className="px-4 py-3">
-                          <Badge className={`text-xs font-medium ${CONSEQUENCE_BADGE[c.consequence_type] ?? "bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}`}>
-                            {c.consequence_type}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 max-w-xs">
+                      <TableRow key={c.id} interactive>
+                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-heading">{catName(c.category_id)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone="neutral" dot={false} label={levelCode(c.level_id)} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            tone={CONSEQUENCE_TONE[c.consequence_type] ?? "neutral"}
+                            label={c.consequence_type}
+                          />
+                        </TableCell>
+                        <TableCell className="max-w-xs">
                           <p className="line-clamp-2 leading-relaxed">{c.consequence_text}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-consequence", c)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/consequences", c.id, `Sanksi #${c.id}`)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell>
+                          <RowActions
+                            editLabel={`Ubah sanksi ${c.consequence_type} kategori ${catName(c.category_id)}`}
+                            onEdit={() => openDlg("edit-consequence", c)}
+                            deleteLabel={`Hapus sanksi ${c.consequence_type} kategori ${catName(c.category_id)}`}
+                            onDelete={() => doDelete("/discipline-handbook/consequences", c.id, `Sanksi #${c.id}`)}
+                          />
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsPrimitive.Panel>
+                  </TableBody>
+                </DataTable>
+              )}
+            </TabsContent>
 
-          {/* ══════════════ DOKUMEN ══════════════ */}
-          <TabsPrimitive.Panel value="documents" className="p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">Dokumen administrasi yang diperlukan per kategori dan jenjang</p>
-              <Button size="sm" onClick={() => openDlg("add-document")}><Plus className="h-3 w-3 mr-1" />Tambah</Button>
-            </div>
+            {/* ══════════════ DOKUMEN ══════════════ */}
+            <TabsContent value="documents" className="space-y-4">
+              <PanelHeader
+                hint="Dokumen administrasi yang diperlukan per kategori dan jenjang."
+                actionLabel="Tambah Dokumen"
+                onAction={() => openDlg("add-document")}
+              />
 
-            {documents.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <FolderOpen className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Belum ada dokumen.</p>
-              </div>
-            ) : (
-              <div className="rounded-lg border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/60 border-b">
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground w-10">#</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Nama Dokumen</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Kategori</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Jenjang</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Template</th>
-                      <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Keterangan</th>
-                      <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-14">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {documents.length === 0 ? (
+                <EmptyState
+                  icon={<FolderOpen />}
+                  title="Belum ada dokumen"
+                  description="Tambahkan dokumen administrasi beserta tautan template yang dibutuhkan pada setiap kategori."
+                  action={
+                    <Button onClick={() => openDlg("add-document")}>
+                      <Plus className="size-4" />
+                      Tambah Dokumen
+                    </Button>
+                  }
+                />
+              ) : (
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col" className="w-12">No</TableHeaderCell>
+                      <TableHeaderCell scope="col">Nama Dokumen</TableHeaderCell>
+                      <TableHeaderCell scope="col">Kategori</TableHeaderCell>
+                      <TableHeaderCell scope="col">Jenjang</TableHeaderCell>
+                      <TableHeaderCell scope="col">Template</TableHeaderCell>
+                      <TableHeaderCell scope="col">Keterangan</TableHeaderCell>
+                      <TableHeaderCell scope="col" className="w-20 text-right">Aksi</TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {documents.map((d, i) => (
-                      <tr key={d.id} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} hover:bg-primary/5 transition-colors`}>
-                        <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
-                        <td className="px-4 py-3 font-medium">{d.document_name}</td>
-                        <td className="px-4 py-3">{catName(d.category_id)}</td>
-                        <td className="px-4 py-3"><Badge variant="outline" className="text-xs font-mono font-bold">{levelCode(d.level_id)}</Badge></td>
-                        <td className="px-4 py-3">
+                      <TableRow key={d.id} interactive>
+                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                        <TableCell className="font-medium text-heading">{d.document_name}</TableCell>
+                        <TableCell className="text-secondary-text">{catName(d.category_id)}</TableCell>
+                        <TableCell>
+                          <StatusBadge tone="neutral" dot={false} label={levelCode(d.level_id)} />
+                        </TableCell>
+                        <TableCell>
                           {d.template_url ? (
-                            <a href={d.template_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-blue-500 hover:underline">
-                              <ExternalLink className="h-3 w-3" />
-                              <span className="text-xs truncate max-w-[140px]">{d.template_url.split("/").pop()}</span>
+                            <a
+                              href={d.template_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="action-link max-w-[160px] truncate"
+                            >
+                              <ExternalLink className="size-3.5" />
+                              {d.template_url.split("/").pop()}
                             </a>
                           ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
-                        </td>
-                        <td className="px-4 py-3 max-w-xs">
-                          {d.description ? <p className="line-clamp-2 leading-relaxed">{d.description}</p> : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openDlg("edit-document", d)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => doDelete("/discipline-handbook/documents", d.id, d.document_name)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          {d.description ? (
+                            <p className="line-clamp-2 leading-relaxed">{d.description}</p>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <RowActions
+                            editLabel={`Ubah dokumen ${d.document_name}`}
+                            onEdit={() => openDlg("edit-document", d)}
+                            deleteLabel={`Hapus dokumen ${d.document_name}`}
+                            onDelete={() => doDelete("/discipline-handbook/documents", d.id, d.document_name)}
+                          />
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsPrimitive.Panel>
-        </TabsPrimitive.Root>
-      </div>
+                  </TableBody>
+                </DataTable>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* ── Dialogs ── */}
       <Dialog open={dlg.open === "add-category" || dlg.open === "edit-category"} onOpenChange={(o) => !o && closeDlg()}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{dlg.data?.id ? "Edit Kategori" : "Tambah Kategori"}</DialogTitle>
-            <DialogDescription>4 tingkatan: Ringan, Sedang, Berat, Sangat Berat</DialogDescription>
+            <DialogTitle>{dlg.data?.id ? "Ubah Kategori" : "Tambah Kategori"}</DialogTitle>
+            <DialogDescription>Empat tingkatan: ringan, sedang, berat, dan sangat berat.</DialogDescription>
           </DialogHeader>
           <FormCategory data={dlg.data} onSubmit={(body) => {
             if (dlg.data?.id) doPut(`/discipline-handbook/categories/${dlg.data.id}`, body);
@@ -674,7 +947,10 @@ export default function AdminDisciplineHandbookPage() {
 
       <Dialog open={dlg.open === "add-level" || dlg.open === "edit-level"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Jenjang" : "Tambah Jenjang"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{dlg.data?.id ? "Ubah Jenjang" : "Tambah Jenjang"}</DialogTitle>
+            <DialogDescription>Tentukan jenjang pendidikan beserta urutan tampilnya.</DialogDescription>
+          </DialogHeader>
           <FormLevel data={dlg.data} onSubmit={(body) => {
             if (dlg.data?.id) doPut(`/discipline-handbook/levels/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/levels", body);
@@ -684,16 +960,19 @@ export default function AdminDisciplineHandbookPage() {
 
       <Dialog open={dlg.open === "add-group"} onOpenChange={(o) => !o && closeDlg()}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Tambah Kelompok Perilaku</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Tambah Kelompok Perilaku</DialogTitle>
+            <DialogDescription>Kelompokkan butir perilaku di bawah satu kategori.</DialogDescription>
+          </DialogHeader>
           <FormGroup categories={categories} onSubmit={(body) => doPost("/discipline-handbook/groups", body)} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={dlg.open === "add-behavior" || dlg.open === "edit-behavior"} onOpenChange={(o) => !o && closeDlg()}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{dlg.data?.id ? `Edit Perilaku` : "Tambah Perilaku Spesifik"}</DialogTitle>
-            <DialogDescription>Pilih kelompok dan jenjang yang berlaku.</DialogDescription>
+            <DialogTitle>{dlg.data?.id ? "Ubah Perilaku" : "Tambah Perilaku Spesifik"}</DialogTitle>
+            <DialogDescription>Pilih kelompok perilaku dan jenjang yang berlaku.</DialogDescription>
           </DialogHeader>
           <FormBehavior data={dlg.data} categories={categories} groups={tree.flatMap(n => n.groups.map(g => g.group))} levels={levels} onSubmit={(body) => {
             if (dlg.data?.id) {
@@ -706,8 +985,11 @@ export default function AdminDisciplineHandbookPage() {
       </Dialog>
 
       <Dialog open={dlg.open === "add-guideline" || dlg.open === "edit-guideline"} onOpenChange={(o) => !o && closeDlg()}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit SOP" : "Tambah SOP"}</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{dlg.data?.id ? "Ubah SOP" : "Tambah SOP"}</DialogTitle>
+            <DialogDescription>Tuliskan langkah penanganan sesuai kategori, jenjang, dan tahap.</DialogDescription>
+          </DialogHeader>
           <FormGuideline data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
             if (dlg.data?.id) doPut(`/discipline-handbook/guidelines/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/guidelines", body);
@@ -716,8 +998,11 @@ export default function AdminDisciplineHandbookPage() {
       </Dialog>
 
       <Dialog open={dlg.open === "add-consequence" || dlg.open === "edit-consequence"} onOpenChange={(o) => !o && closeDlg()}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Sanksi" : "Tambah Sanksi"}</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{dlg.data?.id ? "Ubah Sanksi" : "Tambah Sanksi"}</DialogTitle>
+            <DialogDescription>Pilih jenis sanksi lalu jelaskan detail konsekuensinya.</DialogDescription>
+          </DialogHeader>
           <FormConsequence data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
             if (dlg.data?.id) doPut(`/discipline-handbook/consequences/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/consequences", body);
@@ -726,8 +1011,11 @@ export default function AdminDisciplineHandbookPage() {
       </Dialog>
 
       <Dialog open={dlg.open === "add-document" || dlg.open === "edit-document"} onOpenChange={(o) => !o && closeDlg()}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{dlg.data?.id ? "Edit Dokumen" : "Tambah Dokumen"}</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{dlg.data?.id ? "Ubah Dokumen" : "Tambah Dokumen"}</DialogTitle>
+            <DialogDescription>Tambahkan dokumen administrasi beserta tautan template bila tersedia.</DialogDescription>
+          </DialogHeader>
           <FormDocument data={dlg.data} categories={categories} levels={levels} onSubmit={(body) => {
             if (dlg.data?.id) doPut(`/discipline-handbook/documents/${dlg.data.id}`, body);
             else doPost("/discipline-handbook/documents", body);
@@ -742,18 +1030,47 @@ export default function AdminDisciplineHandbookPage() {
 // FORM SUB-COMPONENTS
 // ═══════════════════════════════════════════════════════════════════
 
+function FormFooter({ saving, label }: { saving: boolean; label?: string }) {
+  return (
+    <DialogFooter>
+      <Button type="submit" disabled={saving}>
+        {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+        {saving ? "Menyimpan…" : (label ?? "Simpan")}
+      </Button>
+    </DialogFooter>
+  );
+}
+
 function FormCategory({ data, onSubmit }: { data?: Category; onSubmit: (b: any) => void }) {
   const [f, setF] = useState({ name: data?.name ?? "", general_description: data?.general_description ?? "", characteristics: data?.characteristics ?? "", impact_victim: data?.impact_victim ?? "", impact_perpetrator: data?.impact_perpetrator ?? "", impact_school: data?.impact_school ?? "" });
   const [saving, setSaving] = useState(false);
   return (
-    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit(f); setSaving(false); }} className="space-y-3">
-      <div><Label> Nama Kategori *</Label><Input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required placeholder="contoh: Pelanggaran Ringan" /></div>
-      <div><Label>Deskripsi Umum</Label><Textarea rows={2} value={f.general_description} onChange={e => setF({ ...f, general_description: e.target.value })} placeholder="Ciri-ciri utama kategori" /></div>
-      <div><Label>Ciri-ciri</Label><Textarea rows={3} value={f.characteristics} onChange={e => setF({ ...f, characteristics: e.target.value })} placeholder="Sifat atau karakteristik perilaku yang termasuk dalam kategori ini" /></div>
-      <div><Label>Dampak bagi Korban</Label><Textarea rows={2} value={f.impact_victim} onChange={e => setF({ ...f, impact_victim: e.target.value })} /></div>
-      <div><Label>Dampak bagi Pelaku</Label><Textarea rows={2} value={f.impact_perpetrator} onChange={e => setF({ ...f, impact_perpetrator: e.target.value })} /></div>
-      <div><Label>Dampak bagi Sekolah</Label><Textarea rows={2} value={f.impact_school} onChange={e => setF({ ...f, impact_school: e.target.value })} /></div>
-      <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit(f); setSaving(false); }} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="cat-name">Nama Kategori</Label>
+        <Input id="cat-name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required placeholder="Contoh: Pelanggaran Ringan" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cat-desc">Deskripsi Umum</Label>
+        <Textarea id="cat-desc" rows={2} value={f.general_description} onChange={e => setF({ ...f, general_description: e.target.value })} placeholder="Ciri-ciri utama kategori" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cat-char">Ciri-ciri</Label>
+        <Textarea id="cat-char" rows={3} value={f.characteristics} onChange={e => setF({ ...f, characteristics: e.target.value })} placeholder="Sifat atau karakteristik perilaku yang termasuk dalam kategori ini" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cat-victim">Dampak bagi Korban</Label>
+        <Textarea id="cat-victim" rows={2} value={f.impact_victim} onChange={e => setF({ ...f, impact_victim: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cat-perp">Dampak bagi Pelaku</Label>
+        <Textarea id="cat-perp" rows={2} value={f.impact_perpetrator} onChange={e => setF({ ...f, impact_perpetrator: e.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="cat-school">Dampak bagi Sekolah</Label>
+        <Textarea id="cat-school" rows={2} value={f.impact_school} onChange={e => setF({ ...f, impact_school: e.target.value })} />
+      </div>
+      <FormFooter saving={saving} />
     </form>
   );
 }
@@ -762,11 +1079,20 @@ function FormLevel({ data, onSubmit }: { data?: EducationLevel; onSubmit: (b: an
   const [f, setF] = useState({ code: data?.code ?? "", name: data?.name ?? "", sort_order: data?.sort_order ?? 0 });
   const [saving, setSaving] = useState(false);
   return (
-    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit(f); setSaving(false); }} className="space-y-3">
-      <div><Label>Kode *</Label><Input value={f.code} onChange={e => setF({ ...f, code: e.target.value })} required placeholder="TK / SD / SMP / SMA" maxLength={10} /></div>
-      <div><Label>Nama Lengkap *</Label><Input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required placeholder="Taman Kanak-Kanak / Sekolah Dasar" /></div>
-      <div><Label>Urutan Tampilan</Label><Input type="number" value={f.sort_order} onChange={e => setF({ ...f, sort_order: Number(e.target.value) })} /></div>
-      <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit(f); setSaving(false); }} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="level-code">Kode</Label>
+        <Input id="level-code" value={f.code} onChange={e => setF({ ...f, code: e.target.value })} required placeholder="TK / SD / SMP / SMA" maxLength={10} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="level-name">Nama Lengkap</Label>
+        <Input id="level-name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required placeholder="Taman Kanak-Kanak / Sekolah Dasar" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="level-order">Urutan Tampilan</Label>
+        <Input id="level-order" type="number" value={f.sort_order} onChange={e => setF({ ...f, sort_order: Number(e.target.value) })} />
+      </div>
+      <FormFooter saving={saving} />
     </form>
   );
 }
@@ -775,16 +1101,25 @@ function FormGroup({ categories, onSubmit }: { categories: Category[]; onSubmit:
   const [f, setF] = useState({ category_id: "", group_name: "", description: "" });
   const [saving, setSaving] = useState(false);
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (!f.category_id) { toast.error("Pilih kategori"); return; } setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id) }); setSaving(false); }} className="space-y-3">
-      <div><Label>Kategori *</Label>
+    <form onSubmit={(e) => { e.preventDefault(); if (!f.category_id) { toast.error("Pilih kategori terlebih dahulu."); return; } setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id) }); setSaving(false); }} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="group-category">Kategori</Label>
         <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
-          <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
+          <SelectTrigger id="group-category" className="w-full">
+            <SelectValue placeholder="Pilih kategori" />
+          </SelectTrigger>
           <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <div><Label>Nama Kelompok *</Label><Input value={f.group_name} onChange={e => setF({ ...f, group_name: e.target.value })} required placeholder="contoh: Kekerasan Fisik Berbahaya" /></div>
-      <div><Label>Deskripsi</Label><Textarea rows={2} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></div>
-      <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+      <div className="space-y-2">
+        <Label htmlFor="group-name">Nama Kelompok</Label>
+        <Input id="group-name" value={f.group_name} onChange={e => setF({ ...f, group_name: e.target.value })} required placeholder="Contoh: Kekerasan Fisik Berbahaya" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="group-desc">Deskripsi</Label>
+        <Textarea id="group-desc" rows={2} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} />
+      </div>
+      <FormFooter saving={saving} />
     </form>
   );
 }
@@ -795,40 +1130,56 @@ function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: a
   const filteredGroups = f.category_id ? groups.filter(g => g.category_id === Number(f.category_id)) : groups;
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!f.group_id) { toast.error("Pilih kelompok perilaku"); return; }
+    if (!f.group_id) { toast.error("Pilih kelompok perilaku terlebih dahulu."); return; }
     setSaving(true);
     onSubmit({ group_id: Number(f.group_id), behavior_text: f.behavior_text, level_ids: f.level_ids });
     setSaving(false);
   };
   const toggleLevel = (id: number) => setF(prev => ({ ...prev, level_ids: prev.level_ids.includes(id) ? prev.level_ids.filter(l => l !== id) : [...prev.level_ids, id] }));
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div><Label>Kategori *</Label>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="behavior-category">Kategori</Label>
         <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "", group_id: "" })}>
-          <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
+          <SelectTrigger id="behavior-category" className="w-full">
+            <SelectValue placeholder="Pilih kategori" />
+          </SelectTrigger>
           <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <div><Label>Kelompok Perilaku *</Label>
+      <div className="space-y-2">
+        <Label htmlFor="behavior-group">Kelompok Perilaku</Label>
         <Select value={f.group_id} onValueChange={v => setF({ ...f, group_id: v ?? "" })}>
-          <SelectTrigger><SelectValue placeholder="Pilih kelompok" /></SelectTrigger>
+          <SelectTrigger id="behavior-group" className="w-full">
+            <SelectValue placeholder="Pilih kelompok" />
+          </SelectTrigger>
           <SelectContent>{filteredGroups.map(g => <SelectItem key={g.id} value={String(g.id)}>{g.group_name}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <div><Label>Butir Perilaku *</Label><Textarea rows={3} value={f.behavior_text} onChange={e => setF({ ...f, behavior_text: e.target.value })} required placeholder="contoh: Mencekik leher seseorang dengan sengaja." /></div>
-      <div>
-        <Label>Berlaku untuk Jenjang *</Label>
-        <div className="flex gap-2 mt-1 flex-wrap">
+      <div className="space-y-2">
+        <Label htmlFor="behavior-text">Butir Perilaku</Label>
+        <Textarea id="behavior-text" rows={3} value={f.behavior_text} onChange={e => setF({ ...f, behavior_text: e.target.value })} required placeholder="Contoh: Mencekik leher seseorang dengan sengaja." />
+      </div>
+      <div className="space-y-2">
+        <Label>Berlaku untuk Jenjang</Label>
+        <div className="mt-1 flex flex-wrap gap-2">
           {levels.map(l => (
             <button key={l.id} type="button" onClick={() => toggleLevel(l.id)}
-              className={`px-3 py-1 rounded-full border text-xs font-medium transition-colors ${f.level_ids.includes(l.id) ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}>
+              aria-pressed={f.level_ids.includes(l.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                f.level_ids.includes(l.id)
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-muted text-secondary-text hover:bg-accent"
+              }`}>
               {l.code}
             </button>
           ))}
         </div>
-        {f.level_ids.length === 0 && <p className="text-xs text-orange-500 mt-1">Pilih minimal 1 jenjang</p>}
+        {f.level_ids.length === 0 ? (
+          <p className="text-xs text-warning">Pilih minimal satu jenjang.</p>
+        ) : null}
       </div>
-      <DialogFooter><Button type="submit" disabled={saving || f.level_ids.length === 0}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+      <FormFooter saving={saving} />
     </form>
   );
 }
@@ -838,30 +1189,45 @@ function FormGuideline({ data, categories, levels, onSubmit }: { data?: Handling
   const [saving, setSaving] = useState(false);
   const TARGET_TYPES = ["A. Identifikasi dan Klasifikasi", "B. Penanganan Terlapor", "C. Penanganan Korban", "D. Penanganan Lingkungan", "E. Penyusunan Kesimpulan"];
   return (
-    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id), step_number: Number(f.step_number) }); setSaving(false); }} className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <div><Label>Kategori *</Label>
+    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id), step_number: Number(f.step_number) }); setSaving(false); }} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-2">
+          <Label htmlFor="sop-category">Kategori</Label>
           <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
-            <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
+            <SelectTrigger id="sop-category" className="w-full">
+              <SelectValue placeholder="Pilih" />
+            </SelectTrigger>
             <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div><Label>Jenjang *</Label>
+        <div className="space-y-2">
+          <Label htmlFor="sop-level">Jenjang</Label>
           <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v ?? "" })}>
-            <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
+            <SelectTrigger id="sop-level" className="w-full">
+              <SelectValue placeholder="Pilih" />
+            </SelectTrigger>
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div><Label>No. Langkah *</Label><Input type="number" min={1} value={f.step_number} onChange={e => setF({ ...f, step_number: Number(e.target.value) })} /></div>
+        <div className="space-y-2">
+          <Label htmlFor="sop-step">Nomor Langkah</Label>
+          <Input id="sop-step" type="number" min={1} value={f.step_number} onChange={e => setF({ ...f, step_number: Number(e.target.value) })} />
+        </div>
       </div>
-      <div><Label>Tahap *</Label>
+      <div className="space-y-2">
+        <Label htmlFor="sop-target">Tahap</Label>
         <Select value={f.target_type} onValueChange={v => setF({ ...f, target_type: v ?? "A. Identifikasi dan Klasifikasi" })}>
-          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="sop-target" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>{TARGET_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <div><Label>Isi Langkah *</Label><Textarea rows={4} value={f.guideline_text} onChange={e => setF({ ...f, guideline_text: e.target.value })} required placeholder="Detail langkah penanganan…" /></div>
-      <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+      <div className="space-y-2">
+        <Label htmlFor="sop-text">Isi Langkah</Label>
+        <Textarea id="sop-text" rows={4} value={f.guideline_text} onChange={e => setF({ ...f, guideline_text: e.target.value })} required placeholder="Detail langkah penanganan…" />
+      </div>
+      <FormFooter saving={saving} />
     </form>
   );
 }
@@ -871,29 +1237,41 @@ function FormConsequence({ data, categories, levels, onSubmit }: { data?: Conseq
   const [saving, setSaving] = useState(false);
   const CONSEQUENCE_TYPES = ["Tugas Reflektif", "Perbaikan Langsung", "Pembatasan Sementara", "Konferensi Keluarga", "Skorsing", "Skorsing Ringan", "Skorsing Berat", "Ganti Rugi", "Tugas Karakter", "Pelanggaran Surat Pernyataan", "Koordinasi Pihak Luar"];
   return (
-    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id) }); setSaving(false); }} className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Kategori *</Label>
+    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id) }); setSaving(false); }} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="sank-category">Kategori</Label>
           <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
-            <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
+            <SelectTrigger id="sank-category" className="w-full">
+              <SelectValue placeholder="Pilih" />
+            </SelectTrigger>
             <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div><Label>Jenjang *</Label>
+        <div className="space-y-2">
+          <Label htmlFor="sank-level">Jenjang</Label>
           <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v ?? "" })}>
-            <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
+            <SelectTrigger id="sank-level" className="w-full">
+              <SelectValue placeholder="Pilih" />
+            </SelectTrigger>
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
-      <div><Label>Jenis Sanksi *</Label>
+      <div className="space-y-2">
+        <Label htmlFor="sank-type">Jenis Sanksi</Label>
         <Select value={f.consequence_type} onValueChange={v => setF({ ...f, consequence_type: v ?? "" })}>
-          <SelectTrigger><SelectValue placeholder="Pilih jenis sanksi" /></SelectTrigger>
+          <SelectTrigger id="sank-type" className="w-full">
+            <SelectValue placeholder="Pilih jenis sanksi" />
+          </SelectTrigger>
           <SelectContent>{CONSEQUENCE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
         </Select>
       </div>
-      <div><Label>Detail Sanksi *</Label><Textarea rows={4} value={f.consequence_text} onChange={e => setF({ ...f, consequence_text: e.target.value })} required placeholder="Contoh: SD: Menulis surat permintaan maaf. SMA: Membuat esai refleksi 500 kata." /></div>
-      <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+      <div className="space-y-2">
+        <Label htmlFor="sank-text">Detail Sanksi</Label>
+        <Textarea id="sank-text" rows={4} value={f.consequence_text} onChange={e => setF({ ...f, consequence_text: e.target.value })} required placeholder="Contoh: SD: Menulis surat permintaan maaf. SMA: Membuat esai refleksi 500 kata." />
+      </div>
+      <FormFooter saving={saving} />
     </form>
   );
 }
@@ -902,25 +1280,40 @@ function FormDocument({ data, categories, levels, onSubmit }: { data?: RequiredD
   const [f, setF] = useState({ category_id: data ? String(data.category_id) : "", level_id: data ? String(data.level_id) : "", document_name: data?.document_name ?? "", template_url: data?.template_url ?? "", description: data?.description ?? "" });
   const [saving, setSaving] = useState(false);
   return (
-    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id) }); setSaving(false); }} className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div><Label>Kategori *</Label>
+    <form onSubmit={(e) => { e.preventDefault(); setSaving(true); onSubmit({ ...f, category_id: Number(f.category_id), level_id: Number(f.level_id) }); setSaving(false); }} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="doc-category">Kategori</Label>
           <Select value={f.category_id} onValueChange={v => setF({ ...f, category_id: v ?? "" })}>
-            <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
+            <SelectTrigger id="doc-category" className="w-full">
+              <SelectValue placeholder="Pilih" />
+            </SelectTrigger>
             <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div><Label>Jenjang *</Label>
+        <div className="space-y-2">
+          <Label htmlFor="doc-level">Jenjang</Label>
           <Select value={f.level_id} onValueChange={v => setF({ ...f, level_id: v ?? "" })}>
-            <SelectTrigger><SelectValue placeholder="Pilih" /></SelectTrigger>
+            <SelectTrigger id="doc-level" className="w-full">
+              <SelectValue placeholder="Pilih" />
+            </SelectTrigger>
             <SelectContent>{levels.map(l => <SelectItem key={l.id} value={String(l.id)}>{l.code} — {l.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
-      <div><Label>Nama Dokumen *</Label><Input value={f.document_name} onChange={e => setF({ ...f, document_name: e.target.value })} required placeholder="Surat Pernyataan Menerima Konsekuensi" /></div>
-      <div><Label>URL Template</Label><Input value={f.template_url} onChange={e => setF({ ...f, template_url: e.target.value })} placeholder="/templates/disiplin/surat-pernyataan.docx" /></div>
-      <div><Label>Deskripsi</Label><Textarea rows={2} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></div>
-      <DialogFooter><Button type="submit" disabled={saving}><Save className="h-4 w-4 mr-1" />Simpan</Button></DialogFooter>
+      <div className="space-y-2">
+        <Label htmlFor="doc-name">Nama Dokumen</Label>
+        <Input id="doc-name" value={f.document_name} onChange={e => setF({ ...f, document_name: e.target.value })} required placeholder="Surat Pernyataan Menerima Konsekuensi" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="doc-url">Tautan Template</Label>
+        <Input id="doc-url" value={f.template_url} onChange={e => setF({ ...f, template_url: e.target.value })} placeholder="/templates/disiplin/surat-pernyataan.docx" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="doc-desc">Deskripsi</Label>
+        <Textarea id="doc-desc" rows={2} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} />
+      </div>
+      <FormFooter saving={saving} />
     </form>
   );
 }

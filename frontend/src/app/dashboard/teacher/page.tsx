@@ -1,14 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { formatInTimeZone } from 'date-fns-tz';
+import { id as localeId } from 'date-fns/locale';
+import {
+  AlertTriangle,
+  CalendarDays,
+  FileText,
+  MapPin,
+  Plus,
+  Users,
+} from 'lucide-react';
+
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle, FileText, Users, Plus } from 'lucide-react';
 import { classificationLabel } from '@/lib/constants';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  DataTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui/data-table';
+import { EmptyState, PageHeader } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge, severityTone } from '@/components/ui/status-badge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,19 +68,28 @@ interface MyIncident {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const severityColors: Record<string, string> = {
-  LOW: 'bg-severity-low/15 text-severity-low border-severity-low/30',
-  MEDIUM: 'bg-severity-medium/15 text-severity-medium border-severity-medium/30',
-  HIGH: 'bg-severity-high/15 text-severity-high border-severity-high/30',
-  CRITICAL: 'bg-severity-critical/15 text-severity-critical border-severity-critical/30',
-};
+const TIMEZONE = 'Asia/Jakarta';
 
-const severityDot: Record<string, string> = {
-  LOW: 'bg-severity-low',
-  MEDIUM: 'bg-severity-medium',
-  HIGH: 'bg-severity-high',
-  CRITICAL: 'bg-severity-critical animate-pulse',
-};
+const formatDate = (value?: string | null) =>
+  value
+    ? formatInTimeZone(new Date(value), TIMEZONE, 'dd MMM yyyy', { locale: localeId })
+    : 'Belum ada';
+
+const formatDateTime = (value?: string | null) =>
+  value
+    ? formatInTimeZone(new Date(value), TIMEZONE, 'dd MMM yyyy · HH:mm', { locale: localeId })
+    : 'Belum ada';
+
+const initialOf = (name: string) => name.trim().charAt(0).toUpperCase() || '?';
+
+function PageLoader() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-20">
+      <div className="size-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+      <p className="text-sm text-muted-foreground">Memuat data Anda…</p>
+    </div>
+  );
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -61,6 +98,8 @@ export default function TeacherDashboardPage() {
   const [myStudents, setMyStudents] = useState<MyStudent[]>([]);
   const [myIncidents, setMyIncidents] = useState<MyIncident[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  /** Waktu pemuatan terakhir — dipakai sebagai acuan "30 hari terakhir". */
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -75,206 +114,265 @@ export default function TeacherDashboardPage() {
           setMyStudents(Array.isArray(studentsRes.data) ? studentsRes.data : []);
         }
         if (incidentsRes.success && incidentsRes.data) {
-          const raw = incidentsRes.data as any;
+          const raw = incidentsRes.data as unknown as { data?: MyIncident[] };
           setMyIncidents(Array.isArray(raw) ? raw : (raw?.data ?? []));
         }
       } catch (err) {
-        console.error('Failed to load teacher data:', err);
+        console.error('Gagal memuat data guru:', err);
       } finally {
+        setLoadedAt(Date.now());
         setIsLoading(false);
       }
     };
     load();
   }, []);
 
-  const totalIncidents = myIncidents.length;
-  const criticalCount = myIncidents.filter((i) => i.severity === 'CRITICAL').length;
-  const highCount = myIncidents.filter((i) => i.severity === 'HIGH').length;
-  const recentIncidents = [...myIncidents].slice(0, 5);
+  const firstName = user?.full_name?.split(' ')[0] ?? '';
+
+  const stats = useMemo(() => {
+    const criticalCount = myIncidents.filter((i) => i.severity === 'CRITICAL').length;
+    const highCount = myIncidents.filter((i) => i.severity === 'HIGH').length;
+    const cutoff = (loadedAt ?? 0) - 30 * 24 * 60 * 60 * 1000;
+    const last30 = myIncidents.filter(
+      (i) => new Date(i.incident_at).getTime() >= cutoff,
+    ).length;
+    const total = myIncidents.length;
+    return {
+      total,
+      criticalCount,
+      highCount,
+      urgent: criticalCount + highCount,
+      last30,
+      last30Pct: total > 0 ? Math.round((last30 / total) * 100) : 0,
+    };
+  }, [myIncidents, loadedAt]);
+
+  const recentIncidents = useMemo(() => myIncidents.slice(0, 6), [myIncidents]);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            Welcome back, {user?.full_name?.split(' ')[0]}
-          </h2>
-          <p className="text-muted-foreground">
-            Your reported incidents and students at a glance.
-          </p>
-        </div>
-        <Link href="/dashboard/incidents/new">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Report Incident
+      <PageHeader
+        title={firstName ? `Selamat datang, ${firstName}` : 'Dashboard Guru'}
+        description="Pantau laporan insiden yang Anda buat dan siswa yang pernah Anda ampu."
+        actions={
+          <Button render={<Link href="/dashboard/incidents/new" />}>
+            <Plus className="size-4" />
+            Buat Laporan
           </Button>
-        </Link>
-      </div>
+        }
+      />
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Total Incidents */}
-        <Card className="glass border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              My Reported Incidents
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-              <FileText className="h-4 w-4 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              {isLoading ? <span className="animate-pulse text-muted-foreground">—</span> : totalIncidents}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">incidents you have filed</p>
-          </CardContent>
-        </Card>
-
-        {/* Critical + High */}
-        <Card className="glass border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              High / Critical
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-severity-critical/10">
-              <AlertTriangle className="h-4 w-4 text-severity-critical" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-severity-critical">
-              {isLoading ? <span className="animate-pulse text-muted-foreground">—</span> : criticalCount + highCount}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {criticalCount} critical · {highCount} high severity
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Students Reported */}
-        <Card className="glass border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Students Reported
-            </CardTitle>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-chart-2/10">
-              <Users className="h-4 w-4 text-chart-2" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              {isLoading ? <span className="animate-pulse text-muted-foreground">—</span> : myStudents.length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">distinct students in your reports</p>
-          </CardContent>
-        </Card>
+      {/* Baris kartu statistik */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Laporan dari Anda"
+          value={isLoading ? '—' : stats.total}
+          hint="Insiden yang pernah Anda laporkan."
+          icon={<FileText />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Perlu Perhatian"
+          value={isLoading ? '—' : stats.urgent}
+          hint={`${stats.criticalCount} klasifikasi kritis · ${stats.highCount} klasifikasi tinggi`}
+          icon={<AlertTriangle />}
+          iconTone="red"
+          trend={stats.urgent > 0 ? 'up' : 'down'}
+          trendLabel={stats.urgent > 0 ? 'perlu ditindaklanjuti' : 'aman'}
+        />
+        <StatCard
+          label="Siswa yang Dilaporkan"
+          value={isLoading ? '—' : myStudents.length}
+          hint="Siswa berbeda yang muncul di laporan Anda."
+          icon={<Users />}
+          iconTone="teal"
+        />
+        <StatCard
+          label="Laporan 30 Hari Terakhir"
+          value={isLoading ? '—' : stats.last30}
+          hint="Aktivitas laporan dalam sebulan terakhir."
+          icon={<CalendarDays />}
+          iconTone="purple"
+          progress={stats.last30Pct}
+          progressLabel="Porsi laporan 30 hari terakhir"
+        />
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
+        <PageLoader />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2">
-
-          {/* My Students */}
-          <Card className="glass border-border/50">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-primary" />
-                Students You Reported
-              </CardTitle>
+        <div className="grid gap-6 xl:grid-cols-5">
+          {/* Laporan Terbaru */}
+          <Card className="xl:col-span-3">
+            <CardHeader className="border-b">
+              <CardTitle>Laporan Terbaru</CardTitle>
+              <CardDescription>
+                Enam laporan terakhir yang Anda buatkan beserta kasusnya.
+              </CardDescription>
+              <CardAction>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/dashboard/incidents" />}
+                >
+                  Lihat semua
+                </Button>
+              </CardAction>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {myStudents.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">
-                  No students reported yet. Use &quot;Report Incident&quot; to get started.
-                </p>
+            <CardContent>
+              {recentIncidents.length === 0 ? (
+                <EmptyState
+                  icon={<FileText />}
+                  title="Belum ada laporan"
+                  description="Anda belum membuat laporan insiden. Mulai dengan menambahkan laporan insiden."
+                />
               ) : (
-                myStudents.map((s) => (
-                  <Link
-                    key={s.student_id}
-                    href={`/dashboard/cases?student_id=${s.student_id}`}
-                    className="flex items-center justify-between rounded-lg border border-border/50 bg-card/50 p-3 transition-colors hover:bg-accent"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className={`h-2 w-2 rounded-full shrink-0 ${severityDot[s.last_severity] ?? 'bg-muted'}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{s.full_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {s.incident_count} incident{s.incident_count !== 1 ? 's' : ''} · last{' '}
-                          {new Date(s.last_incident_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className={`text-[10px] shrink-0 ${severityColors[s.last_severity] ?? ''}`}>
-                      {s.last_severity}
-                    </Badge>
-                  </Link>
-                ))
+                <DataTable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeaderCell scope="col">Laporan</TableHeaderCell>
+                      <TableHeaderCell scope="col">Siswa</TableHeaderCell>
+                      <TableHeaderCell scope="col">Klasifikasi</TableHeaderCell>
+                      <TableHeaderCell scope="col">Waktu</TableHeaderCell>
+                      <TableHeaderCell scope="col">Lokasi</TableHeaderCell>
+                      <TableHeaderCell scope="col">
+                        <span className="sr-only">Tindakan</span>
+                      </TableHeaderCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {recentIncidents.map((incident) => {
+                      const student = myStudents.find(
+                        (s) => s.student_id === incident.student_id,
+                      );
+                      return (
+                        <TableRow key={incident.incident_id}>
+                          <TableCell>
+                            <p className="font-medium text-heading">
+                              {incident.category}
+                            </p>
+                            {incident.sub_category ? (
+                              <p className="text-xs text-muted-foreground">
+                                {incident.sub_category}
+                              </p>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="text-secondary-text">
+                            {student?.full_name ?? 'Siswa tidak ditemukan'}
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge
+                              tone={severityTone(incident.severity)}
+                              label={classificationLabel(incident.severity)}
+                            />
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-secondary-text">
+                            {formatDateTime(incident.incident_at)}
+                          </TableCell>
+                          <TableCell className="text-secondary-text">
+                            {incident.location ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              render={
+                                <Link href={`/dashboard/cases/${incident.case_id}`} />
+                              }
+                            >
+                              Detail
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </DataTable>
               )}
+              {myIncidents.length > recentIncidents.length ? (
+                <p className="pt-3 text-center text-xs text-muted-foreground">
+                  Menampilkan {recentIncidents.length} dari {myIncidents.length} laporan.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
-          {/* Recent Incidents */}
-          <Card className="glass border-border/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-primary" />
-                Recent Reports
-              </CardTitle>
-              <Link href="/dashboard/incidents/new">
-                <Button variant="outline" size="sm" className="h-7 gap-1 text-xs">
-                  <Plus className="h-3 w-3" /> New
-                </Button>
-              </Link>
+          {/* Siswa yang Dilaporkan */}
+          <Card className="xl:col-span-2">
+            <CardHeader className="border-b">
+              <CardTitle>Siswa yang Dilaporkan</CardTitle>
+              <CardDescription>
+                Klik nama siswa untuk melihat kasus terkait.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {recentIncidents.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">
-                  No incidents filed yet.
-                </p>
+            <CardContent>
+              {myStudents.length === 0 ? (
+                <EmptyState
+                  icon={<Users />}
+                  title="Belum ada data"
+                  description="Siswa yang Anda laporkan akan tampil di sini setelah laporan pertama dibuat."
+                />
               ) : (
-                recentIncidents.map((inc) => {
-                  // find student name
-                  const student = myStudents.find((s) => s.student_id === inc.student_id);
-                  return (
-                    <Link
-                      key={inc.incident_id}
-                      href={`/dashboard/cases/${inc.case_id}`}
-                      className="block rounded-lg border border-border/50 bg-card/50 p-3 transition-colors hover:bg-accent"
-                    >
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className="text-sm font-medium">{inc.category}</p>
-                        {inc.sub_category && (
-                          <span className="text-xs text-muted-foreground">/ {inc.sub_category}</span>
-                        )}
-                        <Badge variant="outline" className={`text-[10px] ${severityColors[inc.severity] ?? ''}`}>
-                          {classificationLabel(inc.severity)}
+                <ul className="scroll-slim -mx-1 max-h-[28rem] space-y-2.5 overflow-y-auto px-1">
+                  {myStudents.map((student) => (
+                    <li key={student.student_id}>
+                      <Link
+                        href={`/dashboard/cases?student_id=${student.student_id}`}
+                        className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary-softer"
+                      >
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
+                          {initialOf(student.full_name)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-heading">
+                            {student.full_name}
+                          </span>
+                          <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                            <FileText className="size-3.5 shrink-0" />
+                            {student.incident_count} laporan · terakhir{' '}
+                            {formatDate(student.last_incident_at)}
+                          </span>
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 border-border text-muted-foreground"
+                        >
+                          {classificationLabel(student.last_severity)}
                         </Badge>
-                      </div>
-                      {student && (
-                        <p className="text-xs text-primary font-medium mb-0.5">👤 {student.full_name}</p>
-                      )}
-                      <p className="text-xs text-muted-foreground line-clamp-2">{inc.description}</p>
-                      <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground/70">
-                        <span>📅 {new Date(inc.incident_at).toLocaleString()}</span>
-                        {inc.location && <span>📍 {inc.location}</span>}
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-              {myIncidents.length > 5 && (
-                <p className="text-xs text-center text-muted-foreground pt-1">
-                  Showing 5 of {myIncidents.length} incidents
-                </p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
         </div>
       )}
+
+      {/* Panduan singkat */}
+      {!isLoading && myIncidents.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-primary-soft text-primary">
+                <MapPin className="size-5" />
+              </span>
+              <div className="space-y-0.5">
+                <p className="text-sm font-semibold text-heading">
+                  Buat laporan pertama Anda
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Catat insiden segera setelah kejadian agar penanganan bisa lebih cepat.
+                </p>
+              </div>
+            </div>
+            <Button render={<Link href="/dashboard/incidents/new" />}>
+              <Plus className="size-4" />
+              Buat Laporan
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -5,8 +5,13 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { PageHeader } from '@/components/ui/page-header';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ProgressPill } from '@/components/ui/stat-card';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatusBadge, severityTone } from '@/components/ui/status-badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,7 +23,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, UploadCloud, FileIcon, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  ClipboardList,
+  FileText,
+  Info,
+  ListChecks,
+  Loader2,
+  QrCode,
+  Search,
+  UploadCloud,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
 
@@ -63,6 +82,26 @@ interface HandbookGroup {
   category_name?: string | null;
 }
 
+/** Label tampilan untuk nilai enum dari backend. */
+const CASE_TYPE_LABEL: Record<string, string> = {
+  BEHAVIORAL: 'Perilaku',
+  EMOTIONAL: 'Emosional',
+  MEDICAL: 'Medis',
+  ACADEMIC: 'Akademik',
+  POSITIVE: 'Positif',
+};
+
+const CASE_STATUS_LABEL: Record<string, string> = {
+  OPEN: 'Terbuka',
+  MONITORING: 'Dipantau',
+  CLOSED: 'Ditutup',
+};
+
+function optionLabel(map: Record<string, string>, value: string | null | undefined): string {
+  if (!value) return '—';
+  return map[String(value).toUpperCase()] ?? value;
+}
+
 /** Maps the handbook classification to the incident Classification scale.
  *  Pelanggaran Ringan → Minor, Sedang → Moderate, Berat → Major,
  *  Sangat Berat → Severe. Unknown categories fall back to Moderate. */
@@ -96,11 +135,11 @@ const CLASSIFICATION_ITEMS = {
 /** Structured template mirroring the on-screen guide, so the placeholder shows
  *  reporters exactly which five parts a complete report contains. */
 const DESCRIPTION_PLACEHOLDER = [
-  'Activity at the Time of Incident: Playing basketball on the field.',
-  'Who involved: Andi (Class 8A) and Budi (Class 8B).',
-  'How it happens: Andi fell while trying to catch the ball and hit the floor.',
-  'When it happens: Sports period / 8 October 2026, 10:15 WITA.',
-  'Who saw it: Pak Hendra (Sports Teacher) and the Class 8A students.',
+  'Kegiatan saat insiden terjadi: sedang_memajada basket di lapangan.',
+  'Siapa yang terlibat: Andi (Kelas 8A) dan Budi (Kelas 8B).',
+  'Bagaimana kejadiannya: Andi jatuh saat mencoba menangkap bola lalu Regarding lantai.',
+  'Kapan terjadi: Jam olahraga / 8 Oktober 2026, 10.15 WITA.',
+  'Siapa yang promissory: Pak Hendra (Guru Olahraga) dan siswa Kelas 8A.',
 ].join('\n');
 
 export default function NewIncidentPage() {
@@ -155,7 +194,7 @@ export default function NewIncidentPage() {
       const newFiles = Array.from(e.target.files);
       const validFiles = newFiles.filter(file => {
         if (!file.type.startsWith('image/') && file.size > 50 * 1024 * 1024) {
-          toast.error(`File ${file.name} is too large. Max 50MB for non-images.`);
+          toast.error(`Berkas ${file.name} terlalu besar. Maksimal 50 MB untuk berkas non-gambar.`);
           return false;
         }
         return true;
@@ -228,9 +267,9 @@ export default function NewIncidentPage() {
   /** Label lookup for the Case Assignment select — Base UI renders the raw
    *  value (a UUID) in the trigger unless `items` supplies the wording. */
   const caseOptionItems = useMemo(() => {
-    const map: Record<string, string> = { NEW: '+ Create New Case (Auto-generated)' };
+    const map: Record<string, string> = { NEW: '+ Buat Kasus Baru (dibuat otomatis)' };
     for (const c of studentCases) {
-      map[c.case_id] = `Case ${c.student_name ? `${c.student_name} ` : ''}#${c.case_id.slice(0, 8)} - ${c.case_type} (${c.status})`;
+      map[c.case_id] = `Kasus ${c.student_name ? `${c.student_name} ` : ''}#${c.case_id.slice(0, 8)} · ${optionLabel(CASE_TYPE_LABEL, c.case_type)} · ${optionLabel(CASE_STATUS_LABEL, c.status)}`;
     }
     return map;
   }, [studentCases]);
@@ -288,7 +327,7 @@ export default function NewIncidentPage() {
       // 1. Verify student exists (resolves UUID or National ID)
       const studentRes = await apiClient<any>(`/students/${encodeURIComponent(idOrUuid)}`);
       if (!studentRes.success || !studentRes.data) {
-        toast.error('Student ID not found. Please check and try again.');
+        toast.error('ID siswa tidak ditemukan. Periksa kembali dan coba lagi.');
         setIsValidating(false);
         return;
       }
@@ -297,7 +336,7 @@ export default function NewIncidentPage() {
       updateField('student_id', student.student_id);
       updateField('student_name', student.full_name || student.display_id || student.student_id);
       setStep('details');
-      
+
       // 2. Fetch existing cases for this student
       const res = await apiClient<{ data: any[] }>(`/cases?student_id=${student.student_id}&status=OPEN`);
       if (res.success && res.data) {
@@ -305,15 +344,15 @@ export default function NewIncidentPage() {
       }
     } catch (err) {
       console.error('Failed to validate student or load cases:', err);
-      toast.error('Error validating student ID');
+      toast.error('Gagal memvalidasi ID siswa');
     } finally {
       setIsValidating(false);
     }
   };
 
   /** Auto-generated cases come from discipline-handbook groups, whose category is
- *  now "Pelanggaran Ringan/Sedang/Berat/Sangat Berat" → all behavioural.
- *  Kept the legacy English names so older records still map correctly. */
+   *  now "Pelanggaran Ringan/Sedang/Berat/Sangat Berat" → all behavioural.
+   *  Kept the legacy English names so older records still map correctly. */
   const mapCategoryToCaseType = (category: string) => {
     switch (category) {
       case 'Medical': return 'MEDICAL';
@@ -332,7 +371,7 @@ export default function NewIncidentPage() {
     setIsSubmitting(true);
 
     if (!formData.case_id) {
-      setError('Please select an existing case or choose to create a new one');
+      setError('Pilih kasus yang sudah ada atau buat kasus baru terlebih dahulu.');
       setIsSubmitting(false);
       return;
     }
@@ -351,7 +390,7 @@ export default function NewIncidentPage() {
       });
 
       if (!caseRes.success || !caseRes.data?.case_id) {
-        setError(caseRes.error ?? 'Failed to auto-create case');
+        setError(caseRes.error ?? 'Gagal membuat kasus baru secara otomatis');
         setIsSubmitting(false);
         return;
       }
@@ -397,7 +436,7 @@ export default function NewIncidentPage() {
       const incidentId = incidentData.incident_id || incidentData.id || incidentData.data?.incident_id;
 
       if (selectedFiles.length > 0 && incidentId) {
-        toast.info(`Uploading ${selectedFiles.length} files...`);
+        toast.info(`Mengunggah ${selectedFiles.length} berkas...`);
         for (const file of selectedFiles) {
           try {
             // 1. Compress if image
@@ -423,7 +462,7 @@ export default function NewIncidentPage() {
 
             if (uploadRes.success && uploadRes.data) {
               const { uploadUrl, asset } = uploadRes.data;
-              
+
               // 3. PUT file directly
               const putRes = await fetch(uploadUrl, {
                 method: 'PUT',
@@ -443,563 +482,704 @@ export default function NewIncidentPage() {
                   }
                 });
               } else {
-                toast.error(`Failed to upload ${file.name}`);
+                toast.error(`Gagal mengunggah ${file.name}`);
               }
             } else {
-              toast.error(`Failed to initialize upload for ${file.name}`);
+              toast.error(`Gagal menyiapkan unggahan untuk ${file.name}`);
             }
           } catch (err) {
             console.error('File upload error:', err);
-            toast.error(`Error processing ${file.name}`);
+            toast.error(`Gagal memproses ${file.name}`);
           }
         }
-        toast.success('Incident and media saved successfully!');
+        toast.success('Insiden dan media berhasil disimpan!');
       } else {
-        toast.success('Incident saved successfully!');
+        toast.success('Insiden berhasil disimpan!');
       }
-      
+
       router.push(`/dashboard/cases/${targetCaseId}`);
     } else {
-      setError(res.error ?? 'Failed to submit incident');
+      setError(res.error ?? 'Gagal mengirim laporan insiden');
     }
     setIsSubmitting(false);
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight">Report Incident</h2>
-          {user && (
-            <Badge variant="secondary" className="font-normal text-xs">
-              Reporter: {user.full_name}
+    <div className="space-y-6">
+      <PageHeader
+        title="Laporan Insiden"
+        description="Catat insiden siswa beserta detail, bukti, dan penilaian awal."
+        actions={
+          user ? (
+            <Badge variant="soft">
+              <UserRound className="size-3.5" />
+              Pelapor: {user.full_name}
             </Badge>
-          )}
-        </div>
-        <p className="text-muted-foreground">
-          Record a new student incident with details and context
-        </p>
-      </div>
+          ) : null
+        }
+      />
 
-      {/* Step 1: Student Identification */}
-      {step === 'identify' && (
-        <Card className="glass border-border/50">
-          <CardHeader>
-            <CardTitle>Step 1: Reported Student</CardTitle>
-            <CardDescription>
-              Scan a QR code or search manually
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Button
-                variant={!qrMode ? 'default' : 'outline'}
-                onClick={() => setQrMode(false)}
-                className="flex-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                Manual Search
-              </Button>
-              <Button
-                variant={qrMode ? 'default' : 'outline'}
-                onClick={() => setQrMode(true)}
-                className="flex-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                </svg>
-                QR Scanner
-              </Button>
+      <Tabs
+        value={step}
+        onValueChange={(v) => {
+          if (v === 'identify' || v === 'details') setStep(v);
+        }}
+        className="gap-6"
+      >
+        {/* Indikator langkah */}
+        <Card>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <IconBox tone={step === 'identify' ? 'blue' : 'green'} size="lg">
+                  {step === 'identify' ? <Search /> : <ClipboardList />}
+                </IconBox>
+                <div>
+                  <p className="text-sm font-semibold text-heading">
+                    {step === 'identify' ? 'Langkah 1 dari 2' : 'Langkah 2 dari 2'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {step === 'identify'
+                      ? 'Tentukan siswa yang dilaporkan sebelum mengisi detail insiden.'
+                      : 'Lengkapi kronologi, bukti, dan penilaian awal sebelum mengirim.'}
+                  </p>
+                </div>
+              </div>
+              <div className="w-full max-w-40">
+                <ProgressPill
+                  value={step === 'identify' ? 50 : 100}
+                  label="Kemajuan pengisian laporan"
+                />
+              </div>
             </div>
 
-            {qrMode ? (
-              <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border p-12">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground/30">
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                </svg>
-                <p className="text-sm text-muted-foreground">
-                  QR Scanner requires camera access (react-qr-reader).
-                </p>
-                <p className="text-xs text-muted-foreground/60">
-                  Full implementation in Phase 2. Use manual search for now.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4 relative">
-                <div className="relative" ref={searchWrapRef}>
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9 bg-background"
-                    placeholder="Search by student name or class..."
-                    value={studentSearch}
-                    onChange={(e) => setStudentSearch(e.target.value)}
-                  />
-                  {isSearching && (
-                    <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-
-                {/* Dropdown for search results — rendered via portal so the Card's
-                    overflow-hidden can't clip it. Positioned under the input. */}
-                {studentSearch.length >= 2 && ddPos && typeof document !== 'undefined' && createPortal(
-                  <div
-                    style={{ position: 'fixed', top: ddPos.top, left: ddPos.left, width: ddPos.width, zIndex: 50 }}
-                    className="bg-background border rounded-md shadow-lg max-h-60 overflow-auto"
-                  >
-                    {searchResults.length > 0 ? (
-                      <div className="p-2 space-y-1">
-                        {searchResults.map((student) => (
-                          <div
-                            key={student.student_id}
-                            className="p-3 hover:bg-muted/50 rounded-md cursor-pointer transition-colors flex flex-col"
-                            onClick={() => handleStudentSelect(student.student_id)}
-                          >
-                            <div className="flex justify-between items-start w-full">
-                              <span className="font-medium text-sm">{student.full_name}</span>
-                              {student.display_id && (
-                                <Badge variant="outline" className="text-[10px] py-0 px-1 font-mono bg-primary/5">
-                                  ID: {student.display_id}
-                                </Badge>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              UUID: {student.student_id.slice(0, 8)}...
-                              {student.metadata?.email && ` • ${student.metadata.email}`}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : !isSearching && (
-                      <div className="p-4 text-sm text-center text-muted-foreground">
-                        No students found matching "{studentSearch}"
-                      </div>
-                    )}
-                  </div>,
-                  document.body
-                )}
-
-                <p className="text-xs text-muted-foreground mt-4">
-                  Or enter a Student ID (e.g. 12345) manually:
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Student ID / UUID"
-                    value={formData.student_id}
-                    onChange={(e) => updateField('student_id', e.target.value)}
-                  />
-                  <Button
-                    onClick={() => handleStudentSelect(formData.student_id)}
-                    disabled={!formData.student_id || isValidating}
-                  >
-                    {isValidating ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Continue
-                  </Button>
-                </div>
-              </div>
-            )}
+            <TabsList className="w-full">
+              <TabsTrigger value="identify">
+                <Search className="size-4" />
+                Siswa yang Dilaporkan
+              </TabsTrigger>
+              <TabsTrigger value="details" disabled={!formData.student_id}>
+                <ClipboardList className="size-4" />
+                Detail Insiden
+              </TabsTrigger>
+            </TabsList>
           </CardContent>
         </Card>
-      )}
 
-      {/* Step 2: Incident Details */}
-      {step === 'details' && (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Card className="glass border-border/50">
+        {/* Langkah 1: Identifikasi siswa */}
+        <TabsContent value="identify">
+          <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Step 2: Incident Details</CardTitle>
-                  <CardDescription>
-                    Student: <span className="font-medium">{formData.student_name}</span>
-                  </CardDescription>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setStep('identify')}>
-                  Change Student
-                </Button>
-              </div>
+              <CardTitle className="flex items-center gap-2.5">
+                <IconBox tone="blue" size="sm">
+                  <UserRound />
+                </IconBox>
+                Siswa yang Dilaporkan
+              </CardTitle>
+              <CardDescription>
+                Pindai kartu QR siswa atau cari manual berdasarkan nama, kelas, maupun NIS.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Case Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="case-id">Case Assignment *</Label>
-                <Select
-                  value={formData.case_id}
-                  onValueChange={(v) => updateField('case_id', v ?? '')}
-                  items={caseOptionItems}
-                >
-                  <SelectTrigger id="case-id">
-                    <SelectValue placeholder="Select case assignment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEW" className="font-semibold text-primary">
-                      + Create New Case (Auto-generated)
-                    </SelectItem>
-                    {studentCases.map((c: any) => (
-                      <SelectItem key={c.case_id} value={c.case_id}>
-                        {`Case ${c.student_name ? `${c.student_name} ` : ''}#${c.case_id.slice(0, 8)} - ${c.case_type} (${c.status})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Link this incident to an existing case, or generate a new one.
-                </p>
-              </div>
+            <CardContent>
+              <Tabs
+                value={qrMode ? 'qr' : 'manual'}
+                onValueChange={(v) => setQrMode(v === 'qr')}
+                className="gap-5"
+              >
+                <TabsList variant="pill" className="w-full sm:w-auto">
+                  <TabsTrigger value="manual">
+                    <Search className="size-4" />
+                    Pencarian Manual
+                  </TabsTrigger>
+                  <TabsTrigger value="qr">
+                    <QrCode className="size-4" />
+                    Pindai QR
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* Vertical stack — Category (Kelompok) needs the full row width, its
-                  labels are long and were being clipped next to Classification. */}
-              <div className="space-y-4">
-                {/* Category — derived from the discipline handbook "Kelompok" */}
-                <div className="space-y-2">
-                  <Label htmlFor="category">Category (Kelompok) *</Label>
-                  <Select
-                    value={formData.sub_category}
-                    onValueChange={(v) => handleGroupChange(v ?? '')}
-                    disabled={isLoadingGroups}
-                  >
-                    <SelectTrigger id="category" className="h-auto w-full min-h-8 whitespace-normal py-2">
-                      <SelectValue
-                        placeholder={
-                          isLoadingGroups ? 'Loading handbook groups…' : 'Select a violation group'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent className="w-[var(--anchor-width)] max-w-[min(42rem,calc(100vw-2rem))]">
-                      {groupOptions.map((g) => (
-                        <SelectItem
-                          key={g.id}
-                          value={g.group_name}
-                          className="whitespace-normal py-1.5"
-                        >
-                          {g.group_name}
-                        </SelectItem>
-                      ))}
-                      {!isLoadingGroups && groupOptions.length === 0 && (
-                        <SelectItem value="__none" disabled>
-                          No handbook groups available
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    From the Discipline Handbook. The category is set automatically from the
-                    group&apos;s classification.
-                  </p>
-                  {/* Auto-derived, read-only */}
-                  <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
-                    <span className="text-xs text-muted-foreground">Classification</span>
-                    {derivedCategory ? (
-                      <span className="text-xs font-semibold text-primary">{derivedCategory}</span>
-                    ) : (
-                      <span className="text-xs italic text-muted-foreground">
-                        Select a group first
-                      </span>
-                    )}
+                <TabsContent value="qr">
+                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-muted/50 px-6 py-12 text-center">
+                    <IconBox tone="slate" size="lg">
+                      <QrCode />
+                    </IconBox>
+                    <p className="text-sm font-semibold text-heading">Pemindai QR siswa</p>
+                    <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+                      Pemindai QR membutuhkan izin akses kamera dan akan tersedia pada tahap
+                      berikutnya. Untuk saat ini, gunakan pencarian manual.
+                    </p>
                   </div>
-                </div>
+                </TabsContent>
 
-                {/* Classification (was Severity) */}
-                <div className="space-y-2">
-                  <Label htmlFor="severity">Classification *</Label>
-                  <Select
-                    value={formData.severity}
-                    onValueChange={(v) => updateField('severity', v ?? '')}
-                    items={CLASSIFICATION_ITEMS}
-                  >
-                    <SelectTrigger id="severity" className="w-full">
-                      <SelectValue placeholder="Select classification" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="LOW">
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-low" /> Minor
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="MEDIUM">
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-medium" /> Moderate
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="HIGH">
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-high" /> Major
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="CRITICAL">
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-severity-critical" /> Severe
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Involved Students */}
-              <div className="space-y-2">
-                <Label htmlFor="involved">Involved Students / Victim(s)</Label>
-                <Input
-                  id="involved"
-                  placeholder="Names of other students involved, separated by commas"
-                  value={formData.involved_students_raw}
-                  onChange={(e) => updateField('involved_students_raw', e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="involved-teacher">Involved teacher (manual)</Label>
-                <Input
-                  id="involved-teacher"
-                  placeholder="Name of involved teacher (manual entry)"
-                  value={formData.involved_teacher}
-                  onChange={(e) => updateField('involved_teacher', e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">This is a free-text field and is not linked to the user database.</p>
-              </div>
-
-              {/* Student Grade */}
-              <div className="space-y-2">
-                <Label htmlFor="student-grade">Student Grade</Label>
-                <Input
-                  id="student-grade"
-                  placeholder="e.g. KG-A, Grade 5, Grade 12"
-                  value={formData.student_grade}
-                  onChange={(e) => updateField('student_grade', e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Free-text field (kindergarten to senior grade). Fill manually.
-                </p>
-              </div>
-
-              {/* Location */}
-              <div className="space-y-2">
-                <Label htmlFor="location">Incident Location</Label>
-                <Input
-                  id="location"
-                  placeholder="e.g. Classroom 8A, Playground, Cafeteria"
-                  value={formData.location}
-                  onChange={(e) => updateField('location', e.target.value)}
-                />
-              </div>
-
-              {/* Date/Time */}
-              <div className="space-y-2">
-                <Label htmlFor="incident-at">Date and Time Incident *</Label>
-                <Input
-                  id="incident-at"
-                  type="datetime-local"
-                  value={formData.incident_at}
-                  onChange={(e) => updateField('incident_at', e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description">Description *</Label>
-                <Textarea
-                  id="description"
-                  placeholder={DESCRIPTION_PLACEHOLDER}
-                  value={formData.description}
-                  onChange={(e) => updateField('description', e.target.value)}
-                  rows={10}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  💡 Use objective, neutral language. Avoid stigmatizing terms.
-                </p>
-                {/* Structured guide so reports are complete and consistent */}
-                <div className="rounded-md border border-border/60 bg-muted/30 p-3">
-                  <p className="mb-2 text-xs font-semibold text-foreground">
-                    Panduan penulisan (isi berurutan):
-                  </p>
-                  <ul className="space-y-2 text-xs text-muted-foreground">
-                    <li>
-                      <span className="font-medium text-foreground">Activity at the Time of Incident:</span>{' '}
-                      Playing basketball on the field / Practicing in the chemistry lab.
-                    </li>
-                    <li>
-                      <span className="font-medium text-foreground">Who involved:</span> Andi (Class 8A) and
-                      Budi (Class 8B).
-                    </li>
-                    <li>
-                      <span className="font-medium text-foreground">How it happens:</span> Explain the
-                      chronology neutrally, based on facts. Example: Andi fell while trying to catch the ball
-                      and hit the floor.
-                    </li>
-                    <li>
-                      <span className="font-medium text-foreground">When it happens:</span> Sports period /
-                      8 October 2026, 10:15 WITA.
-                    </li>
-                    <li>
-                      <span className="font-medium text-foreground">Who saw it:</span> Pak Hendra (Sports
-                      Teacher) and the Class 8A students.
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Actions taken so far */}
-              <div className="space-y-2">
-                <Label htmlFor="immediate-actions">Actions Taken So Far</Label>
-                <Textarea
-                  id="immediate-actions"
-                  placeholder="Describe any actions taken immediately after the incident..."
-                  value={formData.immediate_actions}
-                  onChange={(e) => updateField('immediate_actions', e.target.value)}
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">Filled in sequential order.</p>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2 pt-4 border-t">
-                {/* Evidence Section */}
-                <div className="space-y-3">
-                  <Label>Evidence Available</Label>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'evidence_cctv', label: 'CCTV' },
-                      { key: 'evidence_photo', label: 'Foto' },
-                      { key: 'evidence_video', label: 'Video' },
-                      { key: 'evidence_screenshot', label: 'Screenshot' },
-                      { key: 'evidence_witness', label: 'Witness Statement' },
-                      { key: 'evidence_none', label: 'Tidak ada bukti' },
-                    ].map((item) => (
-                      <div key={item.key} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={item.key}
-                          className="h-4 w-4 rounded border-border"
-                          checked={formData[item.key as keyof FormData] as boolean}
-                          onChange={(e) => updateField(item.key as keyof FormData, e.target.checked as any)}
+                <TabsContent value="manual">
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <Label htmlFor="student-search">Cari Siswa</Label>
+                      <div className="relative" ref={searchWrapRef}>
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="student-search"
+                          className="pl-9 pr-9"
+                          placeholder="Ketik nama siswa atau kelas..."
+                          value={studentSearch}
+                          onChange={(e) => setStudentSearch(e.target.value)}
                         />
-                        <Label htmlFor={item.key} className="text-sm font-normal cursor-pointer">
-                          {item.label}
-                        </Label>
+                        {isSearching && (
+                          <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <p className="text-xs text-muted-foreground">
+                        Ketik minimal 2 karakter untuk melihat daftar siswa yang cocok.
+                      </p>
+                    </div>
 
-                {/* Initial Assessment Section */}
-                <div className="space-y-3">
-                  <Label>Initial Assessment</Label>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'assess_recurring', label: 'Apakah kejadian berulang?' },
-                      { key: 'assess_similar', label: 'Apakah siswa pernah punya kasus serupa?' },
-                      { key: 'assess_escalation', label: 'Apakah perlu eskalasi?' },
-                      { key: 'assess_parent_comm', label: 'Apakah perlu parent communication?' },
-                    ].map((item) => (
-                      <div key={item.key} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={item.key}
-                          className="h-4 w-4 rounded border-border"
-                          checked={formData[item.key as keyof FormData] as boolean}
-                          onChange={(e) => updateField(item.key as keyof FormData, e.target.checked as any)}
-                        />
-                        <Label htmlFor={item.key} className="text-sm font-normal cursor-pointer">
-                          {item.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Media Upload Zone */}
-              <div className="space-y-2">
-                <Label>Attachments (Photos, Videos, Documents)</Label>
-                <div className="relative flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-8 hover:bg-muted/50 transition-colors cursor-pointer">
-                  <input 
-                    type="file" 
-                    multiple 
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    onChange={handleFileChange}
-                  />
-                  <UploadCloud className="h-8 w-8 text-muted-foreground/50" />
-                  <p className="text-sm font-medium">
-                    Click or drag & drop files here
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Images will be automatically compressed to save space. Max 50MB for videos.
-                  </p>
-                </div>
-
-                {selectedFiles.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-sm font-medium">Selected Files ({selectedFiles.length})</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {selectedFiles.map((file, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 rounded border bg-muted/30">
-                          <div className="flex items-center gap-2 overflow-hidden">
-                            <FileIcon className="h-4 w-4 shrink-0 text-primary" />
-                            <span className="text-xs truncate">{file.name}</span>
-                            <span className="text-[10px] text-muted-foreground shrink-0">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </span>
+                    {/* Dropdown untuk hasil pencarian — dirender via portal agar
+                        overflow-hidden pada Card tidak memotongnya. */}
+                    {studentSearch.length >= 2 && ddPos && typeof document !== 'undefined' && createPortal(
+                      <div
+                        style={{ position: 'fixed', top: ddPos.top, left: ddPos.left, width: ddPos.width, zIndex: 50 }}
+                        className="max-h-60 overflow-auto rounded-xl border border-border bg-popover p-1.5 shadow-pop"
+                      >
+                        {searchResults.length > 0 ? (
+                          <div className="space-y-1">
+                            {searchResults.map((student) => (
+                              <button
+                                type="button"
+                                key={student.student_id}
+                                className="flex w-full flex-col rounded-lg p-2.5 text-left transition-colors hover:bg-primary-softer"
+                                onClick={() => handleStudentSelect(student.student_id)}
+                              >
+                                <div className="flex w-full items-start justify-between gap-2">
+                                  <span className="truncate text-sm font-medium text-heading">
+                                    {student.full_name}
+                                  </span>
+                                  {student.display_id && (
+                                    <Badge variant="outline" className="font-mono">
+                                      ID: {student.display_id}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <span className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                                  UUID: {student.student_id.slice(0, 8)}...
+                                  {student.metadata?.email && ` • ${student.metadata.email}`}
+                                </span>
+                              </button>
+                            ))}
                           </div>
-                          <Button 
-                            type="button" 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                            onClick={() => removeFile(idx)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
+                        ) : !isSearching && (
+                          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                            Tidak ada siswa yang cocok dengan “{studentSearch}”.
+                          </p>
+                        )}
+                      </div>,
+                      document.body
+                    )}
+
+                    <div className="space-y-2 border-t border-border pt-5">
+                      <Label htmlFor="student-id">Atau masukkan ID Siswa secara manual</Label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          id="student-id"
+                          placeholder="NIS/NISN atau UUID siswa (contoh: 12345)"
+                          value={formData.student_id}
+                          onChange={(e) => updateField('student_id', e.target.value)}
+                        />
+                        <Button
+                          onClick={() => handleStudentSelect(formData.student_id)}
+                          disabled={!formData.student_id || isValidating}
+                        >
+                          {isValidating ? <Loader2 className="size-4 animate-spin" /> : null}
+                          Lanjutkan
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
+        </TabsContent>
 
-          {/* Error */}
-          {error && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
+        {/* Langkah 2: Detail insiden */}
+        <TabsContent value="details">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Ringkasan siswa terpilih */}
+            <Card>
+              <CardContent className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <IconBox tone="blue">
+                    <UserRound />
+                  </IconBox>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-heading">
+                      {formData.student_name || 'Siswa belum dipilih'}
+                    </p>
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      ID: {formData.student_id ? formData.student_id.slice(0, 8) : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {derivedCategory ? (
+                    <StatusBadge
+                      tone={severityTone(formData.severity)}
+                      label={`Klasifikasi: ${derivedCategory}`}
+                    />
+                  ) : null}
+                  <Button type="button" variant="outline" size="sm" onClick={() => setStep('identify')}>
+                    Ganti Siswa
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Kolom utama: detail insiden */}
+              <div className="space-y-6 lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2.5">
+                      <IconBox tone="blue" size="sm">
+                        <ClipboardList />
+                      </IconBox>
+                      Kronologi & Detail Insiden
+                    </CardTitle>
+                    <CardDescription>
+                      Tulis laporan secara objektif, berurutan, dan lengkap.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    {/* Penugasan kasus */}
+                    <div className="space-y-2">
+                      <Label htmlFor="case-id">Penugasan Kasus *</Label>
+                      <Select
+                        value={formData.case_id}
+                        onValueChange={(v) => updateField('case_id', v ?? '')}
+                        items={caseOptionItems}
+                      >
+                        <SelectTrigger id="case-id" className="w-full">
+                          <SelectValue placeholder="Pilih kasus" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NEW" className="font-semibold text-primary">
+                            + Buat Kasus Baru (dibuat otomatis)
+                          </SelectItem>
+                          {studentCases.map((c: any) => (
+                            <SelectItem key={c.case_id} value={c.case_id}>
+                              {`Kasus ${c.student_name ? `${c.student_name} ` : ''}#${c.case_id.slice(0, 8)} · ${optionLabel(CASE_TYPE_LABEL, c.case_type)} · ${optionLabel(CASE_STATUS_LABEL, c.status)}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Hubungkan insiden ini ke kasus yang sudah ada, atau buat kasus baru.
+                      </p>
+                    </div>
+
+                    {/* Kategori (Kelompok) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="category">Kategori (Kelompok) *</Label>
+                      <Select
+                        value={formData.sub_category}
+                        onValueChange={(v) => handleGroupChange(v ?? '')}
+                        disabled={isLoadingGroups}
+                      >
+                        <SelectTrigger id="category" className="h-auto w-full min-h-10 whitespace-normal py-2">
+                          <SelectValue
+                            placeholder={
+                              isLoadingGroups ? 'Memuat kelompok handbook...' : 'Pilih kelompok pelanggaran'
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent className="w-[var(--anchor-width)] max-w-[min(42rem,calc(100vw-2rem))]">
+                          {groupOptions.map((g) => (
+                            <SelectItem
+                              key={g.id}
+                              value={g.group_name}
+                              className="whitespace-normal py-1.5"
+                            >
+                              {g.group_name}
+                            </SelectItem>
+                          ))}
+                          {!isLoadingGroups && groupOptions.length === 0 && (
+                            <SelectItem value="__none" disabled>
+                              Belum ada kelompok handbook
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Diambil dari Buku Panduan Disiplin. Kategori terisi otomatis mengikuti
+                        klasifikasi kelompok.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-border bg-muted/50 px-3 py-2.5">
+                        <span className="text-xs font-medium text-muted-foreground">Klasifikasi</span>
+                        {derivedCategory ? (
+                          <StatusBadge
+                            tone={severityTone(formData.severity)}
+                            label={derivedCategory}
+                          />
+                        ) : (
+                          <span className="text-xs italic text-muted-foreground">
+                            Pilih kelompok terlebih dahulu
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Klasifikasi */}
+                    <div className="space-y-2">
+                      <Label htmlFor="severity">Klasifikasi *</Label>
+                      <Select
+                        value={formData.severity}
+                        onValueChange={(v) => updateField('severity', v ?? '')}
+                        items={CLASSIFICATION_ITEMS}
+                      >
+                        <SelectTrigger id="severity" className="w-full">
+                          <SelectValue placeholder="Pilih klasifikasi" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="LOW">
+                            <span className="flex items-center gap-2">
+                              <span className="size-2 rounded-full bg-severity-low" /> Minor
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="MEDIUM">
+                            <span className="flex items-center gap-2">
+                              <span className="size-2 rounded-full bg-severity-medium" /> Moderate
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="HIGH">
+                            <span className="flex items-center gap-2">
+                              <span className="size-2 rounded-full bg-severity-high" /> Major
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="CRITICAL">
+                            <span className="flex items-center gap-2">
+                              <span className="size-2 rounded-full bg-severity-critical" /> Severe
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      {/* Siswa yang terlibat */}
+                      <div className="space-y-2">
+                        <Label htmlFor="involved">Siswa yang Terlibat / Korban</Label>
+                        <Input
+                          id="involved"
+                          placeholder="Nama siswa lain yang terlibat, pisahkan dengan koma"
+                          value={formData.involved_students_raw}
+                          onChange={(e) => updateField('involved_students_raw', e.target.value)}
+                        />
+                      </div>
+
+                      {/* Guru yang terlibat */}
+                      <div className="space-y-2">
+                        <Label htmlFor="involved-teacher">Guru yang Terlibat (manual)</Label>
+                        <Input
+                          id="involved-teacher"
+                          placeholder="Nama guru yang terlibat (diisi manual)"
+                          value={formData.involved_teacher}
+                          onChange={(e) => updateField('involved_teacher', e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Kolom teks bebas dan tidak terhubung ke basis data pengguna.
+                        </p>
+                      </div>
+
+                      {/* Tingkat kelas */}
+                      <div className="space-y-2">
+                        <Label htmlFor="student-grade">Kelas Siswa</Label>
+                        <Input
+                          id="student-grade"
+                          placeholder="Contoh: KG-A, Kelas 5, Kelas 12"
+                          value={formData.student_grade}
+                          onChange={(e) => updateField('student_grade', e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Kolom teks bebas (dari taman kanak-kanak hingga kelas atas).
+                        </p>
+                      </div>
+
+                      {/* Lokasi */}
+                      <div className="space-y-2">
+                        <Label htmlFor="location">Lokasi Insiden</Label>
+                        <Input
+                          id="location"
+                          placeholder="Contoh: Kelas 8A, Lapangan, Kantin"
+                          value={formData.location}
+                          onChange={(e) => updateField('location', e.target.value)}
+                        />
+                      </div>
+
+                      {/* Waktu */}
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="incident-at">Tanggal & Waktu Insiden *</Label>
+                        <Input
+                          id="incident-at"
+                          type="datetime-local"
+                          value={formData.incident_at}
+                          onChange={(e) => updateField('incident_at', e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Deskripsi */}
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Deskripsi *</Label>
+                      <Textarea
+                        id="description"
+                        placeholder={DESCRIPTION_PLACEHOLDER}
+                        value={formData.description}
+                        onChange={(e) => updateField('description', e.target.value)}
+                        rows={10}
+                        required
+                      />
+                      <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <Info className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                        Gunakan bahasa objektif dan netral. Hindari istilah yang melabeli siswa.
+                      </p>
+                      {/* Panduan terstruktur agar laporan lengkap dan konsisten */}
+                      <div className="rounded-[10px] border border-border bg-muted/50 p-4">
+                        <p className="mb-2.5 flex items-center gap-2 text-xs font-semibold text-heading">
+                          <ListChecks className="size-3.5 text-primary" />
+                          Panduan penulisan (isi berurutan)
+                        </p>
+                        <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
+                          <li>
+                            <span className="font-semibold text-secondary-text">Kegiatan saat insiden terjadi:</span>{' '}
+                            sedang_memajada basket di lapangan / praktik di laboratorium kimia.
+                          </li>
+                          <li>
+                            <span className="font-semibold text-secondary-text">Siapa yang terlibat:</span> Andi
+                            (Kelas 8A) dan Budi (Kelas 8B).
+                          </li>
+                          <li>
+                            <span className="font-semibold text-secondary-text">Bagaimana kejadiannya:</span>{' '}
+                                        Jelaskan kronologi secara netral berdasarkan fakta. Contoh: Andi jatuh saat
+                            mencoba menangkap bola lalu Regarding lantai.
+                          </li>
+                          <li>
+                            <span className="font-semibold text-secondary-text">Kapan terjadi:</span> Jam olahraga /
+                            8 Oktober 2026, 10.15 WITA.
+                          </li>
+                          <li>
+                            <span className="font-semibold text-secondary-text">Siapa yang promissory:</span> Pak
+                            Hendra (Guru Olahraga) dan siswa Kelas 8A.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Tindakan yang sudah dilakukan */}
+                    <div className="space-y-2">
+                      <Label htmlFor="immediate-actions">Tindakan yang Sudah Dilakukan</Label>
+                      <Textarea
+                        id="immediate-actions"
+                        placeholder="Jelaskan tindakan yang segera dilakukan setelah insiden terjadi..."
+                        value={formData.immediate_actions}
+                        onChange={(e) => updateField('immediate_actions', e.target.value)}
+                        rows={3}
+                      />
+                      <p className="text-xs text-muted-foreground">Diisi secara berurutan.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Kolom samping: bukti, penilaian, lampiran */}
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2.5">
+                      <IconBox tone="teal" size="sm">
+                        <Users />
+                      </IconBox>
+                      Bukti yang Tersedia
+                    </CardTitle>
+                    <CardDescription>
+                      Centang bukti pendukung insiden, jika ada.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2.5">
+                    {[
+                      { key: 'evidence_cctv', label: 'Rekaman CCTV' },
+                      { key: 'evidence_photo', label: 'Foto' },
+                      { key: 'evidence_video', label: 'Video' },
+                      { key: 'evidence_screenshot', label: 'Tangkapan layar' },
+                      { key: 'evidence_witness', label: 'Pernyataan saksi' },
+                      { key: 'evidence_none', label: 'Tidak ada bukti' },
+                    ].map((item) => (
+                      <label
+                        key={item.key}
+                        htmlFor={item.key}
+                        className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-3 py-2 transition-colors hover:bg-primary-softer"
+                      >
+                        <input
+                          type="checkbox"
+                          id={item.key}
+                          className="size-4 accent-[var(--color-primary)]"
+                          checked={formData[item.key as keyof FormData] as boolean}
+                          onChange={(e) => updateField(item.key as keyof FormData, e.target.checked as any)}
+                        />
+                        <span className="text-sm text-secondary-text">{item.label}</span>
+                      </label>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2.5">
+                      <IconBox tone="purple" size="sm">
+                        <AlertTriangle />
+                      </IconBox>
+                      Penilaian Awal
+                    </CardTitle>
+                    <CardDescription>
+                      Tandai hal yang relevan untuk tindak lanjut.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2.5">
+                    {[
+                      { key: 'assess_recurring', label: 'Apakah kejadian ini berulang?' },
+                      { key: 'assess_similar', label: 'Apakah siswa pernah punya kasus serupa?' },
+                      { key: 'assess_escalation', label: 'Apakah perlu eskalasi?' },
+                      { key: 'assess_parent_comm', label: 'Apakah perlu komunikasi kepada orang tua?' },
+                    ].map((item) => (
+                      <label
+                        key={item.key}
+                        htmlFor={item.key}
+                        className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-3 py-2 transition-colors hover:bg-primary-softer"
+                      >
+                        <input
+                          type="checkbox"
+                          id={item.key}
+                          className="size-4 accent-[var(--color-primary)]"
+                          checked={formData[item.key as keyof FormData] as boolean}
+                          onChange={(e) => updateField(item.key as keyof FormData, e.target.checked as any)}
+                        />
+                        <span className="text-sm text-secondary-text">{item.label}</span>
+                      </label>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2.5">
+                      <IconBox tone="blue" size="sm">
+                        <UploadCloud />
+                      </IconBox>
+                      Lampiran
+                    </CardTitle>
+                    <CardDescription>
+                      Foto, video, atau dokumen pendukung insiden.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="relative flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-muted/50 px-4 py-8 text-center transition-colors hover:border-primary/40 hover:bg-primary-softer">
+                      <input
+                        type="file"
+                        multiple
+                        aria-label="Unggah lampiran insiden"
+                        className="absolute inset-0 size-full cursor-pointer opacity-0"
+                        onChange={handleFileChange}
+                      />
+                      <IconBox tone="blue" size="lg">
+                        <UploadCloud />
+                      </IconBox>
+                      <p className="text-sm font-medium text-heading">
+                        Klik atau tarik &amp; letakkan berkas di sini
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Gambar otomatis dikompres. Maksimal 50 MB untuk video.
+                      </p>
+                    </div>
+
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="card-label">
+                          Berkas dipilih ({selectedFiles.length})
+                        </p>
+                        <div className="space-y-2">
+                          {selectedFiles.map((file, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/50 p-2"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <IconBox tone="slate" size="sm">
+                                  <FileText />
+                                </IconBox>
+                                <span className="truncate text-xs text-secondary-text">
+                                  {file.name}
+                                </span>
+                                <span className="shrink-0 text-[11px] text-muted-foreground">
+                                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label={`Hapus berkas ${file.name}`}
+                                title={`Hapus ${file.name}`}
+                                onClick={() => removeFile(idx)}
+                              >
+                                <X className="size-3.5 text-muted-foreground" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button type="button" variant="secondary">
-              Save as Draft
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSubmitting || !formData.category || !formData.severity || !formData.description}
-            >
-              {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Submitting...
-                </span>
-              ) : (
-                'Submit Incident'
-              )}
-            </Button>
-          </div>
-        </form>
-      )}
+            {/* Galat */}
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-2xl border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Aksi */}
+            <Card>
+              <CardFooter className="flex-col gap-3 sm:flex-row sm:justify-end">
+                <p className="flex flex-1 items-center gap-2 text-xs text-muted-foreground">
+                  <CalendarClock className="size-3.5 shrink-0 text-primary" />
+                  Pastikan kategori, klasifikasi, dan deskripsi sudah terisi sebelum dikirim.
+                </p>
+                <Button type="button" variant="outline" onClick={() => router.back()}>
+                  Batal
+                </Button>
+                <Button type="button" variant="secondary">
+                  Simpan sebagai Draf
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || !formData.category || !formData.severity || !formData.description}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Mengirim...
+                    </>
+                  ) : (
+                    'Kirim Laporan'
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          </form>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

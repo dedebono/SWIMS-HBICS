@@ -14,6 +14,7 @@ import incidentsRoutes from './api/incidents.routes.js';
 import studentsRoutes from './api/students.routes.js';
 import auditLogsRoutes from './api/audit-logs.routes.js';
 import mediaRoutes from './api/media.routes.js';
+import avatarRoutes from './api/avatar.routes.js';
 import alertsRoutes from './api/alerts.routes.js';
 import interventionsRoutes from './api/interventions.routes.js';
 import consentsRoutes from './api/consents.routes.js';
@@ -70,6 +71,7 @@ app.use('/api/cases', casesRoutes);
 app.use('/api/students', studentsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/avatars', avatarRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/counselor', counselorRoutes);
 app.use('/api/admin', adminRoutes);
@@ -85,7 +87,11 @@ app.use('/api/counseling', counselingBookingRoutes);
 // Legacy mount (kept for other consumers)
 app.use('/api/counseling-booking', counselingBookingRoutes);
 app.use('/api/discipline-handbook', disciplineHandbookRoutes);
-app.use('/api/employee-counseling', employeeCounselingRoutes);
+// Mounted at /api (NOT /api/employee-counseling): every route inside
+// employee-counseling.routes.ts already carries the `/employee-counseling/...`
+// prefix, so mounting under the resource name duplicated it and every request
+// resolved to /api/employee-counseling/employee-counseling/... → 404.
+app.use('/api', employeeCounselingRoutes);
 app.use('/api/guidebook', guidebookRoutes);
 app.use('/api/quisioner', quisionerRoutes);
 app.use('/api/referrals', referralssRoutes);

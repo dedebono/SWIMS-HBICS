@@ -13,6 +13,25 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  // Body-parser rejections. `express.json({ limit })` throws these BEFORE any
+  // route handler runs, so without this branch an oversized upload surfaced as
+  // a generic 500 ("request entity too large") instead of telling the user the
+  // file was rejected. For base64 image payloads the inflated size is expected —
+  // a 1 MB photo encodes to ~1.37 MB — so the message names the real cause.
+  const bodyParserCode = (err as { type?: string; status?: number }).type;
+  if (bodyParserCode === 'entity.too.large') {
+    sendError(
+      res,
+      'Berkas terlalu besar untuk diproses. Maksimal 1 MB untuk foto profil.',
+      413,
+    );
+    return;
+  }
+  if (bodyParserCode === 'entity.parse.failed') {
+    sendError(res, 'Format permintaan tidak valid.', 400);
+    return;
+  }
+
   // Zod validation errors
   if (err instanceof ZodError) {
     const messages = err.errors.map((e) => `${e.path.join('.')}: ${e.message}`);

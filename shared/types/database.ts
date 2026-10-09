@@ -139,6 +139,10 @@ export interface UserRow {
   is_active: boolean;
   national_id: string | null;
   national_id_hash: string | null;
+  /** Storage key of the profile photo inside /app/media; null when unset. */
+  avatar_key: string | null;
+  /** Last avatar upload — used as the HTTP cache-buster. */
+  avatar_updated_at: string | null;
   created_at: string;
   deleted_at: string | null;
 }
@@ -151,7 +155,12 @@ export interface StudentRow {
   gender: string | null;
   national_id: string | null;
   qr_code: string | null;
+  parent_email: string | null;
   phone_number: string | null;
+  /** Storage key of the profile photo inside /app/media; null when unset. */
+  avatar_key: string | null;
+  /** Last avatar upload — used as the HTTP cache-buster. */
+  avatar_updated_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   deleted_at: string | null;
@@ -477,6 +486,8 @@ export interface ParentReferralTokenRow {
 export interface SchoolPsychologistRow {
   psychologist_id: string;
   tenant_id: string;
+  /** Login account this profile belongs to (migration 048). */
+  user_id?: string | null;
   full_name: string;
   expertise: string;
   photo_url: string | null;
@@ -484,4 +495,7 @@ export interface SchoolPsychologistRow {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  /** Only present on the admin list endpoint. */
+  email?: string | null;
+  has_profile?: boolean;
 }

@@ -6,7 +6,8 @@ import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as quisionerService from '../services/quisioner.service.js';
 import * as quisionerSettingsService from '../services/quisioner-settings.service.js';
 import * as quisionerListsService from '../services/quisioner-lists.service.js';
-import { sendSuccess, sendCreated } from '../utils/response.js';
+import { sendSuccess, sendCreated, sendError } from '../utils/response.js';
+import { getClientWithTenant } from '../db/pool.js';
 
 const router = Router();
 
@@ -225,6 +226,28 @@ router.delete(
   asyncHandler(async (req, res) => {
     const ok = await quisionerListsService.deleteQuestionList(req.tenantId, req.params.listId);
     res.status(ok ? 204 : 404).end();
+  }),
+);
+
+// ─── TENANT SLUG ─────────────────────────────────────────────────────────────
+// The admin console renders the school's public questionnaire link, which is
+// built from the tenant slug. This route was referenced by the frontend but
+// never implemented, so the request 404'd.
+router.get(
+  '/tenant-slug',
+  checkPermission('quisioner', 'read'),
+  asyncHandler(async (req, res) => {
+    const client = await getClientWithTenant(req.tenantId);
+    try {
+      const { rows } = await client.query('SELECT slug FROM tenants WHERE tenant_id = $1', [req.tenantId]);
+      const slug = rows[0]?.slug;
+      // sendError (not res.status().json()) so the handler still returns void —
+      // returning the Response object is what trips the asyncHandler signature.
+      if (!slug) sendError(res, 'Tenant slug not found', 404);
+      else sendSuccess(res, { slug });
+    } finally {
+      client.release();
+    }
   }),
 );
 

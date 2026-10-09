@@ -1,6 +1,7 @@
 import { queryWithTenant } from '../db/pool.js';
 import { hashNationalId } from '../utils/encryption.js';
 import { createAppointment, confirmAppointment, updateAvailabilitySlot } from './appointments.service.js';
+import { buildAvatarUrl } from './avatar.service.js';
 import { sendNotificationToUser } from './notifications.service.js';
 
 export async function verifyNik(tenantId: string, nik: string): Promise<{ valid: boolean; staff_name?: string; gender?: string }> {
@@ -26,6 +27,8 @@ export interface CounselorWithSlots {
   user_id: string;
   full_name: string;
   gender: string;
+  /** Signed 128px WebP URL, or null when the counselor has no photo. */
+  thumb_url: string | null;
   slots: CounselorSlot[];
 }
 
@@ -36,9 +39,15 @@ export interface CounselorWithSlots {
  * the counselor + schedule picker.
  */
 export async function listCounselorAvailability(tenantId: string): Promise<CounselorWithSlots[]> {
-  const { rows: counselors } = await queryWithTenant<{ user_id: string; full_name: string; gender: string }>(
+  const { rows: counselors } = await queryWithTenant<{
+    user_id: string;
+    full_name: string;
+    gender: string;
+    avatar_key: string | null;
+    avatar_updated_at: string | null;
+  }>(
     tenantId,
-    `SELECT user_id, full_name, gender FROM users
+    `SELECT user_id, full_name, gender, avatar_key, avatar_updated_at FROM users
      WHERE tenant_id = $1 AND role = 'COUNSELOR' AND is_active = true
      ORDER BY full_name ASC`,
     [tenantId],
@@ -57,6 +66,11 @@ export async function listCounselorAvailability(tenantId: string): Promise<Couns
       user_id: c.user_id,
       full_name: c.full_name,
       gender: c.gender,
+      // Built from the row we already have — calling avatarService.getAvatarUrl()
+      // instead would add one extra query per counselor on a PUBLIC endpoint.
+      thumb_url: c.avatar_key
+        ? buildAvatarUrl(c.user_id, tenantId, 'thumb', c.avatar_updated_at)
+        : null,
       slots: slots.map((s) => ({
         slot_id: s.slot_id,
         slot_start: new Date(s.slot_start).toISOString(),

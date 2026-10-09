@@ -2,19 +2,24 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { apiClient } from '@/lib/api-client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { EmptyState } from '@/components/ui/page-header';
 import {
-  FileUp,
-  ShieldAlert,
-  Download,
-  FileText,
-  FileAudio,
-  FileVideo,
-  X,
-  ZoomIn,
   ChevronLeft,
   ChevronRight,
+  Download,
+  FileAudio,
+  FileText,
+  FileUp,
+  FileVideo,
+  Image as ImageIcon,
+  ShieldAlert,
+  X,
+  ZoomIn,
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 
@@ -30,14 +35,25 @@ interface AssetWithUrl extends MediaAssetRow {
   url?: string;
 }
 
-function getFileIcon(mimeType: string) {
-  if (mimeType.startsWith('audio/')) return <FileAudio className="w-8 h-8 text-purple-400" />;
-  if (mimeType.startsWith('video/')) return <FileVideo className="w-8 h-8 text-blue-400" />;
-  return <FileText className="w-8 h-8 text-muted-foreground" />;
+function assetKind(mimeType: string): 'image' | 'video' | 'audio' | 'file' {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return 'file';
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+function KindIcon({ mimeType, className }: { mimeType: string; className?: string }) {
+  const kind = assetKind(mimeType);
+  if (kind === 'audio') return <FileAudio className={className} />;
+  if (kind === 'video') return <FileVideo className={className} />;
+  if (kind === 'image') return <ImageIcon className={className} />;
+  return <FileText className={className} />;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function MediaTab({ caseId }: { caseId: string }) {
@@ -47,17 +63,17 @@ export function MediaTab({ caseId }: { caseId: string }) {
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch assets and resolve download URLs for each
   const fetchAssets = useCallback(async () => {
     setIsLoading(true);
     const res = await apiClient<MediaAssetRow[]>(`/cases/${caseId}/media`);
     if (res.success && res.data) {
-      // Assets now include pre-signed download URL from backend — no extra fetch needed
-      // url field is added by backend's listAssetsForCase response
-      const withUrls: AssetWithUrl[] = (res.data as (MediaAssetRow & { url?: string })[]).map((asset) => ({
-        ...asset,
-        url: asset.url ?? `/api/media/${asset.asset_id}/download`,
-      }));
+      // Backend menyertakan URL unduhan bertanda tangan pada daftar aset.
+      const withUrls: AssetWithUrl[] = (res.data as (MediaAssetRow & { url?: string })[]).map(
+        (asset) => ({
+          ...asset,
+          url: asset.url ?? `/api/media/${asset.asset_id}/download`,
+        }),
+      );
       setAssets(withUrls);
     }
     setIsLoading(false);
@@ -67,12 +83,13 @@ export function MediaTab({ caseId }: { caseId: string }) {
     fetchAssets();
   }, [fetchAssets]);
 
-  // Keyboard navigation for lightbox
+  // Navigasi papan cahaya dengan keyboard
   useEffect(() => {
     if (lightboxIdx === null) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightboxIdx(null);
-      if (e.key === 'ArrowRight') setLightboxIdx((i) => (i !== null ? Math.min(i + 1, assets.length - 1) : null));
+      if (e.key === 'ArrowRight')
+        setLightboxIdx((i) => (i !== null ? Math.min(i + 1, assets.length - 1) : null));
       if (e.key === 'ArrowLeft') setLightboxIdx((i) => (i !== null ? Math.max(i - 1, 0) : null));
     };
     window.addEventListener('keydown', handler);
@@ -87,7 +104,7 @@ export function MediaTab({ caseId }: { caseId: string }) {
     try {
       let fileToUpload = file;
 
-      // Compress images client-side before upload
+      // Kompres gambar di sisi klien sebelum diunggah
       if (file.type.startsWith('image/')) {
         fileToUpload = await imageCompression(file, {
           maxSizeMB: 1,
@@ -96,7 +113,7 @@ export function MediaTab({ caseId }: { caseId: string }) {
         });
       }
 
-      // Convert file to base64 for upload through HTTPS backend (avoids Mixed Content)
+      // Ubah ke base64 agar unggah melewati backend HTTPS
       const fileBase64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -107,15 +124,17 @@ export function MediaTab({ caseId }: { caseId: string }) {
         reader.readAsDataURL(fileToUpload);
       });
 
-      // Upload through backend proxy (avoids Minio HTTP presigned URL)
-      const uploadRes = await apiClient<{ asset_id: string; file_name: string }>('/media/direct-upload', {
-        method: 'POST',
-        body: {
-          file_name: fileToUpload.name,
-          mime_type: fileToUpload.type,
-          file_data: fileBase64,
+      const uploadRes = await apiClient<{ asset_id: string; file_name: string }>(
+        '/media/direct-upload',
+        {
+          method: 'POST',
+          body: {
+            file_name: fileToUpload.name,
+            mime_type: fileToUpload.type,
+            file_data: fileBase64,
+          },
         },
-      });
+      );
 
       if (uploadRes.success && uploadRes.data) {
         const { asset_id } = uploadRes.data;
@@ -126,7 +145,7 @@ export function MediaTab({ caseId }: { caseId: string }) {
         fetchAssets();
       }
     } catch (err) {
-      console.error('Upload failed', err);
+      console.error('Pengunggahan gagal', err);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -134,197 +153,260 @@ export function MediaTab({ caseId }: { caseId: string }) {
   };
 
   const lightboxAsset = lightboxIdx !== null ? assets[lightboxIdx] : null;
+  const pendingRedaction = assets.filter((a) => a.redaction_status === 'PENDING').length;
+  const totalSize = assets.length;
+  const activeIndex = lightboxIdx ?? 0;
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 animate-pulse">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="aspect-square rounded-lg bg-muted/50" />
-        ))}
-      </div>
+      <Card>
+        <CardContent className="flex items-center justify-center py-16">
+          <div className="size-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {/* Upload Zone */}
-      <Card className="border-dashed glass border-border/50">
-        <CardContent className="flex flex-col items-center justify-center p-6">
+    <div className="space-y-6">
+      {/* Statistik */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total Lampiran"
+          value={totalSize}
+          hint="Berkas bukti yang terlampir pada kasus ini."
+          icon={<FileUp className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Menunggu Redaksi"
+          value={pendingRedaction}
+          hint="Lampiran yang masih menunggu penyensoran identitas."
+          icon={<ShieldAlert className="size-5" />}
+          iconTone="yellow"
+        />
+        <StatCard
+          label="Kelola Lampiran"
+          value={totalSize > 0 ? 'Tersedia' : 'Kosong'}
+          hint="Unggah foto, video, audio, atau dokumen sebagai bukti."
+          icon={<FileText className="size-5" />}
+          iconTone="slate"
+        />
+      </div>
+
+      {/* Zona unggah */}
+      <Card className="border-dashed">
+        <CardHeader className="border-b border-border">
+          <div className="flex items-center gap-3">
+            <IconBox tone="blue" size="sm">
+              <FileUp />
+            </IconBox>
+            <div>
+              <CardTitle>Unggah Berkas Bukti</CardTitle>
+              <CardDescription>
+                Mendukung gambar, video, audio, PDF, dan dokumen. Gambar otomatis dikompresi.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
           <input
             type="file"
             ref={fileInputRef}
-            className="hidden"
+            className="sr-only"
             onChange={handleFileUpload}
             accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+            aria-label="Pilih berkas bukti"
           />
-          <FileUp className="h-8 w-8 text-muted-foreground mb-3 opacity-50" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-          >
-            {isUploading ? 'Uploading...' : 'Upload Evidence File'}
-          </Button>
-          <p className="text-xs text-muted-foreground mt-2">Images are automatically compressed to save space.</p>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-8 text-center">
+            <IconBox tone="blue" size="lg">
+              <FileUp />
+            </IconBox>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-heading">Belum ada berkas dipilih</p>
+              <p className="text-xs text-muted-foreground">
+                Ukuran berkas dikompresi otomatis agar hemat ruang penyimpanan.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+            >
+              <FileUp className="size-4" />
+              {isUploading ? 'Mengunggah...' : 'Pilih Berkas untuk Diunggah'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Thumbnail Grid */}
+      {/* Galeri */}
       {assets.length === 0 ? (
-        <div className="py-12 text-center text-sm text-muted-foreground">No media attachments yet.</div>
+        <Card>
+          <EmptyState
+            icon={<ImageIcon />}
+            title="Belum ada lampiran"
+            description="Anda belum memiliki data. Mulai dengan mengunggah foto, video, atau dokumen sebagai bukti kasus."
+          />
+        </Card>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {assets.map((asset, idx) => {
-            const isImage = asset.mime_type.startsWith('image/');
-            const isVideo = asset.mime_type.startsWith('video/');
+            const kind = assetKind(asset.mime_type);
 
             return (
-              <div
+              <button
                 key={asset.asset_id}
-                className="group relative aspect-square rounded-lg overflow-hidden border border-border/50 bg-muted/30 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                type="button"
                 onClick={() => setLightboxIdx(idx)}
+                className="group relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted/30 text-left transition-all hover:border-primary/30 hover:shadow-card"
                 title={asset.file_name}
+                aria-label={`Buka lampiran ${asset.file_name}`}
               >
-                {/* Thumbnail Content */}
-                {isImage && asset.url ? (
+                {kind === 'image' && asset.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={asset.url}
                     alt={asset.file_name}
-                    className="w-full h-full object-cover"
+                    className="size-full object-cover"
                     loading="lazy"
                   />
-                ) : isVideo && asset.url ? (
-                  <video
-                    src={asset.url}
-                    className="w-full h-full object-cover"
-                    muted
-                    preload="metadata"
-                  />
+                ) : kind === 'video' && asset.url ? (
+                  <video src={asset.url} className="size-full object-cover" muted preload="metadata" />
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
-                    {getFileIcon(asset.mime_type)}
-                    <span className="text-[10px] text-muted-foreground text-center leading-tight truncate w-full text-center">
+                  <span className="flex size-full flex-col items-center justify-center gap-2 p-3">
+                    <IconBox tone={kind === 'audio' ? 'purple' : kind === 'video' ? 'blue' : 'slate'}>
+                      <KindIcon mimeType={asset.mime_type} />
+                    </IconBox>
+                    <span className="w-full truncate text-center text-xs text-muted-foreground">
                       {asset.file_name}
                     </span>
-                  </div>
-                )}
-
-                {/* Hover Overlay */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <ZoomIn className="w-6 h-6 text-white drop-shadow" />
-                </div>
-
-                {/* Redaction Badge */}
-                {asset.redaction_status === 'PENDING' && (
-                  <div className="absolute top-1 left-1">
-                    <span className="text-[9px] flex items-center bg-yellow-500/90 text-yellow-950 px-1 py-0.5 rounded font-medium">
-                      <ShieldAlert className="w-2.5 h-2.5 mr-0.5" /> Redaction
-                    </span>
-                  </div>
-                )}
-
-                {/* Type Badge */}
-                <div className="absolute bottom-1 right-1">
-                  <span className="text-[9px] bg-black/60 text-white px-1 py-0.5 rounded">
-                    {asset.mime_type.split('/')[1]?.toUpperCase() ?? 'FILE'}
                   </span>
-                </div>
-              </div>
+                )}
+
+                <span className="absolute inset-0 flex items-center justify-center bg-heading/40 opacity-0 transition-opacity group-hover:opacity-100">
+                  <ZoomIn className="size-6 text-white" />
+                </span>
+
+                <span className="absolute left-2 top-2">
+                  <StatusBadge
+                    tone={asset.redaction_status === 'PENDING' ? 'warning' : 'success'}
+                    label={asset.redaction_status === 'PENDING' ? 'Menunggu Redaksi' : 'Tersedia'}
+                  />
+                </span>
+
+                <span className="absolute bottom-2 right-2 rounded-full bg-heading/70 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  {asset.mime_type.split('/')[1]?.toUpperCase() ?? 'BERKAS'}
+                </span>
+              </button>
             );
           })}
         </div>
       )}
 
-      {/* Lightbox */}
-      {lightboxAsset && (
+      {/* Papan cahaya */}
+      {lightboxAsset ? (
         <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-heading/70 p-4"
           onClick={() => setLightboxIdx(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Pratinjau ${lightboxAsset.file_name}`}
         >
-          {/* Close */}
           <button
-            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            className="absolute right-4 top-4 text-white/80 transition-colors hover:text-white"
             onClick={() => setLightboxIdx(null)}
+            aria-label="Tutup pratinjau"
           >
-            <X className="w-6 h-6" />
+            <X className="size-6" />
           </button>
 
-          {/* Prev */}
-          {lightboxIdx! > 0 && (
+          {activeIndex > 0 ? (
             <button
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white"
-              onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i! - 1); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/80 transition-colors hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIdx((i) => (i ?? 0) - 1);
+              }}
+              aria-label="Lampiran sebelumnya"
             >
-              <ChevronLeft className="w-8 h-8" />
+              <ChevronLeft className="size-8" />
             </button>
-          )}
+          ) : null}
 
-          {/* Next */}
-          {lightboxIdx! < assets.length - 1 && (
+          {activeIndex < assets.length - 1 ? (
             <button
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white"
-              onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => i! + 1); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 transition-colors hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIdx((i) => (i ?? 0) + 1);
+              }}
+              aria-label="Lampiran berikutnya"
             >
-              <ChevronRight className="w-8 h-8" />
+              <ChevronRight className="size-8" />
             </button>
-          )}
+          ) : null}
 
-          {/* Media Preview */}
           <div
-            className="max-w-4xl max-h-[85vh] flex flex-col items-center gap-4"
+            className="flex max-w-4xl max-h-[85vh] flex-col items-center gap-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {lightboxAsset.mime_type.startsWith('image/') && lightboxAsset.url ? (
+            {assetKind(lightboxAsset.mime_type) === 'image' && lightboxAsset.url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={lightboxAsset.url}
                 alt={lightboxAsset.file_name}
-                className="max-h-[75vh] max-w-full rounded-lg object-contain shadow-2xl"
+                className="max-h-[75vh] max-w-full rounded-2xl object-contain shadow-card-hover"
               />
-            ) : lightboxAsset.mime_type.startsWith('video/') && lightboxAsset.url ? (
+            ) : assetKind(lightboxAsset.mime_type) === 'video' && lightboxAsset.url ? (
               <video
                 src={lightboxAsset.url}
                 controls
                 autoPlay
-                className="max-h-[75vh] max-w-full rounded-lg shadow-2xl"
+                className="max-h-[75vh] max-w-full rounded-2xl shadow-card-hover"
               />
-            ) : lightboxAsset.mime_type.startsWith('audio/') && lightboxAsset.url ? (
-              <div className="bg-muted rounded-lg p-8 flex flex-col items-center gap-4">
-                <FileAudio className="w-16 h-16 text-purple-400" />
+            ) : assetKind(lightboxAsset.mime_type) === 'audio' && lightboxAsset.url ? (
+              <div className="flex flex-col items-center gap-4 rounded-2xl bg-card p-10">
+                <IconBox tone="purple" size="lg">
+                  <FileAudio />
+                </IconBox>
                 <audio src={lightboxAsset.url} controls className="w-72" />
               </div>
             ) : (
-              <div className="bg-muted rounded-lg p-12 flex flex-col items-center gap-4">
-                {getFileIcon(lightboxAsset.mime_type)}
+              <div className="flex flex-col items-center gap-4 rounded-2xl bg-card p-12">
+                <IconBox tone="slate" size="lg">
+                  <KindIcon mimeType={lightboxAsset.mime_type} />
+                </IconBox>
                 <p className="text-sm text-muted-foreground">{lightboxAsset.file_name}</p>
               </div>
             )}
 
-            {/* Info Bar */}
-            <div className="flex items-center gap-4 text-white/70 text-xs">
-              <span className="font-medium text-white truncate max-w-xs">{lightboxAsset.file_name}</span>
-              <span>•</span>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-white/80">
+              <span className="max-w-xs truncate font-medium text-white">{lightboxAsset.file_name}</span>
+              <span className="size-1 rounded-full bg-white/40" />
               <span>{formatDate(lightboxAsset.created_at)}</span>
-              <span>•</span>
-              <span>{lightboxIdx! + 1} / {assets.length}</span>
-              {lightboxAsset.url && (
+              <span className="size-1 rounded-full bg-white/40" />
+              <span>
+                {activeIndex + 1} / {assets.length}
+              </span>
+              {lightboxAsset.url ? (
                 <a
                   href={lightboxAsset.url}
                   download={lightboxAsset.file_name}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 text-primary hover:text-primary/80"
+                  className="action-link"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <Download className="w-3.5 h-3.5" /> Download
+                  Unduh
+                  <Download className="size-3.5" />
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

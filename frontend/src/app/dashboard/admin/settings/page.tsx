@@ -3,14 +3,91 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Save, Cloud, CheckCircle, AlertTriangle, MessageSquare, Mail } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { IconBox } from "@/components/ui/icon-box";
+import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Bot,
+  Save,
+  Cloud,
+  MessageSquare,
+  Mail,
+  PlugZap,
+  ShieldCheck,
+  HardDrive,
+  Loader2,
+} from "lucide-react";
+
+/** Toggle row with a label, helper text and a right-aligned switch. */
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onCheckedChange,
+  tone = "blue",
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (value: boolean) => void;
+  tone?: "blue" | "green" | "purple";
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <IconBox tone={tone} size="sm">
+          <ShieldCheck />
+        </IconBox>
+        <div className="min-w-0 space-y-0.5">
+          <Label className="text-sm">{title}</Label>
+          <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <StatusBadge
+          tone={checked ? "success" : "neutral"}
+          label={checked ? "Aktif" : "Nonaktif"}
+        />
+        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      </div>
+    </div>
+  );
+}
+
+/** Section heading used inside the tab panels. */
+function SettingsSection({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader className="border-b">
+        <div className="flex items-start gap-3">
+          <IconBox tone="blue">{icon}</IconBox>
+          <div className="space-y-1">
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>{description}</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">{children}</CardContent>
+    </Card>
+  );
+}
 
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(false);
@@ -64,7 +141,7 @@ export default function AdminSettingsPage() {
         if (res.data.email) setEmailSettings(prev => ({ ...prev, ...res.data.email }));
       }
     } catch (error) {
-      toast.error("Failed to load settings. Are you an IT Admin?");
+      toast.error("Gagal memuat pengaturan. Pastikan Anda adalah Admin IT.");
     } finally {
       setLoading(false);
     }
@@ -73,7 +150,7 @@ export default function AdminSettingsPage() {
   const handleSaveSettings = async (category: "ai" | "storage" | "waha" | "email") => {
     try {
       setSaving(true);
-      let payload: any = {};
+      const payload: any = {};
       if (category === "ai") payload.ai = aiSettings;
       else if (category === "storage") payload.storage = { ...storageSettings, storageProvider: storageSettings.provider };
       else if (category === "waha") payload.waha = wahaSettings;
@@ -85,12 +162,12 @@ export default function AdminSettingsPage() {
       });
 
       if (res.success) {
-        toast.success(`${category.toUpperCase()} settings saved successfully!`);
+        toast.success("Pengaturan berhasil disimpan.");
       } else {
-        toast.error(res.error || "Failed to save settings.");
+        toast.error(res.error || "Gagal menyimpan pengaturan.");
       }
     } catch (error) {
-      toast.error("Failed to save settings. Please try again.");
+      toast.error("Gagal menyimpan pengaturan. Silakan coba lagi.");
     } finally {
       setSaving(false);
     }
@@ -110,86 +187,101 @@ export default function AdminSettingsPage() {
       });
 
       if (res.success) {
-        toast.success("Connection to AI successful! Model is responding.");
+        toast.success("Koneksi ke layanan AI berhasil. Model merespons dengan baik.");
       } else {
-        toast.error("AI Connection failed.");
+        toast.error("Koneksi ke layanan AI gagal.");
       }
     } catch (error) {
-      toast.error("Error communicating with AI endpoint. Check your URL and Key.");
+      toast.error("Gagal menghubungi layanan AI. Periksa alamat URL dan kunci API Anda.");
     } finally {
       setTestingAi(false);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 p-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          IT Admin Settings
-        </h1>
-        <p className="text-zinc-500 dark:text-zinc-400 mt-2">
-          Manage system configurations, integrations, and external services.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Pengaturan Sistem"
+        description="Kelola konfigurasi, integrasi, dan layanan eksternal yang dipakai SWIMS-HBICS."
+        actions={
+          loading ? (
+            <StatusBadge tone="info" label="Memuat pengaturan…" />
+          ) : (
+            <StatusBadge tone="success" label="Pengaturan tersinkron" />
+          )
+        }
+      />
 
-      <Tabs
-        style={{ display: 'block', overflow: 'auto' }}
-        defaultValue="ai"
-        className="w-full"
-      >
-        <TabsList className="grid w-full max-w-2xl grid-cols-4">
-          <TabsTrigger value="ai">AI Insights</TabsTrigger>
-          <TabsTrigger value="storage">Storage</TabsTrigger>
-          <TabsTrigger value="waha">WAHA</TabsTrigger>
-          <TabsTrigger value="email">Email SMTP</TabsTrigger>
+      <Tabs defaultValue="ai" className="w-full">
+        <TabsList>
+          <TabsTrigger value="ai">
+            <Bot />
+            Wawasan AI
+          </TabsTrigger>
+          <TabsTrigger value="storage">
+            <Cloud />
+            Penyimpanan
+          </TabsTrigger>
+          <TabsTrigger value="waha">
+            <MessageSquare />
+            WhatsApp
+          </TabsTrigger>
+          <TabsTrigger value="email">
+            <Mail />
+            Email SMTP
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="ai" className="mt-6 space-y-6">
+        {/* ── AI ── */}
+        <TabsContent value="ai">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-5 w-5 text-indigo-500" />
-                AI Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure the AI backend used for case summarization and pattern detection. You can connect to cloud providers or a local LLM via Ollama/LMStudio.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between rounded-lg border p-4 shadow-sm">
-                <div className="space-y-0.5">
-                  <Label className="text-base">Enable AI Features</Label>
-                  <p className="text-sm text-zinc-500">Allow Counselors to generate AI case summaries.</p>
+            <CardHeader className="border-b">
+              <div className="flex items-start gap-3">
+                <IconBox tone="purple">
+                  <Bot />
+                </IconBox>
+                <div className="space-y-1">
+                  <CardTitle>Konfigurasi AI</CardTitle>
+                  <CardDescription>
+                    Atur layanan AI untuk ringkasan kasus dan deteksi pola. Anda dapat
+                    terhubung ke penyedia cloud maupun model lokal melalui Ollama/LMStudio.
+                  </CardDescription>
                 </div>
-                <Switch
-                  checked={!!aiSettings.enabled}
-                  onCheckedChange={(v) => setAiSettings({ ...aiSettings, enabled: v })}
-                />
               </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <ToggleRow
+                title="Aktifkan Fitur AI"
+                description="Izinkan konselor membuat ringkasan kasus dengan bantuan AI."
+                checked={!!aiSettings.enabled}
+                onCheckedChange={(v) => setAiSettings({ ...aiSettings, enabled: v })}
+                tone="purple"
+              />
 
-              {aiSettings.enabled && (
-                <div className="space-y-4 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {aiSettings.enabled ? (
+                <div className="space-y-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Provider Type</Label>
+                      <Label htmlFor="ai-provider">Jenis Penyedia</Label>
                       <Select
                         value={aiSettings.provider}
                         onValueChange={(v) => setAiSettings({ ...aiSettings, provider: v ?? "local" })}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select provider" />
+                        <SelectTrigger id="ai-provider" className="w-full">
+                          <SelectValue placeholder="Pilih penyedia" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="local">Local Model (Ollama/LMStudio)</SelectItem>
+                          <SelectItem value="local">Model Lokal (Ollama/LMStudio)</SelectItem>
                           <SelectItem value="openai">OpenAI</SelectItem>
                           <SelectItem value="anthropic">Anthropic</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Model Name</Label>
+                      <Label htmlFor="ai-model">Nama Model</Label>
                       <Input
-                        placeholder="e.g. llama3 or gpt-4"
+                        id="ai-model"
+                        placeholder="Contoh: llama3 atau gpt-4"
                         value={aiSettings.model || ""}
                         onChange={(e) => setAiSettings({ ...aiSettings, model: e.target.value })}
                       />
@@ -197,18 +289,22 @@ export default function AdminSettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>API Base URL</Label>
+                    <Label htmlFor="ai-url">Alamat Endpoint API</Label>
                     <Input
+                      id="ai-url"
                       placeholder="http://localhost:11434/v1/chat/completions"
                       value={aiSettings.apiUrl || ""}
                       onChange={(e) => setAiSettings({ ...aiSettings, apiUrl: e.target.value })}
                     />
-                    <p className="text-xs text-zinc-500">For local models, use the absolute URL to the endpoint.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Untuk model lokal, gunakan alamat lengkap endpoint yang diawali http://
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>API Key (Optional for Local)</Label>
+                    <Label htmlFor="ai-key">Kunci API (opsional untuk model lokal)</Label>
                     <Input
+                      id="ai-key"
                       type="password"
                       placeholder="sk-..."
                       value={aiSettings.apiKey || ""}
@@ -216,225 +312,246 @@ export default function AdminSettingsPage() {
                     />
                   </div>
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Aktifkan fitur AI terlebih dahulu untuk mengatur model dan endpoint.
+                </p>
               )}
             </CardContent>
-            <CardFooter className="flex justify-between border-t p-6">
+            <CardFooter className="flex flex-wrap justify-end gap-2.5">
               <Button
                 variant="outline"
                 onClick={handleTestAiConnection}
                 disabled={!aiSettings.enabled || testingAi}
               >
-                {testingAi ? "Testing..." : "Test Connection"}
+                {testingAi ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Menguji…
+                  </>
+                ) : (
+                  <>
+                    <PlugZap className="size-4" />
+                    Uji Koneksi
+                  </>
+                )}
               </Button>
               <Button onClick={() => handleSaveSettings("ai")} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" /> Save AI Settings
+                <Save className="size-4" />
+                Simpan Pengaturan AI
               </Button>
             </CardFooter>
           </Card>
         </TabsContent>
 
-        <TabsContent value="storage" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cloud className="h-5 w-5 text-sky-500" />
-                Storage Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure where student media, PDF reports, and exported data are stored. We support S3-compatible endpoints, Firebase, and Google Drive.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>Storage Provider</Label>
-                <Select
-                  value={storageSettings.provider}
-                  onValueChange={(v) => setStorageSettings({ ...storageSettings, provider: v ?? "s3" })}
-                >
-                  <SelectTrigger className="w-full sm:w-[300px]">
-                    <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="s3">Amazon S3</SelectItem>
-                    <SelectItem value="r2">Cloudflare R2</SelectItem>
-                    <SelectItem value="firebase">Firebase Storage</SelectItem>
-                    <SelectItem value="gdrive">Google Drive API</SelectItem>
-                    <SelectItem value="local">Local Server Storage</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* ── Storage ── */}
+        <TabsContent value="storage">
+          <SettingsSection
+            icon={<HardDrive />}
+            title="Konfigurasi Penyimpanan"
+            description="Tentukan lokasi media siswa, laporan PDF, dan data hasil ekspor. Mendukung endpoint S3, Firebase, serta Google Drive."
+          >
+            <div className="space-y-2">
+              <Label htmlFor="storage-provider">Penyedia Penyimpanan</Label>
+              <Select
+                value={storageSettings.provider}
+                onValueChange={(v) => setStorageSettings({ ...storageSettings, provider: v ?? "s3" })}
+              >
+                <SelectTrigger id="storage-provider" className="w-full sm:w-72">
+                  <SelectValue placeholder="Pilih penyedia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="s3">Amazon S3</SelectItem>
+                  <SelectItem value="r2">Cloudflare R2</SelectItem>
+                  <SelectItem value="firebase">Firebase Storage</SelectItem>
+                  <SelectItem value="gdrive">Google Drive API</SelectItem>
+                  <SelectItem value="local">Penyimpanan Server Lokal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              {storageSettings.provider === 'local' ? (
-                <div className="rounded-md bg-muted/50 p-4">
-                  <h4 className="text-sm font-semibold mb-2">Local Server Storage Active</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Files will be securely saved directly to the backend server&apos;s local file system (e.g. <code>backend/uploads/</code>). No additional configuration keys are required for this provider.
+            {storageSettings.provider === "local" ? (
+              <div className="flex items-start gap-3 rounded-xl border border-info-soft bg-info-soft/40 p-4">
+                <IconBox tone="blue" size="sm">
+                  <HardDrive />
+                </IconBox>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-heading">
+                    Penyimpanan server lokal sedang digunakan
+                  </p>
+                  <p className="text-xs leading-relaxed text-secondary-text">
+                    Berkas akan disimpan langsung ke sistem berkas server, misalnya pada folder{" "}
+                    <code className="rounded bg-card px-1.5 py-0.5 text-[0.7rem]">backend/uploads/</code>.
+                    Penyedia ini tidak memerlukan kunci tambahan.
                   </p>
                 </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="storage-bucket">Nama Bucket / ID Proyek Firebase</Label>
+                    <Input
+                      id="storage-bucket"
+                      value={storageSettings.bucket || ""}
+                      onChange={(e) => setStorageSettings({ ...storageSettings, bucket: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="storage-region">Region</Label>
+                    <Input
+                      id="storage-region"
+                      placeholder="us-east-1"
+                      value={storageSettings.region || ""}
+                      onChange={(e) => setStorageSettings({ ...storageSettings, region: e.target.value })}
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label>Bucket Name / Firebase Project ID</Label>
+                  <Label htmlFor="storage-access">Access Key / Email Klien</Label>
                   <Input
-                    value={storageSettings.bucket || ""}
-                    onChange={(e) => setStorageSettings({ ...storageSettings, bucket: e.target.value })}
+                    id="storage-access"
+                    value={storageSettings.accessKey || ""}
+                    onChange={(e) => setStorageSettings({ ...storageSettings, accessKey: e.target.value })}
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label>Region</Label>
+                  <Label htmlFor="storage-secret">Secret Key / Private Key</Label>
                   <Input
-                    placeholder="us-east-1"
-                    value={storageSettings.region || ""}
-                    onChange={(e) => setStorageSettings({ ...storageSettings, region: e.target.value })}
+                    id="storage-secret"
+                    type="password"
+                    value={storageSettings.secretKey || ""}
+                    onChange={(e) => setStorageSettings({ ...storageSettings, secretKey: e.target.value })}
                   />
                 </div>
               </div>
+            )}
 
-              <div className="space-y-2">
-                <Label>Access Key / Client Email</Label>
-                <Input
-                  value={storageSettings.accessKey || ""}
-                  onChange={(e) => setStorageSettings({ ...storageSettings, accessKey: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Secret Key / Private Key</Label>
-                <Input
-                  type="password"
-                  value={storageSettings.secretKey || ""}
-                  onChange={(e) => setStorageSettings({ ...storageSettings, secretKey: e.target.value })}
-                />
-              </div>
-                </>
-              )}
-            </CardContent>
-            <CardFooter className="flex justify-end border-t p-6">
+            <div className="flex justify-end">
               <Button onClick={() => handleSaveSettings("storage")} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" /> Save Storage Settings
+                <Save className="size-4" />
+                Simpan Pengaturan Penyimpanan
               </Button>
-            </CardFooter>
-          </Card>
+            </div>
+          </SettingsSection>
         </TabsContent>
 
-        <TabsContent value="waha" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-emerald-500" />
-                WAHA Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure WhatsApp integration via WAHA for notifications and messaging.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>WAHA URL</Label>
-                  <Input
-                    placeholder="http://100.127.221.23:3002"
-                    value={wahaSettings.url || ""}
-                    onChange={(e) => setWahaSettings({ ...wahaSettings, url: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Session</Label>
-                  <Input
-                    placeholder="default"
-                    value={wahaSettings.session || ""}
-                    onChange={(e) => setWahaSettings({ ...wahaSettings, session: e.target.value })}
-                  />
-                </div>
-              </div>
-
+        {/* ── WAHA ── */}
+        <TabsContent value="waha">
+          <SettingsSection
+            icon={<MessageSquare />}
+            title="Konfigurasi WhatsApp (WAHA)"
+            description="Hubungkan layanan WhatsApp Business untuk notifikasi dan pesan otomatis."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>API Key</Label>
+                <Label htmlFor="waha-url">Alamat WAHA</Label>
                 <Input
-                  type="password"
-                  placeholder="Enter WAHA API key"
-                  value={wahaSettings.apiKey || ""}
-                  onChange={(e) => setWahaSettings({ ...wahaSettings, apiKey: e.target.value })}
+                  id="waha-url"
+                  placeholder="http://100.127.221.23:3002"
+                  value={wahaSettings.url || ""}
+                  onChange={(e) => setWahaSettings({ ...wahaSettings, url: e.target.value })}
                 />
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-end border-t p-6">
+              <div className="space-y-2">
+                <Label htmlFor="waha-session">Sesi</Label>
+                <Input
+                  id="waha-session"
+                  placeholder="default"
+                  value={wahaSettings.session || ""}
+                  onChange={(e) => setWahaSettings({ ...wahaSettings, session: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="waha-key">Kunci API</Label>
+              <Input
+                id="waha-key"
+                type="password"
+                placeholder="Masukkan kunci API WAHA"
+                value={wahaSettings.apiKey || ""}
+                onChange={(e) => setWahaSettings({ ...wahaSettings, apiKey: e.target.value })}
+              />
+            </div>
+
+            <div className="flex justify-end">
               <Button onClick={() => handleSaveSettings("waha")} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" /> Save WAHA Settings
+                <Save className="size-4" />
+                Simpan Pengaturan WhatsApp
               </Button>
-            </CardFooter>
-          </Card>
+            </div>
+          </SettingsSection>
         </TabsContent>
 
-        <TabsContent value="email" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-orange-500" />
-                Email SMTP Configuration
-              </CardTitle>
-              <CardDescription>
-                Configure SMTP settings for sending emails (parent notifications, appointment confirmations, etc.).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>SMTP Host</Label>
-                  <Input
-                    placeholder="smtp.sumopod.com"
-                    value={emailSettings.host || ""}
-                    onChange={(e) => setEmailSettings({ ...emailSettings, host: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Port</Label>
-                  <Input
-                    type="number"
-                    placeholder="465"
-                    value={emailSettings.port || ""}
-                    onChange={(e) => setEmailSettings({ ...emailSettings, port: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border p-4 shadow-sm">
-                <div className="space-y-0.5">
-                  <Label className="text-base">SSL/TLS</Label>
-                  <p className="text-sm text-zinc-500">Enable secure connection (recommended for port 465).</p>
-                </div>
-                <Switch
-                  checked={!!emailSettings.secure}
-                  onCheckedChange={(v) => setEmailSettings({ ...emailSettings, secure: v })}
+        {/* ── Email ── */}
+        <TabsContent value="email">
+          <SettingsSection
+            icon={<Mail />}
+            title="Konfigurasi Email SMTP"
+            description="Atur server SMTP untuk mengirim email, seperti notifikasi orang tua dan konfirmasi janji temu."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="smtp-host">Host SMTP</Label>
+                <Input
+                  id="smtp-host"
+                  placeholder="smtp.sumopod.com"
+                  value={emailSettings.host || ""}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, host: e.target.value })}
                 />
               </div>
-
               <div className="space-y-2">
-                <Label>Username</Label>
+                <Label htmlFor="smtp-port">Port</Label>
                 <Input
-                  placeholder="username"
+                  id="smtp-port"
+                  type="number"
+                  placeholder="465"
+                  value={emailSettings.port || ""}
+                  onChange={(e) => setEmailSettings({ ...emailSettings, port: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+
+            <ToggleRow
+              title="SSL/TLS"
+              description="Gunakan koneksi aman. Disarankan untuk port 465."
+              checked={!!emailSettings.secure}
+              onCheckedChange={(v) => setEmailSettings({ ...emailSettings, secure: v })}
+              tone="green"
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="smtp-user">Nama Pengguna</Label>
+                <Input
+                  id="smtp-user"
+                  placeholder="nama-pengguna"
                   value={emailSettings.username || ""}
                   onChange={(e) => setEmailSettings({ ...emailSettings, username: e.target.value })}
                 />
               </div>
-
               <div className="space-y-2">
-                <Label>Password</Label>
+                <Label htmlFor="smtp-pass">Kata Sandi</Label>
                 <Input
+                  id="smtp-pass"
                   type="password"
-                  placeholder="password"
+                  placeholder="kata-sandi"
                   value={emailSettings.password || ""}
                   onChange={(e) => setEmailSettings({ ...emailSettings, password: e.target.value })}
                 />
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-end border-t p-6">
+            </div>
+
+            <div className="flex justify-end">
               <Button onClick={() => handleSaveSettings("email")} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" /> Save Email Settings
+                <Save className="size-4" />
+                Simpan Pengaturan Email
               </Button>
-            </CardFooter>
-          </Card>
+            </div>
+          </SettingsSection>
         </TabsContent>
       </Tabs>
     </div>

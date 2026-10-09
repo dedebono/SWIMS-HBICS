@@ -7,9 +7,29 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { PageHeader, EmptyState } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { IconBox } from '@/components/ui/icon-box';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
+import {
+  Target,
+  Users,
+  Layers,
+  ListChecks,
+  QrCode,
+  ClipboardCopy,
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Save,
+} from 'lucide-react';
 
 interface Question {
   question_id: string;
@@ -48,6 +68,15 @@ const TARGET_LABEL: Record<string, string> = {
   appointment_student: 'Janji Temu · Siswa',
   appointment_case: 'Janji Temu · Kasus',
 };
+
+const QUESTION_TYPE_LABEL: Record<string, string> = {
+  multiple_choice: 'Pilihan Ganda',
+  checkbox: 'Pilihan Banyak',
+  text: 'Ulasan Teks',
+  rating: 'Penilaian Skala',
+};
+
+const questionTypeLabel = (type: string) => QUESTION_TYPE_LABEL[type] ?? type;
 
 export default function QuisionerAdminPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -122,9 +151,9 @@ export default function QuisionerAdminPage() {
     });
     if (res.success) {
       setTarget(val);
-      toast.success('Mode quisioner disimpan');
+      toast.success('Mode kuisioner berhasil disimpan.');
     } else {
-      toast.error(res.error ?? 'Gagal menyimpan');
+      toast.error(res.error ?? 'Gagal menyimpan mode kuisioner.');
     }
     setTargetLoading(false);
   };
@@ -166,7 +195,7 @@ export default function QuisionerAdminPage() {
       body: { ...form, question_list_id: form.question_list_id || null },
     });
     if (res.success && res.data) {
-      toast.success('Pertanyaan ditambahkan');
+      toast.success('Pertanyaan berhasil ditambahkan.');
       setForm({
         question_text: '',
         question_type: 'multiple_choice',
@@ -176,18 +205,18 @@ export default function QuisionerAdminPage() {
       });
       fetchQuestions();
     } else {
-      toast.error(res.error ?? 'Gagal menambahkan pertanyaan');
+      toast.error(res.error ?? 'Gagal menambahkan pertanyaan.');
     }
   };
 
   const handleDeleteQuestion = async (id: string) => {
     const res = await apiClient(`/quisioner/questions/${id}`, { method: 'DELETE' });
     if (res.success || res.error?.includes('204')) {
-      toast.success('Pertanyaan dihapus');
+      toast.success('Pertanyaan berhasil dihapus.');
       setExpandedQuestion(null);
       fetchQuestions();
     } else {
-      toast.error(res.error ?? 'Gagal menghapus');
+      toast.error(res.error ?? 'Gagal menghapus pertanyaan.');
     }
   };
 
@@ -197,22 +226,22 @@ export default function QuisionerAdminPage() {
       body: { question_list_id: listId || null },
     });
     if (res.success) {
-      toast.success('Pertanyaan dipindah ke daftar');
+      toast.success('Pertanyaan berhasil dipindahkan ke daftar lain.');
       fetchQuestions();
     } else {
-      toast.error(res.error ?? 'Gagal memindahkan pertanyaan');
+      toast.error(res.error ?? 'Gagal memindahkan pertanyaan.');
     }
   };
 
   const handleCreateAnswer = async (questionId: string) => {
     const af = answerForm[questionId];
     if (!af || !af.answer_text.trim()) {
-      toast.error('Isi teks jawaban');
+      toast.error('Mohon isi teks jawaban terlebih dahulu.');
       return;
     }
     const score = Number(af.score);
     if (Number.isNaN(score) || score < 0) {
-      toast.error('Isi poin/nilai yang valid');
+      toast.error('Mohon isi poin atau nilai yang valid.');
       return;
     }
     const res = await apiClient<Answer>(`/quisioner/questions/${questionId}/answers`, {
@@ -220,31 +249,30 @@ export default function QuisionerAdminPage() {
       body: { answer_text: af.answer_text.trim(), score },
     });
     if (res.success && res.data) {
-      toast.success('Jawaban ditambahkan');
+      toast.success('Jawaban berhasil ditambahkan.');
       setAnswerForm((prev) => ({ ...prev, [questionId]: { answer_text: '', score: '' } }));
       fetchAnswers(questionId);
     } else {
-      toast.error(res.error ?? 'Gagal menambahkan jawaban');
+      toast.error(res.error ?? 'Gagal menambahkan jawaban.');
     }
   };
 
   const handleUpdateAnswer = async (answerId: string, questionId: string, data: { answer_text?: string; score?: number }) => {
     const res = await apiClient<Answer>(`/quisioner/answers/${answerId}`, { method: 'PATCH', body: data });
     if (res.success && res.data) {
-      toast.success('Jawaban diperbarui');
       fetchAnswers(questionId);
     } else {
-      toast.error(res.error ?? 'Gagal memperbarui jawaban');
+      toast.error(res.error ?? 'Gagal memperbarui jawaban.');
     }
   };
 
   const handleDeleteAnswer = async (answerId: string, questionId: string) => {
     const res = await apiClient(`/quisioner/answers/${answerId}`, { method: 'DELETE' });
     if (res.success || res.error?.includes('204')) {
-      toast.success('Jawaban dihapus');
+      toast.success('Jawaban berhasil dihapus.');
       fetchAnswers(questionId);
     } else {
-      toast.error(res.error ?? 'Gagal menghapus jawaban');
+      toast.error(res.error ?? 'Gagal menghapus jawaban.');
     }
   };
 
@@ -252,9 +280,9 @@ export default function QuisionerAdminPage() {
     if (threshold === null) return;
     const res = await apiClient<{ threshold: number }>('/quisioner/threshold', { method: 'PATCH', body: { threshold } });
     if (res.success) {
-      toast.success('Nilai ambang disimpan');
+      toast.success('Nilai ambang berhasil disimpan.');
     } else {
-      toast.error(res.error ?? 'Gagal menyimpan nilai ambang');
+      toast.error(res.error ?? 'Gagal menyimpan nilai ambang.');
     }
   };
 
@@ -296,181 +324,223 @@ export default function QuisionerAdminPage() {
       ? await apiClient(`/quisioner/lists/${editingListId}`, { method: 'PATCH', body })
       : await apiClient('/quisioner/lists', { method: 'POST', body });
     if (res.success) {
-      toast.success(editingListId ? 'Daftar diperbarui' : 'Daftar dibuat');
+      toast.success(editingListId ? 'Daftar berhasil diperbarui.' : 'Daftar berhasil dibuat.');
       cancelEditList();
       fetchLists();
     } else {
-      toast.error(res.error ?? 'Gagal menyimpan daftar');
+      toast.error(res.error ?? 'Gagal menyimpan daftar.');
     }
   };
 
   const handleDeleteList = async (id: string) => {
     const res = await apiClient(`/quisioner/lists/${id}`, { method: 'DELETE' });
     if (res.success || res.error?.includes('204')) {
-      toast.success('Daftar dihapus');
+      toast.success('Daftar berhasil dihapus.');
       fetchLists();
       fetchQuestions();
     } else {
-      toast.error(res.error ?? 'Gagal menghapus daftar');
+      toast.error(res.error ?? 'Gagal menghapus daftar.');
     }
   };
 
-  const listName = (id: string | null) => lists.find((l) => l.question_list_id === id)?.name ?? '—';
+  const listName = (id: string | null) => lists.find((l) => l.question_list_id === id)?.name ?? 'Belum ada daftar';
   const countByList = questions.reduce<Record<string, number>>((acc, q) => {
     if (q.question_list_id) acc[q.question_list_id] = (acc[q.question_list_id] ?? 0) + 1;
     return acc;
   }, {});
 
+  const copyLink = (url: string, message: string) => {
+    navigator.clipboard?.writeText(url);
+    toast.success(message);
+  };
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const directBookingUrl = slug ? `${origin}/book/staff?t=${slug}` : '';
+  const employeeUrl = slug ? `${origin}/quisioner/employee-counseling?t=${slug}` : '';
+
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">Kelola Quisioner</h1>
-        <p className="text-muted-foreground">Tambah, edit, dan kelompokkan pertanyaan quisioner dinamis.</p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Kelola Kuisioner"
+        description="Tambah, ubah, dan kelompokkan pertanyaan kuisioner dinamis untuk alur konseling."
+      />
+
+      {/* ── Ringkasan ── */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Pertanyaan"
+          value={questions.length}
+          hint="Seluruh pertanyaan yang tersedia"
+          icon={<ListChecks className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Daftar Pertanyaan"
+          value={lists.length}
+          hint={`${lists.filter((l) => l.is_active).length} daftar aktif`}
+          icon={<Layers className="size-5" />}
+          iconTone="purple"
+          progress={
+            lists.length > 0
+              ? Math.round((lists.filter((l) => l.is_active).length / lists.length) * 100)
+              : 0
+          }
+          progressLabel="Persentase daftar aktif"
+        />
+        <StatCard
+          label="Nilai Ambang"
+          value={threshold ?? '—'}
+          hint="Nilai minimum untuk rekomendasi profesional"
+          icon={<Target className="size-5" />}
+          iconTone="green"
+        />
+        <StatCard
+          label="Mode Kuisioner"
+          value={target === 'student' ? 'Siswa' : 'Karyawan'}
+          hint={
+            target === 'student'
+              ? 'Digunakan pada alur kasus konseling siswa'
+              : 'Digunakan pada kuisioner karyawan (NIK)'
+          }
+          icon={<Users className="size-5" />}
+          iconTone={target === 'student' ? 'blue' : 'teal'}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Nilai Ambang Rekomendasi</CardTitle>
-          <CardDescription>Nilai total minimal untuk merekomendasikan bantuan profesional (Psikolog).</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3">
-            <Input
-              type="number"
-              className="w-32"
-              value={threshold ?? ''}
-              onChange={(e) => setThreshold(Number(e.target.value))}
-              disabled={thresholdLoading}
-            />
-            <Button onClick={handleSaveThreshold} disabled={thresholdLoading || threshold === null}>
-              Simpan Threshold
-            </Button>
-          </div>
-          {threshold !== null && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Skor &ge; {threshold} = Rekomendasi <strong>Professional</strong>. Di bawah itu = <strong>Internal</strong>.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Penggunaan Quisioner</CardTitle>
-          <CardDescription>Pilih apakah quisioner untuk alur siswa (kasus) atau staff (karyawan).</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Select
-              value={target}
-              onValueChange={(v) => handleSaveTarget(v as 'student' | 'staff')}
-              disabled={targetLoading}
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="student">Siswa — alur kasus konseling</SelectItem>
-                <SelectItem value="staff">Staff — quisioner karyawan (NIK)</SelectItem>
-              </SelectContent>
-            </Select>
-            {targetLoading && <span className="text-xs text-muted-foreground">Menyimpan...</span>}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {target === 'student'
-              ? 'Quisioner ditampilkan di tab konseling siswa (alur kasus).'
-              : 'Quisioner karyawan (login NIK) diaktifkan. Staff scan QR di bawah untuk mengisi.'}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>QR Code Booking Konseling (Guru &amp; Staff)</CardTitle>
-          <CardDescription>
-            Guru/staff scan QR ini untuk langsung booking janji temu konseling dengan konselor (tanpa login).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* ── Link 1: Direct booking (tanpa quisioner) ── */}
-          <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
-            <div>
-              <p className="text-sm font-medium">Booking Langsung (tanpa quisioner)</p>
-              <p className="text-xs text-muted-foreground">
-                Staff masukkan NIK → langsung pilih konselor sesuai gender.
-              </p>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* ── Nilai Ambang ── */}
+        <Card>
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <IconBox tone="green">
+                <Target />
+              </IconBox>
+              <div className="space-y-1">
+                <CardTitle>Nilai Ambang Rekomendasi</CardTitle>
+                <CardDescription>
+                  Nilai total minimum untuk merekomendasikan bantuan profesional (psikolog).
+                </CardDescription>
+              </div>
             </div>
-            {slug && (
-              <>
-                <QRCodeSVG
-                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/book/staff?t=${slug}`}
-                  size={160}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="threshold">Nilai ambang</Label>
+                <Input
+                  id="threshold"
+                  type="number"
+                  className="w-32"
+                  value={threshold ?? ''}
+                  onChange={(e) => setThreshold(Number(e.target.value))}
+                  disabled={thresholdLoading}
                 />
-                <div className="flex items-center gap-2">
-                  <code className="text-xs break-all rounded bg-muted px-2 py-1">
-                    {typeof window !== 'undefined' ? window.location.origin : ''}/book/staff?t={slug}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/book/staff?t=${slug}`;
-                      navigator.clipboard?.writeText(url);
-                      toast.success('Link disalin');
-                    }}
-                  >
-                    Salin
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* ── Link 2: Quisioner staff (employee counseling) ── */}
-          <div className="flex flex-col items-start gap-3 rounded-lg border p-4 border-blue-200 bg-blue-50/50">
-            <div>
-              <p className="text-sm font-medium">Quisioner Konseling Karyawan</p>
-              <p className="text-xs text-muted-foreground">
-                Staff isi quisioner → counselor/psikolog tindak lanjuti.
-              </p>
+              </div>
+              <Button onClick={handleSaveThreshold} disabled={thresholdLoading || threshold === null}>
+                <Save className="size-4" />
+                Simpan Nilai Ambang
+              </Button>
             </div>
-            {slug && (
-              <>
-                <QRCodeSVG
-                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/employee-counseling?t=${slug}`}
-                  size={160}
-                />
-                <div className="flex items-center gap-2">
-                  <code className="text-xs break-all rounded bg-muted px-2 py-1">
-                    {typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/employee-counseling?t={slug}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/quisioner/employee-counseling?t=${slug}`;
-                      navigator.clipboard?.writeText(url);
-                      toast.success('Link disalin');
-                    }}
-                  >
-                    Salin
-                  </Button>
-                </div>
-              </>
+            {threshold !== null ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted px-4 py-3">
+                <span className="text-xs text-secondary-text">
+                  Skor ≥ {threshold} menghasilkan rekomendasi
+                </span>
+                <StatusBadge tone="purple" label="Profesional" />
+                <span className="text-xs text-secondary-text">di bawahnya</span>
+                <StatusBadge tone="info" label="Internal" />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        {/* ── Penggunaan ── */}
+        <Card>
+          <CardHeader className="border-b">
+            <div className="flex items-start gap-3">
+              <IconBox tone="teal">
+                <Users />
+              </IconBox>
+              <div className="space-y-1">
+                <CardTitle>Penggunaan Kuisioner</CardTitle>
+                <CardDescription>
+                  Pilih apakah kuisioner dipakai untuk alur siswa (kasus) atau karyawan (staf).
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="target-select">Mode kuisioner</Label>
+              <Select
+                value={target}
+                onValueChange={(v) => handleSaveTarget(v as 'student' | 'staff')}
+                disabled={targetLoading}
+              >
+                <SelectTrigger id="target-select" className="w-full sm:w-80">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Siswa — alur kasus konseling</SelectItem>
+                  <SelectItem value="staff">Staf — kuisioner karyawan (NIK)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {targetLoading ? (
+              <StatusBadge tone="info" label="Menyimpan…" />
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {target === 'student'
+                  ? 'Kuisioner ditampilkan pada tab konseling siswa (alur kasus).'
+                  : 'Kuisioner karyawan dengan login NIK diaktifkan. Staf dapat memindai QR di bawah untuk mengisi.'}
+              </p>
             )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── QR Code ── */}
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="purple">
+              <QrCode />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Kode QR Pemesanan Konseling</CardTitle>
+              <CardDescription>
+                Guru atau staf memindai kode ini untuk langsung membuat janji temu dengan konselor tanpa perlu masuk.
+              </CardDescription>
+            </div>
           </div>
+        </CardHeader>
+        <CardContent className="grid gap-5 lg:grid-cols-2">
+          <QrPanel
+            title="Pemesanan Langsung"
+            description="Staf memasukkan NIK lalu langsung memilih konselor sesuai genders."
+            url={directBookingUrl}
+            highlighted={false}
+            onCopy={() => copyLink(directBookingUrl, 'Tautan pemesanan disalin.')}
+          />
+          <QrPanel
+            title="Kuisioner Konseling Karyawan"
+            description="Staf mengisi kuisioner, kemudian konselor atau psikolog menindaklanjuti."
+            url={employeeUrl}
+            highlighted
+            onCopy={() => copyLink(employeeUrl, 'Tautan kuisioner disalin.')}
+          />
         </CardContent>
       </Card>
 
       {/* ── DAFTAR PERTANYAAN (question lists) ─────────────────────────────── */}
       <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
+        <CardHeader className="border-b">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
               <CardTitle>Daftar Pertanyaan</CardTitle>
               <CardDescription>
-                Kelompokkan pertanyaan menjadi daftar, lalu assign ke{' '}
-                <strong>Janji Temu (Siswa / Kasus)</strong>. Daftar yang aktif dipakai oleh flow terkait.
+                Kelompokkan pertanyaan menjadi daftar, lalu tetapkan ke Janji Temu (Siswa atau
+                Kasus). Daftar aktif dipakai oleh alur terkait.
               </CardDescription>
             </div>
             <Button
@@ -480,159 +550,245 @@ export default function QuisionerAdminPage() {
                 else setShowListForm((v) => !v);
               }}
             >
-              {showListForm ? 'Tutup' : 'Buat Daftar'}
+              <Plus className="size-4" />
+              {showListForm ? 'Tutup Formulir' : 'Buat Daftar'}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {showListForm && (
-            <form onSubmit={handleSaveList} className="space-y-3 rounded-lg border p-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Nama Daftar</Label>
+          {showListForm ? (
+            <form onSubmit={handleSaveList} className="space-y-4 rounded-xl border border-border bg-muted/40 p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="list-name">Nama Daftar</Label>
                   <Input
+                    id="list-name"
                     value={listForm.name}
                     onChange={(e) => setListForm({ ...listForm, name: e.target.value })}
                     placeholder="cth. Skrining Awal"
                     required
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label>Deskripsi</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="list-description">Deskripsi</Label>
                   <Input
+                    id="list-description"
                     value={listForm.description}
                     onChange={(e) => setListForm({ ...listForm, description: e.target.value })}
                     placeholder="Opsional"
                   />
                 </div>
               </div>
+
               <div className="space-y-2">
-                <Label className="text-sm">Assign ke:</Label>
+                <Label htmlFor="list-target">Tetapkan ke:</Label>
                 <div className="flex flex-wrap gap-4">
                   {TARGET_OPTIONS.map((t) => (
-                    <label key={t.value} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={listForm.targets[t.value]} onChange={() => toggleTarget(t.value)} />
+                    <label
+                      key={t.value}
+                      htmlFor={`target-${t.value}`}
+                      className="flex cursor-pointer items-center gap-2 text-sm text-secondary-text"
+                    >
+                      <input
+                        id={`target-${t.value}`}
+                        type="checkbox"
+                        className="size-4 accent-[var(--color-primary)]"
+                        checked={listForm.targets[t.value]}
+                        onChange={() => toggleTarget(t.value)}
+                      />
                       {t.label}
                     </label>
                   ))}
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="list-active">Aktif</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Dipakai oleh alur yang telah ditetapkan.
+                  </p>
+                </div>
+                <Switch
+                  id="list-active"
                   checked={listForm.is_active}
-                  onChange={(e) => setListForm({ ...listForm, is_active: e.target.checked })}
+                  onCheckedChange={(v) => setListForm({ ...listForm, is_active: v })}
                 />
-                Aktif (dipakai oleh flow yang di-assign)
-              </label>
-              <div className="flex gap-2">
-                <Button type="submit">{editingListId ? 'Simpan Perubahan' : 'Buat Daftar'}</Button>
-                {editingListId && (
+              </div>
+
+              <div className="flex flex-wrap gap-2.5">
+                <Button type="submit">
+                  <Save className="size-4" />
+                  {editingListId ? 'Simpan Perubahan' : 'Buat Daftar'}
+                </Button>
+                {editingListId ? (
                   <Button type="button" variant="outline" onClick={cancelEditList}>
                     Batal
                   </Button>
-                )}
+                ) : null}
               </div>
             </form>
-          )}
+          ) : null}
 
           {listsLoading ? (
-            <p className="text-sm text-muted-foreground">Memuat...</p>
+            <div className="flex flex-col items-center gap-3 py-10">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Memuat daftar pertanyaan…</p>
+            </div>
+          ) : lists.length === 0 ? (
+            <EmptyState
+              icon={<Layers />}
+              title="Belum ada daftar pertanyaan"
+              description="Anda belum memiliki data. Mulai dengan membuat daftar pertanyaan pertama."
+              action={
+                <Button onClick={() => setShowListForm(true)}>
+                  <Plus className="size-4" />
+                  Buat Daftar
+                </Button>
+              }
+            />
           ) : (
             <div className="space-y-3">
               {lists.map((l) => (
-                <div key={l.question_list_id} className="border rounded p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{l.name}</p>
-                        {l.is_active && (
-                          <Badge className="bg-green-100 text-green-700 text-[10px] hover:bg-green-100">Aktif</Badge>
-                        )}
+                <div
+                  key={l.question_list_id}
+                  className="rounded-xl border border-border p-4 transition-colors hover:border-primary/25"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-heading">{l.name}</p>
+                        <StatusBadge
+                          tone={l.is_active ? "success" : "neutral"}
+                          label={l.is_active ? "Aktif" : "Nonaktif"}
+                        />
                       </div>
-                      {l.description && <p className="text-xs text-muted-foreground">{l.description}</p>}
-                      <div className="flex flex-wrap gap-1 mt-1">
+                      {l.description ? (
+                        <p className="text-xs leading-relaxed text-muted-foreground">{l.description}</p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {l.targets.map((t) => (
-                          <Badge key={t} variant="outline" className="text-[10px]">
+                          <Badge key={t} variant="outline">
                             {TARGET_LABEL[t] ?? t}
                           </Badge>
                         ))}
-                        {l.targets.length === 0 && (
-                          <span className="text-[10px] text-muted-foreground">Belum di-assign</span>
-                        )}
+                        {l.targets.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">Belum ditetapkan ke alur mana pun</span>
+                        ) : null}
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground">
                         {countByList[l.question_list_id] ?? 0} pertanyaan
                       </p>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <Button size="sm" variant="outline" onClick={() => startEditList(l)}>
-                        Edit
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label={`Ubah daftar ${l.name}`}
+                        onClick={() => startEditList(l)}
+                      >
+                        <Pencil className="size-4" />
+                        Ubah
                       </Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleDeleteList(l.question_list_id)}>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        aria-label={`Hapus daftar ${l.name}`}
+                        onClick={() => handleDeleteList(l.question_list_id)}
+                      >
+                        <Trash2 className="size-4" />
                         Hapus
                       </Button>
                     </div>
                   </div>
                 </div>
               ))}
-              {lists.length === 0 && <p className="text-sm text-muted-foreground">Belum ada daftar pertanyaan.</p>}
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* ── Tambah Pertanyaan ── */}
       <Card>
-        <CardHeader>
-          <CardTitle>Tambah Pertanyaan</CardTitle>
-          <CardDescription>Pilih daftar tujuan agar pertanyaan masuk ke grup yang tepat.</CardDescription>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="blue">
+              <Plus />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Tambah Pertanyaan</CardTitle>
+              <CardDescription>
+                Pilih daftar tujuan agar pertanyaan masuk ke grup yang tepat.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCreateQuestion} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <input
-                className="border rounded p-2 col-span-2"
-                placeholder="Teks pertanyaan"
-                value={form.question_text}
-                onChange={(e) => setForm({ ...form, question_text: e.target.value })}
-                required
-              />
-              <select
-                className="border rounded p-2"
-                value={form.question_type}
-                onChange={(e) => setForm({ ...form, question_type: e.target.value as Question['question_type'] })}
-              >
-                <option value="multiple_choice">Multiple Choice</option>
-                <option value="checkbox">Checkbox</option>
-                <option value="text">Text</option>
-                <option value="rating">Rating</option>
-              </select>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="question-text">Teks Pertanyaan</Label>
+                <Input
+                  id="question-text"
+                  placeholder="Contoh: Apakah kamu merasamurah dalam belajar?"
+                  value={form.question_text}
+                  onChange={(e) => setForm({ ...form, question_text: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="question-type">Jenis Jawaban</Label>
+                <Select
+                  value={form.question_type}
+                  onValueChange={(v) =>
+                    setForm({ ...form, question_type: (v ?? 'multiple_choice') as Question['question_type'] })
+                  }
+                >
+                  <SelectTrigger id="question-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="multiple_choice">Pilihan Ganda</SelectItem>
+                    <SelectItem value="checkbox">Pilihan Banyak</SelectItem>
+                    <SelectItem value="text">Ulasan Teks</SelectItem>
+                    <SelectItem value="rating">Penilaian Skala</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex items-center gap-4 flex-wrap">
-              <label className="flex items-center gap-2 text-sm">
+
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex items-center gap-2.5 pb-2.5">
                 <input
+                  id="question-required"
                   type="checkbox"
+                  className="size-4 accent-[var(--color-primary)]"
                   checked={form.is_required}
                   onChange={(e) => setForm({ ...form, is_required: e.target.checked })}
                 />
-                Wajib diisi
-              </label>
-              <input
-                type="number"
-                className="border rounded p-2 w-24"
-                placeholder="Urutan"
-                value={form.order_index}
-                onChange={(e) => setForm({ ...form, order_index: Number(e.target.value) })}
-              />
-              <div className="flex items-center gap-2">
-                <Label htmlFor="qlist" className="text-sm">
-                  Daftar
+                <Label htmlFor="question-required" className="text-sm font-normal">
+                  Wajib diisi
                 </Label>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="question-order">Urutan</Label>
+                <Input
+                  id="question-order"
+                  type="number"
+                  className="w-24"
+                  value={form.order_index}
+                  onChange={(e) => setForm({ ...form, order_index: Number(e.target.value) })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="qlist">Daftar</Label>
                 <Select
                   value={form.question_list_id}
                   onValueChange={(v) => setForm({ ...form, question_list_id: v ?? '' })}
                 >
-                  <SelectTrigger id="qlist" className="w-56">
+                  <SelectTrigger id="qlist" className="w-full sm:w-64">
                     <SelectValue placeholder="Pilih daftar" />
                   </SelectTrigger>
                   <SelectContent>
@@ -644,48 +800,104 @@ export default function QuisionerAdminPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button type="submit">Simpan</Button>
+
+              <Button type="submit">
+                <Save className="size-4" />
+                Simpan Pertanyaan
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
+      {/* ── Bank Pertanyaan ── */}
       <Card>
-        <CardHeader>
-          <CardTitle>Bank Pertanyaan</CardTitle>
-          <CardDescription>
-            Semua pertanyaan. Pindahkan antar daftar lewat dropdown &quot;Daftar&quot; di tiap pertanyaan.
-          </CardDescription>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="slate">
+              <ListChecks />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Bank Pertanyaan</CardTitle>
+              <CardDescription>
+                Semua pertanyaan yang tersimpan. Pindahkan antar daftar lewat pilihan &quot;Daftar&quot;
+                pada tiap pertanyaan.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-sm text-muted-foreground">Memuat...</p>
+            <div className="flex flex-col items-center gap-3 py-10">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Memuat pertanyaan…</p>
+            </div>
+          ) : questions.length === 0 ? (
+            <EmptyState
+              icon={<ListChecks />}
+              title="Belum ada pertanyaan"
+              description="Anda belum memiliki data. Mulai dengan menambahkan pertanyaan pada formulir di atas."
+            />
           ) : (
             <div className="space-y-3">
               {questions.map((q) => (
-                <div key={q.question_id} className="border rounded">
-                  <div className="flex items-center justify-between p-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{q.question_text}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {q.question_type} {q.is_required ? '• Wajib' : ''} • Urutan {q.order_index} • Daftar:{' '}
-                        <span className="font-medium">{listName(q.question_list_id)}</span>
+                <div
+                  key={q.question_id}
+                  className="rounded-xl border border-border transition-colors hover:border-primary/25"
+                >
+                  <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-sm font-medium leading-relaxed text-heading">
+                        {q.question_text}
                       </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">{questionTypeLabel(q.question_type)}</Badge>
+                        {q.is_required ? (
+                          <StatusBadge tone="warning" label="Wajib diisi" />
+                        ) : (
+                          <StatusBadge tone="neutral" label="Opsional" />
+                        )}
+                        <span className="text-xs text-muted-foreground">Urutan {q.order_index}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Daftar: <span className="font-medium text-secondary-text">{listName(q.question_list_id)}</span>
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <Button size="sm" variant="outline" onClick={() => toggleExpand(q.question_id)}>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label={`${expandedQuestion === q.question_id ? 'Sembunyikan' : 'Kelola'} jawaban pertanyaan ${q.question_text}`}
+                        onClick={() => toggleExpand(q.question_id)}
+                      >
+                        {expandedQuestion === q.question_id ? (
+                          <ChevronDown className="size-4" />
+                        ) : (
+                          <ChevronRight className="size-4" />
+                        )}
                         {expandedQuestion === q.question_id ? 'Sembunyikan' : 'Jawaban'}
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteQuestion(q.question_id)}>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        aria-label={`Hapus pertanyaan ${q.question_text}`}
+                        onClick={() => handleDeleteQuestion(q.question_id)}
+                      >
+                        <Trash2 className="size-4" />
                         Hapus
                       </Button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 px-3 pb-3">
-                    <Label className="text-xs">Pindah ke daftar:</Label>
-                    <Select value={q.question_list_id ?? ''} onValueChange={(v) => handleReassignQuestion(q.question_id, v ?? '')}>
-                      <SelectTrigger className="w-56">
+                  <div className="flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:items-center">
+                    <Label htmlFor={`move-${q.question_id}`} className="shrink-0 text-xs">
+                      Pindahkan ke daftar:
+                    </Label>
+                    <Select
+                      value={q.question_list_id ?? ''}
+                      onValueChange={(v) => handleReassignQuestion(q.question_id, v ?? '')}
+                    >
+                      <SelectTrigger id={`move-${q.question_id}`} className="w-full sm:w-64">
                         <SelectValue placeholder="Pilih daftar" />
                       </SelectTrigger>
                       <SelectContent>
@@ -698,64 +910,137 @@ export default function QuisionerAdminPage() {
                     </Select>
                   </div>
 
-                  {expandedQuestion === q.question_id && (
-                    <div className="border-t p-3 space-y-3">
-                      <p className="text-xs font-medium text-muted-foreground">Jawaban & Poin</p>
+                  {expandedQuestion === q.question_id ? (
+                    <div className="space-y-3 border-t border-border p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Jawaban dan Poin
+                      </p>
                       <div className="space-y-2">
                         {(answersMap[q.question_id] ?? []).map((a) => (
-                          <div key={a.answer_id} className="flex items-center gap-2">
+                          <div key={a.answer_id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
                             <Input
+                              aria-label={`Teks jawaban ${a.answer_text}`}
                               className="flex-1"
                               value={a.answer_text}
-                              onChange={(e) => handleUpdateAnswer(a.answer_id, q.question_id, { answer_text: e.target.value })}
+                              onChange={(e) =>
+                                handleUpdateAnswer(a.answer_id, q.question_id, { answer_text: e.target.value })
+                              }
                             />
                             <Input
+                              aria-label={`Poin untuk jawaban ${a.answer_text}`}
                               type="number"
-                              className="w-20"
+                              className="w-full sm:w-24"
                               value={a.score}
-                              onChange={(e) => handleUpdateAnswer(a.answer_id, q.question_id, { score: Number(e.target.value) })}
+                              onChange={(e) =>
+                                handleUpdateAnswer(a.answer_id, q.question_id, { score: Number(e.target.value) })
+                              }
                             />
-                            <Button variant="destructive" size="sm" onClick={() => handleDeleteAnswer(a.answer_id, q.question_id)}>
-                              Hapus
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              aria-label={`Hapus jawaban ${a.answer_text}`}
+                              onClick={() => handleDeleteAnswer(a.answer_id, q.question_id)}
+                            >
+                              <Trash2 className="size-4" />
                             </Button>
                           </div>
                         ))}
-                        {(answersMap[q.question_id] ?? []).length === 0 && (
-                          <p className="text-xs text-muted-foreground">Belum ada jawaban.</p>
-                        )}
+                        {(answersMap[q.question_id] ?? []).length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            Belum ada jawaban untuk pertanyaan ini.
+                          </p>
+                        ) : null}
                       </div>
 
-                      <div className="flex items-center gap-2 pt-2">
+                      <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center">
                         <Input
+                          aria-label="Teks jawaban baru"
                           className="flex-1"
                           placeholder="Teks jawaban baru"
                           value={answerForm[q.question_id]?.answer_text ?? ''}
                           onChange={(e) =>
-                            setAnswerForm((prev) => ({ ...prev, [q.question_id]: { ...prev[q.question_id], answer_text: e.target.value } }))
+                            setAnswerForm((prev) => ({
+                              ...prev,
+                              [q.question_id]: { ...prev[q.question_id], answer_text: e.target.value },
+                            }))
                           }
                         />
                         <Input
+                          aria-label="Poin untuk jawaban baru"
                           type="number"
-                          className="w-20"
+                          className="w-full sm:w-24"
                           placeholder="Poin"
                           value={answerForm[q.question_id]?.score ?? ''}
                           onChange={(e) =>
-                            setAnswerForm((prev) => ({ ...prev, [q.question_id]: { ...prev[q.question_id], score: e.target.value } }))
+                            setAnswerForm((prev) => ({
+                              ...prev,
+                              [q.question_id]: { ...prev[q.question_id], score: e.target.value },
+                            }))
                           }
                         />
                         <Button size="sm" onClick={() => handleCreateAnswer(q.question_id)}>
+                          <Plus className="size-4" />
                           Tambah Jawaban
                         </Button>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))}
-              {questions.length === 0 && <p className="text-sm text-muted-foreground">Belum ada pertanyaan.</p>}
             </div>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/** QR code panel with a copyable link. */
+function QrPanel({
+  title,
+  description,
+  url,
+  highlighted,
+  onCopy,
+}: {
+  title: string;
+  description: string;
+  url: string;
+  highlighted: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div
+      className={`flex flex-col items-start gap-4 rounded-xl border p-5 ${
+        highlighted ? 'border-info-soft bg-info-soft/40' : 'border-border bg-muted/40'
+      }`}
+    >
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-heading">{title}</p>
+          {highlighted ? <StatusBadge tone="info" label="Kuisioner" /> : null}
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+
+      {url ? (
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="rounded-xl border border-border bg-card p-3">
+            <QRCodeSVG value={url} size={140} />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <code className="block break-all rounded-lg bg-card px-3 py-2 text-xs text-secondary-text">
+              {url}
+            </code>
+            <Button size="sm" variant="outline" onClick={onCopy}>
+              <ClipboardCopy className="size-4" />
+              Salin Tautan
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">Kode QR sedang disiapkan…</p>
+      )}
     </div>
   );
 }

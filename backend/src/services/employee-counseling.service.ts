@@ -17,7 +17,13 @@ import { sendHighPriorityAlert } from './notifications.service.js';
 
 // ─── HIGH PRIORITY DETECTION ──────────────────────────────────────────────────
 
-function detectHighPriority(answers: CreateSubmissionInput['answers']): boolean {
+/**
+ * Q8 (safety threat) or Q9 (needs help now) answered "Ya"/"Tidak yakin" makes the
+ * intake high priority. Exported so the combined booking flow derives the flag the
+ * same way — two copies of this rule would eventually disagree about which
+ * intakes are urgent.
+ */
+export function detectHighPriority(answers: CreateSubmissionInput['answers']): boolean {
   return (
     answers.q8_safety_threat === 'ya' ||
     answers.q8_safety_threat === 'tidak_yakin' ||
@@ -96,11 +102,21 @@ export async function listSubmissions(
   let sql = `
     SELECT s.*,
            u_c.full_name AS counselor_name,
-           u_s.full_name AS submitted_by_name
-    FROM employee_counseling_submissions s
-    LEFT JOIN users u_c ON u_c.user_id = s.assigned_counselor_id
-    LEFT JOIN users u_s ON u_s.user_id = s.submitted_by
-    WHERE s.tenant_id = $1 AND s.deleted_at IS NULL
+           u_s.full_name AS submitted_by_name,
+           -- Booking columns (migration 050). Surfaced so the counselor sees the
+           -- schedule next to the intake instead of having to cross-reference the
+           -- appointments calendar. NULL for the old standalone submissions.
+           s.booking_status,
+           s.nik_verified,
+           s.scheduled_at,
+           s.slot_start,
+           s.slot_end,
+           a.status AS appointment_status
+      FROM employee_counseling_submissions s
+      LEFT JOIN users u_c ON u_c.user_id = s.assigned_counselor_id
+      LEFT JOIN users u_s ON u_s.user_id = s.submitted_by
+      LEFT JOIN appointments a ON a.appointment_id = s.appointment_id
+     WHERE s.tenant_id = $1 AND s.deleted_at IS NULL
   `;
   const params: unknown[] = [tenantId];
   let p = 2;

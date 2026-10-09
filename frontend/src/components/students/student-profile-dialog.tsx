@@ -3,9 +3,23 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge, severityTone } from '@/components/ui/status-badge';
 import { apiClient } from '@/lib/api-client';
-import { Card, CardContent } from '@/components/ui/card';
+import { PageHeader, EmptyState } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { IconBox } from '@/components/ui/icon-box';
+import {
+  DataTable,
+  TableBody,
+  TableCell,
+  TableEmptyRow,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui/data-table';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, Award, ArrowRight, ClipboardList, ShieldAlert, UserRound } from 'lucide-react';
 
 interface StudentProfile {
   student_id: string;
@@ -28,6 +42,47 @@ interface StudentProfile {
     status: string;
     handled_by: string;
   }>;
+}
+
+const RISK_LABEL: Record<string, string> = {
+  LOW: 'Rendah',
+  MEDIUM: 'Sedang',
+  HIGH: 'Tinggi',
+  CRITICAL: 'Kritis',
+};
+
+const TIMELINE_TYPE_LABEL: Record<string, string> = {
+  INCIDENT: 'Insiden',
+  INTERVENTION: 'Intervensi',
+  OBSERVATION: 'Prestasi',
+  CASE_STATUS_CHANGE: 'Perubahan Kasus',
+};
+
+/** Nilai "status" pada profil berisi klasifikasi insiden/intervensi (atau
+ *  "RECORDED"), jadi dipetakan memakai skala klasifikasi yang sama. */
+const STATUS_DISPLAY: Record<string, string> = {
+  LOW: 'Minor',
+  MEDIUM: 'Moderate',
+  HIGH: 'Major',
+  CRITICAL: 'Severe',
+  RECORDED: 'Tercatat',
+};
+
+function label(map: Record<string, string>, value: string | null | undefined): string {
+  if (!value) return '—';
+  return map[String(value).toUpperCase()] ?? value;
+}
+
+function statusLabel(value: string | null | undefined): string {
+  if (!value) return '—';
+  return STATUS_DISPLAY[String(value).toUpperCase()] ?? value;
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function StudentProfileDialog({
@@ -60,117 +115,170 @@ export function StudentProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!w-full !max-w-[calc(100vw-2rem)] !max-h-[90vh] overflow-y-auto overflow-x-hidden p-6 sm:!p-8">
+      <DialogContent className="!max-h-[90vh] !w-full !max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden sm:!max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Student Profile</DialogTitle>
-          <DialogDescription>Overview and history for this student.</DialogDescription>
+          <DialogTitle className="flex items-center gap-2.5">
+            <IconBox tone="blue" size="sm">
+              <UserRound />
+            </IconBox>
+            Profil Siswa
+          </DialogTitle>
+          <DialogDescription>
+            Ringkasan profil dan riwayat aktivitas siswa ini.
+          </DialogDescription>
         </DialogHeader>
 
         {loading ? (
           <div className="flex h-40 items-center justify-center">
-            <span className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span className="size-6 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
           </div>
         ) : profile ? (
           <div className="space-y-6">
-            {/* Basic Info */}
-            <Card className="glass">
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Name</p>
-                    <p className="font-medium">{profile.full_name}</p>
+            {/* Informasi dasar */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Informasi Dasar</CardTitle>
+                <CardDescription>
+                  Data identitas dan pendaftaran siswa.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <dt className="text-xs text-muted-foreground">Nama Lengkap</dt>
+                    <dd className="text-sm font-medium text-heading">
+                      {profile.full_name || '—'}
+                    </dd>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">ID (NIS/NISN)</p>
-                    <p className="font-medium">{profile.national_id || '-'}</p>
+                  <div className="space-y-1">
+                    <dt className="text-xs text-muted-foreground">NIS/NISN</dt>
+                    <dd className="font-mono text-sm font-medium text-heading">
+                      {profile.national_id || '—'}
+                    </dd>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Class</p>
-                    <p className="font-medium">{profile.enrollment?.class_name || '-'}</p>
+                  <div className="space-y-1">
+                    <dt className="text-xs text-muted-foreground">Kelas</dt>
+                    <dd className="text-sm font-medium text-heading">
+                      {profile.enrollment?.class_name || '—'}
+                    </dd>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Academic Year</p>
-                    <p className="font-medium">{profile.enrollment?.academic_year || '-'}</p>
+                  <div className="space-y-1">
+                    <dt className="text-xs text-muted-foreground">Tahun Ajaran</dt>
+                    <dd className="text-sm font-medium text-heading">
+                      {profile.enrollment?.academic_year || '—'}
+                    </dd>
                   </div>
-                </div>
+                </dl>
               </CardContent>
             </Card>
 
-            {/* Behavior Summary */}
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Behavior Summary</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground">Active Cases</p>
-                  <p className="text-2xl font-bold">{profile.summary?.total_active_cases || 0}</p>
-                </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground">Incidents</p>
-                  <p className="text-2xl font-bold">{profile.summary?.total_incidents || 0}</p>
-                </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground">Risk Level</p>
-                  <Badge variant={
-                    profile.summary?.risk_level === 'CRITICAL' || profile.summary?.risk_level === 'HIGH' ? 'destructive' :
-                    profile.summary?.risk_level === 'MEDIUM' ? 'secondary' : 'default'
-                  }>
-                    {profile.summary?.risk_level || 'LOW'}
-                  </Badge>
-                </div>
-                <div className="rounded-lg border bg-card p-4 shadow-sm">
-                  <p className="text-xs text-muted-foreground">Positive Notes</p>
-                  <p className="text-2xl font-bold text-green-600">{profile.summary?.positive_count || 0}</p>
-                </div>
+            {/* Ringkasan perilaku */}
+            <div className="space-y-3">
+              <div>
+                <p className="card-label">Ringkasan Perilaku</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  label="Kasus Aktif"
+                  value={profile.summary?.total_active_cases || 0}
+                  hint="Kasus yang masih berjalan sampai saat ini."
+                  icon={<ClipboardList className="size-5" />}
+                  iconTone="blue"
+                />
+                <StatCard
+                  label="Insiden"
+                  value={profile.summary?.total_incidents || 0}
+                  hint={
+                    profile.summary?.last_incident_date
+                      ? `Insiden terakhir ${formatDate(profile.summary.last_incident_date)}`
+                      : 'Belum ada insiden tercatat.'
+                  }
+                  icon={<AlertTriangle className="size-5" />}
+                  iconTone="red"
+                />
+                <StatCard
+                  label="Catatan Positif"
+                  value={profile.summary?.positive_count || 0}
+                  hint="Prestasi dan catatan positif siswa."
+                  icon={<Award className="size-5" />}
+                  iconTone="green"
+                />
+                <StatCard
+                  label="Tingkat Risiko"
+                  value={label(RISK_LABEL, profile.summary?.risk_level) === '—' ? 'Rendah' : label(RISK_LABEL, profile.summary.risk_level)}
+                  hint="Klasifikasi risiko tertinggi dari kasus aktif."
+                  icon={<ShieldAlert className="size-5" />}
+                  iconTone="purple"
+                />
               </div>
             </div>
 
-            {/* Timeline */}
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-muted-foreground">Chronological Timeline</h3>
-              <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-sm min-w-[500px]">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="h-10 px-4 text-left font-medium">Date</th>
-                      <th className="h-10 px-4 text-left font-medium">Type</th>
-                      <th className="h-10 px-4 text-left font-medium">Status</th>
-                      <th className="h-10 px-4 text-left font-medium">Handled By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {profile.timeline?.length > 0 ? (
-                      profile.timeline.map((item, i) => (
-                        <tr key={i} className="border-b last:border-0 hover:bg-muted/50">
-                          <td className="p-4">{new Date(item.date).toLocaleDateString()}</td>
-                          <td className="p-4">{item.type}</td>
-                          <td className="p-4">
-                            <Badge variant="outline">{item.status}</Badge>
-                          </td>
-                          <td className="p-4">{item.handled_by}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                          No history found for this student.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+            {/* Linimasa */}
+            <div className="space-y-3">
+              <div>
+                <p className="card-label">Linimasa Kronologis</p>
               </div>
+              <Card>
+                <CardContent className="px-0 pb-0">
+                  <DataTable>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeaderCell scope="col">Tanggal</TableHeaderCell>
+                        <TableHeaderCell scope="col">Jenis</TableHeaderCell>
+                        <TableHeaderCell scope="col">Status</TableHeaderCell>
+                        <TableHeaderCell scope="col">Ditangani Oleh</TableHeaderCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {profile.timeline?.length > 0 ? (
+                        profile.timeline.map((item, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="whitespace-nowrap text-sm text-secondary-text">
+                              {formatDate(item.date)}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-heading">
+                              {label(TIMELINE_TYPE_LABEL, item.type)}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge
+                                tone={severityTone(item.status)}
+                                label={statusLabel(item.status)}
+                              />
+                            </TableCell>
+                            <TableCell className="text-sm text-secondary-text">
+                              {item.handled_by || '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableEmptyRow colSpan={4}>
+                          Belum ada riwayat untuk siswa ini.
+                        </TableEmptyRow>
+                      )}
+                    </TableBody>
+                  </DataTable>
+                </CardContent>
+              </Card>
             </div>
-            <div className="pt-2">
-              <Link
-                href={`/dashboard/students/${profile.student_id}/timeline`}
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-              >
-                View full student timeline &amp; progress →
-              </Link>
-            </div>
+
+            <Card>
+              <CardFooter className="justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Buka linimasa lengkap beserta filter dan grafik progres.
+                </p>
+                <Button render={<Link href={`/dashboard/students/${profile.student_id}/timeline`} />}>
+                  Lihat Linimasa Lengkap
+                  <ArrowRight className="size-4" />
+                </Button>
+              </CardFooter>
+            </Card>
           </div>
         ) : (
-          <div className="p-8 text-center text-muted-foreground">Failed to load profile.</div>
+          <EmptyState
+            icon={<UserRound />}
+            title="Profil tidak ditemukan"
+            description="Gagal memuat profil siswa. Silakan coba kembali beberapa saat lagi."
+          />
         )}
       </DialogContent>
     </Dialog>

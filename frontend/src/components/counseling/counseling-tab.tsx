@@ -1,17 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
-import { id } from 'date-fns/locale';
+import { id as localeId } from 'date-fns/locale';
 import { formatInTimeZone } from 'date-fns-tz';
-import { CalendarClock, Send, FileText } from 'lucide-react';
+import {
+  CalendarClock,
+  Send,
+  FileText,
+  Info,
+  Lock,
+  Loader2,
+  ShieldAlert,
+} from 'lucide-react';
+import { IconBox } from '@/components/ui/icon-box';
+import { EmptyState } from '@/components/ui/page-header';
+import { StatCard } from '@/components/ui/stat-card';
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
+import {
+  DataTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from '@/components/ui/data-table';
 
 interface Question {
   question_id: string;
@@ -43,6 +61,22 @@ interface CounselingTabProps {
   studentId: string;
   user: any;
 }
+
+/** Status janji temu (lowercase dari backend) → badge semantik + label Bahasa Indonesia. */
+const APPOINTMENT_STATUS: Record<string, { tone: StatusTone; label: string }> = {
+  confirmed: { tone: 'success', label: 'Dikonfirmasi' },
+  pending: { tone: 'warning', label: 'Menunggu' },
+  cancelled: { tone: 'danger', label: 'Dibatalkan' },
+  completed: { tone: 'info', label: 'Selesai' },
+};
+
+const DEFAULT_APPOINTMENT_STATUS: { tone: StatusTone; label: string } = {
+  tone: 'neutral',
+  label: 'Tidak Diketahui',
+};
+
+const formatSchedule = (value: string) =>
+  formatInTimeZone(new Date(value), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: localeId });
 
 export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -155,21 +189,17 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
     }
   };
 
-  const statusColor = (s: string) => {
-    switch (s) {
-      case 'confirmed': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      case 'completed': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (!isTeacher) {
     return (
-      <Card className="glass border-border/50">
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Fitur Quisioner & Janji Temu hanya tersedia untuk akun Guru.
+      <Card>
+        <CardContent>
+          <EmptyState
+            icon={<Lock />}
+            title="Hanya untuk akun Guru"
+            description="Fitur Kuesioner & Janji Temu hanya dapat diakses oleh akun dengan peran Guru."
+          />
         </CardContent>
       </Card>
     );
@@ -177,118 +207,223 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
 
   if (quisionerTarget && quisionerTarget !== 'student') {
     return (
-      <Card className="glass border-border/50">
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Quisioner siswa sedang nonaktif karena Admin IT mengatur quisioner untuk staff.
+      <Card>
+        <CardContent>
+          <EmptyState
+            icon={<ShieldAlert />}
+            title="Kuesioner Siswa Sedang Nonaktif"
+            description="Admin IT saat ini mengatur kuesioner untuk staf, sehingga kuesioner siswa dinonaktifkan sementara."
+          />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="glass border-border/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-indigo-500" />
-            Quisioner Bantuan Profesional
-          </CardTitle>
-          <CardDescription>
-            Isi quisioner ini untuk menilai apakah siswa membutuhkan bantuan profesional (Psikolog).
-            Notifikasi ke orang tua akan dikirimkan otomatis setelah pengiriman.
-          </CardDescription>
+    <div className="space-y-6">
+      {/* ── Ringkasan ── */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Jumlah Pertanyaan"
+          value={questions.length}
+          hint="Butir kuesioner yang harus dijawab guru"
+          icon={<FileText className="size-5" />}
+          iconTone="blue"
+        />
+        <StatCard
+          label="Skor Saat Ini"
+          value={totalScore}
+          hint={`Ambang rujukan: ${threshold} poin`}
+          icon={<Info className="size-5" />}
+          iconTone="purple"
+          progress={threshold > 0 ? Math.min(100, Math.round((totalScore / threshold) * 100)) : 0}
+          progressLabel="Persentase terhadap ambang skor"
+        />
+        <StatCard
+          label="Rekomendasi"
+          value={
+            <span className={recommendation === 'professional' ? 'text-danger' : 'text-success'}>
+              {recommendation === 'professional' ? 'Profesional' : 'Internal'}
+            </span>
+          }
+          hint={
+            recommendation === 'professional'
+              ? 'Siswa disarankan escorted bantuan psikolog'
+              : 'Siswa ditangani secara internal sekolah'
+          }
+          icon={<Send className="size-5" />}
+          iconTone={recommendation === 'professional' ? 'red' : 'green'}
+        />
+        <StatCard
+          label="Janji Temu"
+          value={appointments.length}
+          hint="Janji temu konseling yang terkait dengan siswa"
+          icon={<CalendarClock className="size-5" />}
+          iconTone="teal"
+        />
+      </div>
+
+      {/* ── Kuesioner ── */}
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="blue">
+              <FileText />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Kuesioner Bantuan Profesional</CardTitle>
+              <CardDescription>
+                Isi kuesioner ini untuk menilai apakah siswa membutuhkan bantuan profesional (psikolog).
+                Notifikasi ke orang tua dikirimkan otomatis setelah kuesioner dikirim.
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <div className="flex flex-col items-center gap-3 py-16">
+              <Loader2 className="size-7 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Memuat kuesioner…</p>
             </div>
           ) : submitted || submission ? (
-            <div className="space-y-2">
-              <Badge variant="outline" className="text-[11px]">Sudah dikirim</Badge>
-              <p className="text-xs text-muted-foreground">
-                {submission?.submitted_at ? `Dikirim pada ${formatInTimeZone(new Date(submission.submitted_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id })}` : ''}
-              </p>
-              {submission?.recommendation && (
-                <p className="text-sm">Rekomendasi sistem: <span className="font-medium capitalize">{submission.recommendation}</span></p>
-              )}
-              {submission?.score !== undefined && (
-                <p className="text-sm">Total skor: <span className="font-medium">{submission.score}</span> (ambang: {threshold})</p>
-              )}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <StatusBadge tone="success" label="Sudah dikirim" />
+                {submission?.submitted_at ? (
+                  <span className="text-xs text-muted-foreground">
+                    Dikirim pada {formatSchedule(submission.submitted_at)}
+                  </span>
+                ) : null}
+              </div>
+
+              {submission?.recommendation ? (
+                <div className="rounded-xl border border-border bg-muted/40 p-4">
+                  <p className="card-label mb-1.5">Rekomendasi sistem</p>
+                  <StatusBadge
+                    tone={submission.recommendation === 'professional' ? 'danger' : 'success'}
+                    label={
+                      submission.recommendation === 'professional'
+                        ? 'Bantuan Profesional (Psikolog)'
+                        : 'Penanganan Internal'
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {submission?.score !== undefined ? (
+                <div className="rounded-xl border border-border bg-muted/40 p-4">
+                  <p className="card-label mb-1.5">Total skor</p>
+                  <p className="text-sm text-secondary-text">
+                    Skor <span className="font-semibold text-heading">{submission.score}</span> dari ambang{' '}
+                    <span className="font-semibold text-heading">{threshold}</span>.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : (
-            <form onSubmit={handleSubmitCounseling} className="space-y-4">
-              {questions.length === 0 && (
-                <p className="text-sm text-muted-foreground">Belum ada pertanyaan quisioner. Hubungi Admin IT.</p>
-              )}
-              {questions.map((q, idx) => {
-                const opts = answersMap[q.question_id] ?? [];
-                const selected = answers[q.question_id];
-                return (
-                  <div key={q.question_id} className="space-y-2">
-                    <Label className="text-sm">
-                      {idx + 1}. {q.question_text} {q.is_required ? <span className="text-red-500">*</span> : ''}
-                    </Label>
-                    {q.question_type === 'multiple_choice' && (
-                      <div className="flex flex-col gap-2">
-                        {opts.map(o => {
-                          const checked = selected === o.answer_text;
-                          return (
-                            <label
+            <form onSubmit={handleSubmitCounseling} className="space-y-6">
+              {questions.length === 0 ? (
+                <EmptyState
+                  icon={<FileText />}
+                  title="Belum ada pertanyaan"
+                  description="Belum ada pertanyaan kuesioner yang tersedia. Silakan hubungi Admin IT."
+                />
+              ) : (
+                questions.map((q, idx) => {
+                  const opts = answersMap[q.question_id] ?? [];
+                  const selected = answers[q.question_id];
+                  return (
+                    <div key={q.question_id} className="space-y-2.5">
+                      <Label>
+                        {idx + 1}. {q.question_text}{' '}
+                        {q.is_required ? <span className="text-danger">*</span> : null}
+                      </Label>
+
+                      {q.question_type === 'multiple_choice' && (
+                        <div className="grid gap-2">
+                          {opts.map(o => {
+                            const checked = selected === o.answer_text;
+                            return (
+                              <label
+                                key={o.answer_id}
+                                className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors ${
+                                  checked
+                                    ? 'border-primary bg-primary-softer'
+                                    : 'border-border bg-card hover:bg-muted/50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="size-4 shrink-0 accent-primary"
+                                  checked={checked}
+                                  onChange={() => handleAnswerChange(q.question_id, o.answer_text)}
+                                />
+                                <span className="flex-1 text-sm text-secondary-text">{o.answer_text}</span>
+                                <StatusBadge tone="neutral" dot={false} label={`${o.score} poin`} />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {q.question_type === 'rating' && (
+                        <div className="flex flex-wrap gap-2">
+                          {opts.sort((a, b) => a.score - b.score).map(o => (
+                            <Button
                               key={o.answer_id}
-                              className={`flex items-center gap-3 border rounded p-3 cursor-pointer transition-colors ${checked ? 'bg-primary/5 border-primary' : 'bg-background hover:bg-muted/50'}`}
+                              type="button"
+                              variant={selected === o.answer_text ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => handleAnswerChange(q.question_id, o.answer_text)}
                             >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                checked={checked}
-                                onChange={() => handleAnswerChange(q.question_id, o.answer_text)}
-                              />
-                              <span className="text-sm flex-1">{o.answer_text}</span>
-                              <span className="text-xs text-muted-foreground">{o.score} poin</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {q.question_type === 'rating' && (
-                      <div className="flex gap-2">
-                        {opts.sort((a,b) => a.score - b.score).map(o => (
-                          <Button
-                            key={o.answer_id}
-                            type="button"
-                            variant={selected === o.answer_text ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => handleAnswerChange(q.question_id, o.answer_text)}
-                          >
-                            {o.answer_text} ({o.score})
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                    {q.question_type === 'text' && (
-                      <Textarea
-                        placeholder="Tulis jawaban..."
-                        value={selected ?? ''}
-                        onChange={e => handleAnswerChange(q.question_id, e.target.value)}
-                        required={q.is_required}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                              {o.answer_text} ({o.score})
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+
+                      {q.question_type === 'text' && (
+                        <Textarea
+                          placeholder="Tulis jawaban di sini…"
+                          value={selected ?? ''}
+                          onChange={e => handleAnswerChange(q.question_id, e.target.value)}
+                          required={q.is_required}
+                        />
+                      )}
+                    </div>
+                  );
+                })
+              )}
 
               {questions.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-sm">
-                    Total skor: <span className="font-medium">{totalScore}</span> / Ambang: <span className="font-medium">{threshold}</span>
+                <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="card-label mb-1">Total skor</p>
+                      <p className="text-sm text-secondary-text">
+                        <span className="font-semibold text-heading">{totalScore}</span> / ambang{' '}
+                        <span className="font-semibold text-heading">{threshold}</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="card-label mb-1">Rekomendasi sementara</p>
+                      <StatusBadge
+                        tone={recommendation === 'professional' ? 'danger' : 'success'}
+                        label={
+                          recommendation === 'professional'
+                            ? 'Bantuan Profesional (Psikolog)'
+                            : 'Penanganan Internal'
+                        }
+                      />
+                    </div>
                   </div>
-                  <div className="text-sm">
-                    Rekomendasi sementara: <span className={`font-medium ${recommendation === 'professional' ? 'text-red-600' : 'text-green-600'}`}>{recommendation === 'professional' ? 'Bantuan Profesional (Psikolog)' : 'Internal'}</span>
-                  </div>
-                  <Button type="submit" disabled={submitting} className="gap-2">
-                    <Send className="w-4 h-4" />
-                    {submitting ? 'Mengirim...' : 'Kirim Quisioner & Notifikasi Orang Tua'}
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                    {submitting ? 'Mengirim…' : 'Kirim Kuesioner & Notifikasi Orang Tua'}
                   </Button>
                 </div>
               )}
@@ -297,34 +432,60 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
         </CardContent>
       </Card>
 
-      {/* Appointments */}
-      <Card className="glass border-border/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-emerald-500" />
-            Janji Temu Terkait
-          </CardTitle>
-          <CardDescription>Status janji temu konseling untuk siswa ini.</CardDescription>
+      {/* ── Janji Temu ── */}
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex items-start gap-3">
+            <IconBox tone="teal">
+              <CalendarClock />
+            </IconBox>
+            <div className="space-y-1">
+              <CardTitle>Janji Temu Terkait</CardTitle>
+              <CardDescription>Status janji temu konseling untuk siswa ini.</CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {appointments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Belum ada janji temu.</p>
+            <EmptyState
+              icon={<CalendarClock />}
+              title="Belum ada janji temu"
+              description="Tidak ada janji temu konseling yang tercatat untuk siswa ini."
+            />
           ) : (
-            <div className="space-y-3">
-              {appointments.map(a => (
-                <div key={a.appointment_id} className="flex items-center justify-between border rounded p-3">
-                  <div>
-                    <p className="text-sm font-medium capitalize">{a.type === 'student' ? 'Siswa' : 'Personal'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {a.scheduled_at ? formatInTimeZone(new Date(a.scheduled_at), 'Asia/Jakarta', 'dd MMM yyyy HH:mm', { locale: id }) : 'Belum dijadwalkan'}
-                    </p>
-                    {a.location && <p className="text-xs text-muted-foreground">{a.location}</p>}
-                    <Badge className={`mt-1 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
-                  </div>
-                  {a.notes && <p className="text-xs text-muted-foreground max-w-[200px] line-clamp-2">{a.notes}</p>}
-                </div>
-              ))}
-            </div>
+            <DataTable>
+              <TableHead>
+                <TableRow>
+                  <TableHeaderCell scope="col">Jenis</TableHeaderCell>
+                  <TableHeaderCell scope="col">Jadwal</TableHeaderCell>
+                  <TableHeaderCell scope="col">Lokasi</TableHeaderCell>
+                  <TableHeaderCell scope="col">Status</TableHeaderCell>
+                  <TableHeaderCell scope="col">Catatan</TableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {appointments.map(a => {
+                  const status = APPOINTMENT_STATUS[a.status] ?? DEFAULT_APPOINTMENT_STATUS;
+                  return (
+                    <TableRow key={a.appointment_id} interactive>
+                      <TableCell className="font-medium text-heading">
+                        {a.type === 'student' ? 'Siswa' : 'Personal'}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {a.scheduled_at ? formatSchedule(a.scheduled_at) : 'Belum dijadwalkan'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{a.location || '—'}</TableCell>
+                      <TableCell>
+                        <StatusBadge tone={status.tone} label={status.label} />
+                      </TableCell>
+                      <TableCell className="max-w-[220px] text-xs text-muted-foreground">
+                        {a.notes || '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </DataTable>
           )}
         </CardContent>
       </Card>

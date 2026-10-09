@@ -6,6 +6,7 @@ import { pool } from '../db/pool.js';
 import { env } from '../config/env.js';
 import { UnauthorizedError, NotFoundError } from '../utils/errors.js';
 import { auditLog } from '../utils/audit-log.js';
+import { buildAvatarUrl } from './avatar.service.js';
 import type { UserRow, JwtPayload } from '@swims/shared';
 
 const redis = new Redis(env.REDIS_URL);
@@ -26,6 +27,10 @@ interface LoginResult {
     email: string;
     role: string;
     tenant_id: string;
+    /** Signed thumb URL, or null when the account has no photo. */
+    avatar_url: string | null;
+    /** Signed full-size URL for the profile dialog, or null. */
+    avatar_full_url: string | null;
   };
 }
 
@@ -51,8 +56,8 @@ export async function login(
   const tenantId = tenants[0]!.tenant_id;
 
   // Find user
-  const { rows: users } = await pool.query<UserRow>(
-    `SELECT * FROM users
+  const { rows: users } = await pool.query<UserRow & { avatar_key: string | null; avatar_updated_at: string | null }>(
+    `SELECT *, avatar_key, avatar_updated_at FROM users
      WHERE tenant_id = $1 AND email = $2 AND deleted_at IS NULL AND is_active = true`,
     [tenantId, email],
   );
@@ -90,6 +95,14 @@ export async function login(
       email: user.email,
       role: user.role,
       tenant_id: tenantId,
+      // Signed so the topbar/sidebar can drop it straight into an <img>; null
+      // when the account has no photo, which the UI renders as initials.
+      avatar_url: user.avatar_key
+        ? buildAvatarUrl(user.user_id, tenantId, 'thumb', user.avatar_updated_at)
+        : null,
+      avatar_full_url: user.avatar_key
+        ? buildAvatarUrl(user.user_id, tenantId, 'full', user.avatar_updated_at)
+        : null,
     },
   };
 }
