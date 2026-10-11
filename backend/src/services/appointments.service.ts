@@ -263,7 +263,7 @@ export async function mediateAppointment(
 ): Promise<AppointmentRow | null> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
-  let idx = 2;
+  let idx = 1;
 
   if (data.status !== undefined) { setClauses.push(`status = $${idx++}`); values.push(data.status); }
   if (data.scheduled_at !== undefined) { setClauses.push(`scheduled_at = $${idx++}`); values.push(data.scheduled_at); }

@@ -57,16 +57,18 @@ interface QuestionList {
   is_active: boolean;
 }
 
-type ListTarget = 'appointment_student' | 'appointment_case';
+type ListTarget = 'appointment_student' | 'appointment_case' | 'staff';
 
 const TARGET_OPTIONS: { value: ListTarget; label: string }[] = [
   { value: 'appointment_student', label: 'Janji Temu · Siswa' },
   { value: 'appointment_case', label: 'Janji Temu · Kasus' },
+  { value: 'staff', label: 'Karyawan (Employee Counseling)' },
 ];
 
 const TARGET_LABEL: Record<string, string> = {
   appointment_student: 'Janji Temu · Siswa',
   appointment_case: 'Janji Temu · Kasus',
+  staff: 'Karyawan',
 };
 
 const QUESTION_TYPE_LABEL: Record<string, string> = {
@@ -83,8 +85,6 @@ export default function QuisionerAdminPage() {
   const [loading, setLoading] = useState(true);
   const [threshold, setThreshold] = useState<number | null>(null);
   const [thresholdLoading, setThresholdLoading] = useState(true);
-  const [target, setTarget] = useState<'student' | 'staff'>('student');
-  const [targetLoading, setTargetLoading] = useState(true);
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null);
   const [answersMap, setAnswersMap] = useState<Record<string, Answer[]>>({});
 
@@ -112,7 +112,7 @@ export default function QuisionerAdminPage() {
   }>({
     name: '',
     description: '',
-    targets: { appointment_student: false, appointment_case: false },
+    targets: { appointment_student: false, appointment_case: false, staff: false },
     is_active: true,
   });
 
@@ -135,27 +135,11 @@ export default function QuisionerAdminPage() {
 
   const fetchThreshold = async () => {
     setThresholdLoading(true);
-    const res = await apiClient<{ threshold: number; target: 'student' | 'staff' }>('/quisioner/settings');
+    const res = await apiClient<{ threshold: number }>('/quisioner/settings');
     if (res.success && res.data) {
       setThreshold(res.data.threshold);
-      setTarget(res.data.target ?? 'student');
     }
     setThresholdLoading(false);
-  };
-
-  const handleSaveTarget = async (val: 'student' | 'staff') => {
-    setTargetLoading(true);
-    const res = await apiClient('/quisioner/settings', {
-      method: 'PATCH',
-      body: { target: val },
-    });
-    if (res.success) {
-      setTarget(val);
-      toast.success('Mode kuisioner berhasil disimpan.');
-    } else {
-      toast.error(res.error ?? 'Gagal menyimpan mode kuisioner.');
-    }
-    setTargetLoading(false);
   };
 
   const fetchSlug = async () => {
@@ -299,6 +283,7 @@ export default function QuisionerAdminPage() {
       targets: {
         appointment_student: l.targets.includes('appointment_student'),
         appointment_case: l.targets.includes('appointment_case'),
+        staff: l.targets.includes('staff'),
       },
       is_active: l.is_active,
     });
@@ -308,7 +293,7 @@ export default function QuisionerAdminPage() {
   const cancelEditList = () => {
     setEditingListId(null);
     setShowListForm(false);
-    setListForm({ name: '', description: '', targets: { appointment_student: false, appointment_case: false }, is_active: true });
+    setListForm({ name: '', description: '', targets: { appointment_student: false, appointment_case: false, staff: false }, is_active: true });
   };
 
   const handleSaveList = async (e: React.FormEvent) => {
@@ -389,21 +374,10 @@ export default function QuisionerAdminPage() {
         />
         <StatCard
           label="Nilai Ambang"
-          value={threshold ?? '—'}
+          value={threshold?.toString() ?? '-'}
           hint="Nilai minimum untuk rekomendasi profesional"
           icon={<Target className="size-5" />}
           iconTone="green"
-        />
-        <StatCard
-          label="Mode Kuisioner"
-          value={target === 'student' ? 'Siswa' : 'Karyawan'}
-          hint={
-            target === 'student'
-              ? 'Digunakan pada alur kasus konseling siswa'
-              : 'Digunakan pada kuisioner karyawan (NIK)'
-          }
-          icon={<Users className="size-5" />}
-          iconTone={target === 'student' ? 'blue' : 'teal'}
         />
       </div>
 
@@ -451,50 +425,6 @@ export default function QuisionerAdminPage() {
                 <StatusBadge tone="info" label="Internal" />
               </div>
             ) : null}
-          </CardContent>
-        </Card>
-
-        {/* ── Penggunaan ── */}
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-start gap-3">
-              <IconBox tone="teal">
-                <Users />
-              </IconBox>
-              <div className="space-y-1">
-                <CardTitle>Penggunaan Kuisioner</CardTitle>
-                <CardDescription>
-                  Pilih apakah kuisioner dipakai untuk alur siswa (kasus) atau karyawan (staf).
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="target-select">Mode kuisioner</Label>
-              <Select
-                value={target}
-                onValueChange={(v) => handleSaveTarget(v as 'student' | 'staff')}
-                disabled={targetLoading}
-              >
-                <SelectTrigger id="target-select" className="w-full sm:w-80">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="student">Siswa — alur kasus konseling</SelectItem>
-                  <SelectItem value="staff">Staf — kuisioner karyawan (NIK)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {targetLoading ? (
-              <StatusBadge tone="info" label="Menyimpan…" />
-            ) : (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {target === 'student'
-                  ? 'Kuisioner ditampilkan pada tab konseling siswa (alur kasus).'
-                  : 'Kuisioner karyawan dengan login NIK diaktifkan. Staf dapat memindai QR di bawah untuk mengisi.'}
-              </p>
-            )}
           </CardContent>
         </Card>
       </div>

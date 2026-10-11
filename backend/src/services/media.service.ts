@@ -1,5 +1,3 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHmac, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { existsSync } from 'fs';
@@ -7,8 +5,16 @@ import { mkdir, writeFile, readFile } from 'fs/promises';
 import { join } from 'path';
 import { getClientWithTenant, queryWithTenant } from '../db/pool.js';
 import { auditLog } from '../utils/audit-log.js';
-import { NotFoundError, UnauthorizedError } from '../utils/errors.js';
+import { NotFoundError, UnauthorizedError, ValidationError } from '../utils/errors.js';
 import { env } from '../config/env.js';
+import { getStorageSettings } from './tenant-settings.service.js';
+import {
+  createDriver,
+  getConfiguredDriver,
+  normalizeProvider,
+  type StorageConfig,
+  type StorageProvider,
+} from './storage.drivers.js';
 import type { MediaAssetRow } from '@swims/shared';
 import type { Request } from 'express';
 
@@ -21,13 +27,50 @@ async function getSharp() {
   return sharp;
 }
 
-const MEDIA_DIR = '/app/media';
-const DOWNLOAD_TOKEN_TTL = 60 * 60; // 1 hour
+/** Read lazily so tests can redirect the media directory at runtime. */
+const mediaDir = () => process.env['MEDIA_DIR'] || '/app/media';
+const DOWNLOAD_TOKEN_TTL=60 * 60; // 1 hour
 
-// ─── Local Storage Helpers ─────────────────────────────────────────────────────
+// ─── Object keys ─────────────────────────────────────────────────────────────
+// Key layout is identical across providers (tenant/assetId.ext) so switching
+// storage later doesn't need a key migration. Google Drive is the exception:
+// it assigns its own file id, and that id becomes the storage_key.
+
+function buildStorageKey(tenantId: string, assetId: string, fileName: string): string {
+  const ext = fileName.split('.').pop() || 'bin';
+  return `${tenantId}/${assetId}.${ext}`;
+}
+
+/** Resolve the tenant's configured storage into a driver-ready config. */
+async function resolveStorageConfig(tenantId: string): Promise<{
+  cfg: StorageConfig;
+  provider: StorageProvider;
+}> {
+  const storage = await getStorageSettings(tenantId);
+  const provider = normalizeProvider(storage.provider);
+  return {
+    provider,
+    cfg: {
+      provider,
+      bucket: storage.bucket,
+      region: storage.region,
+      endpoint: storage.endpoint,
+      accessKey: storage.accessKey,
+      secretKey: storage.secretKey,
+      accountId: storage.accountId,
+      firebaseBucket: storage.firebaseBucket,
+      serviceAccount: storage.serviceAccount,
+      driveFolderId: storage.driveFolderId,
+      driveSharedDriveId: storage.driveSharedDriveId,
+    },
+  };
+}
+
+// ─── Local Storage Helpers ───────────────────────────────────────────────────
+// Kept for direct/local reads. Remote backends go through the driver registry.
 
 async function ensureLocalDir(tenantId: string): Promise<string> {
-  const dir = join(MEDIA_DIR, tenantId);
+  const dir = join(mediaDir(), tenantId);
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }
@@ -36,15 +79,14 @@ async function ensureLocalDir(tenantId: string): Promise<string> {
 
 async function saveLocalFile(tenantId: string, assetId: string, fileName: string, data: Buffer): Promise<string> {
   const dir = await ensureLocalDir(tenantId);
-  const ext = fileName.split('.').pop() || '';
-  const storageKey = `${tenantId}/${assetId}.${ext}`;
-  const filePath = join(MEDIA_DIR, storageKey);
+  const storageKey = buildStorageKey(tenantId, assetId, fileName);
+  const filePath = join(mediaDir(), storageKey);
   await writeFile(filePath, data);
   return storageKey;
 }
 
 async function readLocalFile(storageKey: string): Promise<{ data: Buffer; ext: string }> {
-  const filePath = join(MEDIA_DIR, storageKey);
+  const filePath = join(mediaDir(), storageKey);
   const data = await readFile(filePath);
   const ext = storageKey.split('.').pop() || '';
   return { data, ext };
@@ -114,18 +156,6 @@ export function validateDownloadToken(token: string): string {
   return userId;
 }
 
-// ─── S3 Client ────────────────────────────────────────────────────────────────
-
-const s3Client = new S3Client({
-  endpoint: env.S3_ENDPOINT,
-  region: env.S3_REGION,
-  credentials: {
-    accessKeyId: env.S3_ACCESS_KEY,
-    secretAccessKey: env.S3_SECRET_KEY,
-  },
-  forcePathStyle: true,
-});
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface UploadRequestInput {
@@ -146,7 +176,12 @@ export interface LinkAssetInput {
 }
 
 // ─── Direct Upload with WebP Conversion ───────────────────────────────────────
-// Backend receives file as base64, converts to WebP, saves locally
+// Backend receives file as base64, converts to WebP, then writes through the
+// tenant's configured storage driver.
+//
+// The provider is chosen per upload and recorded on the asset row, so switching
+// providers later affects only FUTURE uploads — everything already uploaded
+// stays readable from wherever it actually lives.
 export async function directUploadAsset(
   tenantId: string,
   input: DirectUploadInput,
@@ -157,17 +192,30 @@ export async function directUploadAsset(
   let fileBuffer = Buffer.from(input.file_data, 'base64');
 
   // Auto-convert to WebP for images
+  let storedMime = input.mime_type;
   if (input.mime_type.startsWith('image/') && input.mime_type !== 'image/webp') {
-    fileBuffer = await convertToWebp(fileBuffer, input.mime_type);
+    // convertToWebp returns the original buffer on failure, so its type is
+    // Buffer<ArrayBufferLike>; widen once here rather than at every use.
+    fileBuffer = Buffer.from(await convertToWebp(fileBuffer, input.mime_type));
+    storedMime = 'image/webp';
   }
 
-  const webpFileName = input.file_name.replace(/\.[^.]+$/, '.webp');
-  const storageKey = await saveLocalFile(tenantId, assetId, webpFileName, fileBuffer);
+  const webpFileName =
+    storedMime === 'image/webp' ? input.file_name.replace(/\.[^.]+$/, '.webp') : input.file_name;
+
+  const { cfg, provider } = await resolveStorageConfig(tenantId);
+  const requestedKey = buildStorageKey(tenantId, assetId, webpFileName);
+
+  const driver = provider === 'local' ? createDriver(cfg) : getConfiguredDriver(cfg);
+  // Google Drive assigns its own file id, so store what the driver actually
+  // used rather than the key we asked for.
+  const { key: storageKey } = await driver.put(requestedKey, fileBuffer, storedMime);
 
   const { rows } = await queryWithTenant<MediaAssetRow>(
     tenantId,
-    `INSERT INTO media_assets (asset_id, tenant_id, uploader_id, file_name, file_hash, mime_type, storage_key, redaction_status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'NONE')
+    `INSERT INTO media_assets
+       (asset_id, tenant_id, uploader_id, file_name, file_hash, mime_type, storage_key, storage_backend, redaction_status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NONE')
      RETURNING *`,
     [
       assetId,
@@ -175,8 +223,9 @@ export async function directUploadAsset(
       actorId,
       webpFileName,
       `size:${fileBuffer.length}`,
-      'image/webp',
+      storedMime,
       storageKey,
+      provider,
     ],
   );
 
@@ -195,7 +244,7 @@ export async function directUploadAsset(
   return asset;
 }
 
-// ─── Presigned Upload URL (S3/MinIO) ─────────────────────────────────────────
+// ─── Presigned Upload URL (S3-compatible only) ──────────────────────────────
 export async function createPresignedUpload(
   tenantId: string,
   input: UploadRequestInput,
@@ -203,23 +252,35 @@ export async function createPresignedUpload(
   req?: Request,
 ): Promise<{ uploadUrl: string; asset: MediaAssetRow }> {
   const assetId = uuidv4();
-  const fileExtension = input.file_name.split('.').pop();
-  const storageKey = `${tenantId}/${assetId}.${fileExtension}`;
+  const fileExtension = input.file_name.split('.').pop() || 'bin';
+  const storageKey = buildStorageKey(tenantId, assetId, input.file_name);
 
-  const command = new PutObjectCommand({
-    Bucket: env.S3_BUCKET,
-    Key: storageKey,
-    ContentType: input.mime_type,
-  });
+  const { cfg, provider } = await resolveStorageConfig(tenantId);
 
-  let uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  // Direct-to-browser PUT is only possible where the provider speaks signed
+  // URLs. Firebase/Drive have no equivalent, so tell the client to fall back
+  // to /direct-upload rather than handing back a URL that cannot work.
+  if (provider !== 's3' && provider !== 'r2') {
+    throw new ValidationError(
+      `Penyimpanan "${provider}" tidak mendukung upload langsung dari browser. ` +
+        `Gunakan /api/media/direct-upload sebagai gantinya.`,
+    );
+  }
+
+  const driver = getConfiguredDriver(cfg);
+  if (!driver.presignPut) {
+    throw new ValidationError(`Penyimpanan "${provider}" tidak mendukung presigned upload.`);
+  }
+
+  let uploadUrl = await driver.presignPut(storageKey, input.mime_type);
   // Replace http:// with https:// to avoid Mixed Content when browser uploads
   uploadUrl = uploadUrl.replace('http://', 'https://');
 
   const { rows } = await queryWithTenant<MediaAssetRow>(
     tenantId,
-    `INSERT INTO media_assets (asset_id, tenant_id, uploader_id, file_name, file_hash, mime_type, storage_key)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO media_assets
+       (asset_id, tenant_id, uploader_id, file_name, file_hash, mime_type, storage_key, storage_backend)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
     [
       assetId,
@@ -229,6 +290,7 @@ export async function createPresignedUpload(
       input.file_hash,
       input.mime_type,
       storageKey,
+      provider,
     ],
   );
 
@@ -373,7 +435,14 @@ export async function getAssetDownloadUrl(
   }
 }
 
-// ─── Get Object from Local Storage ──────────────────────────────────────────
+// ─── Get Object (dispatches on the asset's OWN backend) ─────────────────────
+// Backward compatibility hinges on this function.
+//
+// It reads `storage_backend` from the asset ROW, not from the tenant's current
+// setting. Every asset uploaded before this feature existed is on local disk,
+// so switching the tenant to S3 must not make those files unreadable — and an
+// asset uploaded after the switch must still be fetched from S3 even if the
+// admin later switches back to local.
 export async function getAssetObject(
   tenantId: string,
   assetId: string,
@@ -381,7 +450,7 @@ export async function getAssetObject(
   const { rows } = await queryWithTenant<MediaAssetRow>(
     tenantId,
     `SELECT * FROM media_assets WHERE asset_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
-    [assetId, tenantId]
+    [assetId, tenantId],
   );
 
   if (rows.length === 0) {
@@ -389,13 +458,46 @@ export async function getAssetObject(
   }
 
   const asset = rows[0]!;
-  const { data } = await readLocalFile(asset.storage_key);
+  // Rows predating migration 051 read back as NULL; they are all local.
+  const backend = normalizeProvider((asset as { storage_backend?: string }).storage_backend || 'local');
+
+  // Local never needs credentials, so an asset saved locally stays readable
+  // even after the tenant switches to a provider it hasn't configured yet.
+  if (backend === 'local') {
+    const { data } = await readLocalFile(asset.storage_key);
+    return { Body: data, ContentType: asset.mime_type, file_name: asset.file_name };
+  }
+
+  const { cfg } = await resolveStorageConfig(tenantId);
+  const driver = createDriver({ ...cfg, provider: backend });
+  const data = await driver.get(asset.storage_key);
 
   return {
     Body: data,
     ContentType: asset.mime_type,
     file_name: asset.file_name,
   };
+}
+
+// ─── Delete Object (same per-asset dispatch) ─────────────────────────────────
+export async function deleteAssetObject(tenantId: string, assetId: string): Promise<void> {
+  const { rows } = await queryWithTenant<MediaAssetRow>(
+    tenantId,
+    `SELECT storage_key, storage_backend FROM media_assets
+     WHERE asset_id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+    [assetId, tenantId],
+  );
+  if (rows.length === 0) return;
+
+  const row = rows[0] as unknown as { storage_key: string; storage_backend?: string };
+  const backend = normalizeProvider(row.storage_backend || 'local');
+  if (backend === 'local') {
+    await createDriver({ provider: 'local' }).delete(row.storage_key);
+    return;
+  }
+
+  const { cfg } = await resolveStorageConfig(tenantId);
+  await createDriver({ ...cfg, provider: backend }).delete(row.storage_key);
 }
 
 // ─── List Assets for Case ─────────────────────────────────────────────────────

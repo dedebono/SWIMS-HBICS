@@ -10,10 +10,10 @@ import { IconBox, type IconTone } from '@/components/ui/icon-box';
 import { EmptyState, PageHeader } from '@/components/ui/page-header';
 import { ProgressPill, StatCard } from '@/components/ui/stat-card';
 import { StatusBadge, severityTone } from '@/components/ui/status-badge';
+import { AiSummaryPanel, type AiInsight } from '@/components/cases/ai-summary-panel';
 import { toast } from 'sonner';
 import {
   Activity,
-  AlertCircle,
   AlertTriangle,
   Award,
   BarChart3,
@@ -25,7 +25,6 @@ import {
   FileText,
   GraduationCap,
   Heart,
-  HeartHandshake,
   RefreshCw,
   ShieldAlert,
   Sparkles,
@@ -50,6 +49,7 @@ interface CaseSummaryResult {
   risk_level: string;
   student_name?: string;
   summary: string | null;
+  insight?: AiInsight | null;
   status: 'pending' | 'loading' | 'done' | 'error';
   error?: string;
 }
@@ -154,50 +154,16 @@ function CaseSummaryCard({ item }: { item: CaseSummaryResult }) {
               {item.error ?? 'Gagal membuat ringkasan.'}
             </p>
           ) : null}
-          {item.status === 'done' && item.summary ? <AiSummaryDisplay summary={item.summary} /> : null}
+          {item.status === 'done' && item.summary ? (
+            <AiSummaryPanel
+              summary={item.summary}
+              insight={item.insight}
+              isGenerating={false}
+            />
+          ) : null}
           {item.status === 'done' && !item.summary ? (
             <p className="text-xs text-muted-foreground">Ringkasan tidak tersedia untuk kasus ini.</p>
           ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ─── AI summary breakdown ────────────────────────────────────────────────────
-
-function AiSummaryDisplay({ summary }: { summary: string }) {
-  const cleanSummary = summary.replace('[AI-GENERATED SUMMARY]', '').trim();
-  const paragraphs = cleanSummary.split('\n\n').filter((p) => p.trim() !== '');
-
-  let whatHappened = cleanSummary;
-  let howHandled = '';
-
-  if (paragraphs.length >= 2) {
-    whatHappened = paragraphs[0];
-    howHandled = paragraphs.slice(1).join('\n\n');
-  }
-
-  const cleanText = (text: string) =>
-    text.replace(/^(1\.|2\.|What happened:?|How it was handled:?|-|--)/i, '').trim();
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-danger-soft bg-danger-soft/60 p-3.5">
-        <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-danger">
-          <AlertCircle className="size-3.5" />
-          Yang Terjadi
-        </h4>
-        <p className="whitespace-pre-wrap text-sm text-secondary-text">{cleanText(whatHappened)}</p>
-      </div>
-
-      {howHandled ? (
-        <div className="rounded-xl border border-success-soft bg-success-soft/60 p-3.5">
-          <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-success">
-            <HeartHandshake className="size-3.5" />
-            Cara Ditangani
-          </h4>
-          <p className="whitespace-pre-wrap text-sm text-secondary-text">{cleanText(howHandled)}</p>
         </div>
       ) : null}
     </div>
@@ -310,10 +276,9 @@ export default function SchoolHeadDashboard() {
       );
 
       try {
-        const res = await apiClient<{ summary: string; ai_confidence_score?: number }>(
-          `/cases/${c.case_id}/insights/generate`,
-          { method: 'POST' },
-        );
+        const res = await apiClient<AiInsight>(`/cases/${c.case_id}/insights/generate`, {
+          method: 'POST',
+        });
 
         setSummaryResults((prev) =>
           prev.map((r) =>
@@ -322,6 +287,7 @@ export default function SchoolHeadDashboard() {
                   ...r,
                   status: res.success ? 'done' : 'error',
                   summary: res.success && res.data ? res.data.summary : null,
+                  insight: res.success && res.data ? res.data : null,
                   error: res.success ? undefined : (res.error ?? 'Terjadi kesalahan yang tidak diketahui'),
                 }
               : r,

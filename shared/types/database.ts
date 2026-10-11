@@ -118,6 +118,19 @@ export const RedactionStatus = {
 } as const;
 export type RedactionStatus = (typeof RedactionStatus)[keyof typeof RedactionStatus];
 
+/**
+ * Storage backends an individual media asset can live in. Mirrors the
+ * `media_assets_storage_backend_check` constraint added by migration 051.
+ */
+export const StorageBackend = {
+  LOCAL: 'local',
+  S3: 's3',
+  R2: 'r2',
+  FIREBASE: 'firebase',
+  GDRIVE: 'gdrive',
+} as const;
+export type StorageBackend = (typeof StorageBackend)[keyof typeof StorageBackend];
+
 // ─── Database Row Types ─────────────────────────────────────────────────────
 
 export interface TenantRow {
@@ -272,7 +285,18 @@ export interface MediaAssetRow {
   file_name: string;
   file_hash: string;
   mime_type: string;
+  /**
+   * Object key/path within storage_backend. For local: path under MEDIA_DIR.
+   * For S3/R2: bucket key. For Firebase: object path. For Google Drive: the
+   * Drive-assigned FILE ID (which is not predictable from the request).
+   */
   storage_key: string;
+  /**
+   * Which backend holds THIS asset. Read from the row — never from the
+   * tenant's current setting — so changing the provider does not make
+   * previously-uploaded files unreadable. See migration 051.
+   */
+  storage_backend: StorageBackend;
   redaction_status: RedactionStatus;
   redacted_key: string | null;
   retention_expiry: string | null;

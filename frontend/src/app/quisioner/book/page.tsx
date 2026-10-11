@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { IconBox } from '@/components/ui/icon-box';
 import { EmptyState, PageHeader } from '@/components/ui/page-header';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { cn } from '@/lib/utils';
 
 type Step = 'loading' | 'identity' | 'gender' | 'schedule' | 'done' | 'error' | 'noflex';
@@ -40,6 +41,8 @@ interface Counselor {
   user_id: string;
   full_name: string;
   gender: string;
+  /** Signed 128px WebP URL, or null when the counselor has no photo. */
+  thumb_url?: string | null;
   slots: Slot[];
 }
 
@@ -358,13 +361,23 @@ function BookingInner() {
               {visibleCounselors.map((c) => (
                 <Card key={c.user_id}>
                   <CardHeader>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CardTitle>{c.full_name}</CardTitle>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {c.slots.length} jadwal tersedia
-                      </span>
+                    <div className="flex items-center gap-3">
+                      <UserAvatar
+                        name={c.full_name}
+                        src={c.thumb_url}
+                        size="lg"
+                        className="size-12"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <CardTitle>{c.full_name}</CardTitle>
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {c.slots.length} jadwal tersedia
+                          </span>
+                        </div>
+                        <CardDescription>Konselor</CardDescription>
+                      </div>
                     </div>
-                    <CardDescription>Konselor</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {c.slots.map((s) => {

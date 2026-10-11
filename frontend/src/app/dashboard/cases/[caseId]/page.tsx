@@ -30,7 +30,6 @@ import {
   ClipboardList,
   FileWarning,
   GraduationCap,
-  HeartHandshake,
   History,
   ListChecks,
   MapPin,
@@ -66,6 +65,7 @@ import {
 import { InterventionsTab } from '@/components/cases/interventions-tab';
 import { MediaTab } from '@/components/cases/media-tab';
 import { CommunicationsTab } from '@/components/cases/communications-tab';
+import { AiSummaryPanel, type AiInsight } from '@/components/cases/ai-summary-panel';
 import { StudentProfileDialog } from '@/components/students/student-profile-dialog';
 import { CounselingTab } from '@/components/counseling/counseling-tab';
 
@@ -197,6 +197,9 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const [justification, setJustification] = useState('');
   const [isOverriding, setIsOverriding] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  // Hasil lengkap dari AI: ringkasan per bagian + acuan SOP/SANKSI + saran guru.
+  const [aiInsight, setAiInsight] = useState<AiInsight | null>(null);
+  const [isSavingSummary, setIsSavingSummary] = useState(false);
 
   // Bagikan kasus
   const [shares, setShares] = useState<
@@ -287,21 +290,44 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const handleGenerateSummary = async () => {
     try {
       setIsGeneratingSummary(true);
-      const res = await apiClient<{ summary: string; ai_confidence_score: number }>(
-        `/cases/${resolvedParams.caseId}/insights/generate`,
-        { method: 'POST' },
-      );
+      const res = await apiClient<AiInsight>(`/cases/${resolvedParams.caseId}/insights/generate`, {
+        method: 'POST',
+      });
 
       if (res.success && res.data) {
-        setCaseData((prev) => (prev ? { ...prev, summary: res.data!.summary } : null));
-        toast.success('Ringkasan otomatis berhasil dibuat.');
+        const insight = res.data;
+        setAiInsight(insight);
+        setCaseData((prev) => (prev ? { ...prev, summary: insight.summary } : null));
+        toast.success('Ringkasan otomatis siap. Cek saran untuk guru di bawah.');
       } else {
-        toast.error('Gagal membuat ringkasan otomatis.');
+        toast.error(res.error || 'Gagal membuat ringkasan otomatis.');
       }
     } catch {
       toast.error('Terjadi kesalahan saat menghubungi layanan ringkasan otomatis.');
     } finally {
       setIsGeneratingSummary(false);
+    }
+  };
+
+  /** Simpan ringkasan ke kasus supaya tetap ada setelah halaman di-refresh. */
+  const handleSaveSummary = async (summaryText: string) => {
+    if (!caseData) return;
+    try {
+      setIsSavingSummary(true);
+      const res = await apiClient(`/cases/${caseData.case_id}`, {
+        method: 'PATCH',
+        body: { summary: `[AI-GENERATED SUMMARY]\n${summaryText}` },
+      });
+      if (res.success) {
+        setCaseData((prev) => (prev ? { ...prev, summary: `[AI-GENERATED SUMMARY]\n${summaryText}` } : prev));
+        toast.success('Ringkasan disimpan di kasus.');
+      } else {
+        toast.error(res.error || 'Gagal menyimpan ringkasan.');
+      }
+    } catch {
+      toast.error('Gagal menyimpan ringkasan.');
+    } finally {
+      setIsSavingSummary(false);
     }
   };
 
@@ -613,7 +639,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                 </Card>
               ) : null}
 
-              {/* Ringkasan otomatis */}
+              {/* Ringkasan otomatis + saran guru */}
               <Card>
                 <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-border">
                   <div className="flex items-center gap-3">
@@ -621,8 +647,10 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                       <Sparkles />
                     </IconBox>
                     <div>
-                      <CardTitle>Ringkasan Otomatis</CardTitle>
-                      <CardDescription>Menggabungkan insiden dan intervensi kasus.</CardDescription>
+                      <CardTitle>Ringkasan Otomatis &amp; Saran Guru</CardTitle>
+                      <CardDescription>
+                        AI membaca detail kasus, log komunikasi, dan SOP/SANKSI Buku Pedoman Disiplin.
+                      </CardDescription>
                     </div>
                   </div>
                   <Button
@@ -637,7 +665,14 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                 </CardHeader>
                 <CardContent>
                   {caseData.summary ? (
-                    <AiSummaryDisplay summary={caseData.summary} />
+                    <AiSummaryPanel
+                      summary={caseData.summary}
+                      insight={aiInsight}
+                      onRegenerate={handleGenerateSummary}
+                      isGenerating={isGeneratingSummary}
+                      onSave={handleSaveSummary}
+                      isSaving={isSavingSummary}
+                    />
                   ) : (
                     <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-10 text-center">
                       <IconBox tone="slate" size="lg">
@@ -645,7 +680,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                       </IconBox>
                       <p className="max-w-sm text-sm text-muted-foreground">
                         Belum ada ringkasan. Tekan <span className="font-semibold text-primary">Buat Ringkasan</span>{' '}
-                        untuk menganalisis insiden dan catatan intervensi menjadi ringkasan singkat.
+                        untuk membaca seluruh detail kasus, lalu dapat saran penanganan sesuai Buku Pedoman Disiplin.
                       </p>
                     </div>
                   )}
@@ -1146,51 +1181,6 @@ function InfoRow({ label, value, hint }: { label: string; value: string; hint?: 
         {value}
         {hint ? <span className="ml-1 text-xs font-normal text-muted-foreground">({hint})</span> : null}
       </span>
-    </div>
-  );
-}
-
-function AiSummaryDisplay({ summary }: { summary: string }) {
-  const cleanSummary = summary.replace('[AI-GENERATED SUMMARY]', '').trim();
-  const paragraphs = cleanSummary.split('\n\n').filter((p) => p.trim() !== '');
-
-  let whatHappened = cleanSummary;
-  let howHandled = '';
-
-  if (paragraphs.length >= 2) {
-    whatHappened = paragraphs[0];
-    howHandled = paragraphs.slice(1).join('\n\n');
-  }
-
-  const cleanText = (text: string) =>
-    text
-      .replace(/^(1\.|2\.|Apa yang terjadi:?|Bagaimana penanganannya:?|-|--)/i, '')
-      .trim();
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-xl border border-danger-soft bg-danger-soft p-3.5">
-        <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-danger">
-          <AlertCircle className="size-3.5" />
-          Apa yang Terjadi
-        </h4>
-        <p className="whitespace-pre-wrap text-sm text-secondary-text">{cleanText(whatHappened)}</p>
-      </div>
-
-      {howHandled ? (
-        <div className="rounded-xl border border-success-soft bg-success-soft p-3.5">
-          <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-success">
-            <HeartHandshake className="size-3.5" />
-            Bagaimana Penanganannya
-          </h4>
-          <p className="whitespace-pre-wrap text-sm text-secondary-text">{cleanText(howHandled)}</p>
-        </div>
-      ) : null}
-
-      <p className="flex items-center gap-1 pt-1 text-xs text-muted-foreground">
-        <Bot className="size-3.5" />
-        Ringkasan dibuat otomatis dari insiden dan intervensi. Mohon periksa kebenarannya.
-      </p>
     </div>
   );
 }

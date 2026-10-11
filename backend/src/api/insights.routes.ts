@@ -21,9 +21,11 @@ router.post(
   '/cases/:caseId/insights/generate',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
-    // We restrict generation to COUNSELOR, SCHOOL_HEAD, IT_ADMIN (based on role matrix typically)
-    const generatedSummary = await generateCaseSummary(req.tenantId, req.params['caseId'] as string);
-    sendSuccess(res, { summary: generatedSummary });
+    // Reads the full case (incidents + intervensi + log komunikasi + observasi)
+    // plus SOP & SANKSI from the Buku Pedoman Disiplin, then returns a simple
+    // Bahasa Indonesia summary, per-section text, and advice for the teacher.
+    const insight = await generateCaseSummary(req.tenantId, req.params['caseId'] as string);
+    sendSuccess(res, insight);
   })
 );
 

@@ -91,11 +91,11 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
   const [submitted, setSubmitted] = useState(false);
 
   const isTeacher = user?.role === 'TEACHER';
-  const [quisionerTarget, setQuisionerTarget] = useState<string>('student');
 
   useEffect(() => {
     apiClient<{ target: string }>('/quisioner/settings').then(r => {
-      if (r.success && r.data) setQuisionerTarget(r.data.target);
+      // We don't block the UI based on target anymore, because both Student
+      // and Staff flows can run concurrently in the new combined architecture.
     });
   }, []);
 
@@ -205,19 +205,7 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
     );
   }
 
-  if (quisionerTarget && quisionerTarget !== 'student') {
-    return (
-      <Card>
-        <CardContent>
-          <EmptyState
-            icon={<ShieldAlert />}
-            title="Kuesioner Siswa Sedang Nonaktif"
-            description="Admin IT saat ini mengatur kuesioner untuk staf, sehingga kuesioner siswa dinonaktifkan sementara."
-          />
-        </CardContent>
-      </Card>
-    );
-  }
+  
 
   return (
     <div className="space-y-6">

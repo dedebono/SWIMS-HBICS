@@ -26,7 +26,32 @@ describe('Insights Routes', () => {
       const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
 
       const { generateCaseSummary } = await import('../../services/ai-insights.service.js');
-      (generateCaseSummary as any).mockResolvedValue('This is an AI-generated summary of the case.');
+      (generateCaseSummary as any).mockResolvedValue({
+        summary: '[AI-GENERATED SUMMARY]\nAPA YANG TERJADI\nSiswu ribut di kelas.',
+        sections: {
+          terjadi: 'Siswa ribut di kelas.',
+          sudah_dilakukan: '',
+          komunikasi: '',
+          posisi: '',
+          saran: '- Panggil wali kelas.\n- Catat kejadiannya.',
+        },
+        reference: {
+          category_id: 1,
+          category_name: 'Pelanggaran Ringan',
+          level_id: 3,
+          level_name: 'Sekolah Menengah Pertama-Sekolah Menengah Atas',
+          sop: [],
+          sanksi: [],
+        },
+        stats: {
+          incidents: 1,
+          interventions_done: 0,
+          interventions_total: 0,
+          communications: 0,
+          observations: 0,
+          days_open: 3,
+        },
+      });
 
       const res = await request(app)
         .post('/api/cases/case-123/insights/generate')
@@ -34,7 +59,13 @@ describe('Insights Routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.summary).toBe('This is an AI-generated summary of the case.');
+      // Ringkasan lengkap tetap dikembalikan agar penyimpanan ke kasus tetap jalan.
+      expect(res.body.data.summary).toContain('Siswu ribut di kelas.');
+      // Bagian per topik untuk tampilan kaya.
+      expect(res.body.data.sections.saran).toContain('Panggil wali kelas');
+      // Acuan Buku Pedoman Displin (SOP + SANKSI) ikut dikirim ke UI.
+      expect(res.body.data.reference.category_name).toBe('Pelanggaran Ringan');
+      expect(res.body.data.stats.incidents).toBe(1);
       expect(generateCaseSummary).toHaveBeenCalledWith('tenant-123', 'case-123');
     });
 

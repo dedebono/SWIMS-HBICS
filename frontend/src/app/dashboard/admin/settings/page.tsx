@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,6 +90,23 @@ function SettingsSection({
   );
 }
 
+/**
+ * Render a stored service account back into editable JSON text.
+ *
+ * The API may hand back either a parsed object (jsonb) or the raw string, so
+ * the textarea needs a string either way. Pretty-printed so an admin can
+ * actually read and fix what the backend returned.
+ */
+function serviceAccountToText(value: string | Record<string, unknown> | null | undefined): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "";
+  }
+}
+
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -103,12 +121,21 @@ export default function AdminSettingsPage() {
   });
 
   const [storageSettings, setStorageSettings] = useState({
-    provider: "s3",
+    provider: "local",
     bucket: "",
     region: "",
     accessKey: "",
     secretKey: "",
     publicUrl: "",
+    // Cloudflare R2
+    accountId: "",
+    // Firebase Storage
+    firebaseBucket: "",
+    // Firebase / Google Drive — JSON string as typed, or a parsed object when
+    // loaded back from the API.
+    serviceAccount: "" as string | Record<string, unknown>,
+    // Google Drive
+    driveFolderId: "",
   });
 
   const [wahaSettings, setWahaSettings] = useState({
@@ -152,7 +179,10 @@ export default function AdminSettingsPage() {
       setSaving(true);
       const payload: any = {};
       if (category === "ai") payload.ai = aiSettings;
-      else if (category === "storage") payload.storage = { ...storageSettings, storageProvider: storageSettings.provider };
+      // Send `provider` once. It used to be sent twice (as `provider` and as
+      // `storageProvider`), so the stored object carried a stale duplicate that
+      // the backend reads instead of the field the form actually edits.
+      else if (category === "storage") payload.storage = storageSettings;
       else if (category === "waha") payload.waha = wahaSettings;
       else if (category === "email") payload.email = emailSettings;
 
@@ -163,6 +193,9 @@ export default function AdminSettingsPage() {
 
       if (res.success) {
         toast.success("Pengaturan berhasil disimpan.");
+        // Re-read from the API so the form shows exactly what was persisted,
+        // instead of keeping unsaved local state.
+        await fetchSettings();
       } else {
         toast.error(res.error || "Gagal menyimpan pengaturan.");
       }
@@ -180,8 +213,8 @@ export default function AdminSettingsPage() {
         method: "POST",
         body: {
           ai: {
-            aiApiUrl: aiSettings.apiUrl,
-            aiApiKey: aiSettings.apiKey,
+            apiUrl: aiSettings.apiUrl,
+            apiKey: aiSettings.apiKey,
           },
         },
       });
@@ -380,52 +413,170 @@ export default function AdminSettingsPage() {
                     Penyimpanan server lokal sedang digunakan
                   </p>
                   <p className="text-xs leading-relaxed text-secondary-text">
-                    Berkas akan disimpan langsung ke sistem berkas server, misalnya pada folder{" "}
-                    <code className="rounded bg-card px-1.5 py-0.5 text-[0.7rem]">backend/uploads/</code>.
-                    Penyedia ini tidak memerlukan kunci tambahan.
+                    Berkas baru akan disimpan ke sistem berkas server dan tidak memerlukan kunci
+                    tambahan.{" "}
+                    <span className="font-medium text-heading">
+                      Berkas yang sudah terlanjur tersimpan di penyedia lain tetap dibaca dari
+                      tempat asalnya
+                    </span>{" "}
+                    — mengganti penyedia tidak membuat berkas lama hilang.
                   </p>
                 </div>
               </div>
             ) : (
               <div className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="storage-bucket">Nama Bucket / ID Proyek Firebase</Label>
-                    <Input
-                      id="storage-bucket"
-                      value={storageSettings.bucket || ""}
-                      onChange={(e) => setStorageSettings({ ...storageSettings, bucket: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="storage-region">Region</Label>
-                    <Input
-                      id="storage-region"
-                      placeholder="us-east-1"
-                      value={storageSettings.region || ""}
-                      onChange={(e) => setStorageSettings({ ...storageSettings, region: e.target.value })}
-                    />
-                  </div>
-                </div>
+                {/* ── S3 & R2 share the bucket/key/secret shape ── */}
+                {storageSettings.provider === "s3" || storageSettings.provider === "r2" ? (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="storage-bucket">Nama Bucket</Label>
+                        <Input
+                          id="storage-bucket"
+                          placeholder="swims-media"
+                          value={storageSettings.bucket || ""}
+                          onChange={(e) => setStorageSettings({ ...storageSettings, bucket: e.target.value })}
+                        />
+                      </div>
+                      {storageSettings.provider === "s3" ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="storage-region">Region</Label>
+                          <Input
+                            id="storage-region"
+                            placeholder="ap-southeast-1"
+                            value={storageSettings.region || ""}
+                            onChange={(e) => setStorageSettings({ ...storageSettings, region: e.target.value })}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor="storage-account">Account ID</Label>
+                          <Input
+                            id="storage-account"
+                            placeholder="ID akun Cloudflare"
+                            value={storageSettings.accountId || ""}
+                            onChange={(e) => setStorageSettings({ ...storageSettings, accountId: e.target.value })}
+                          />
+                          <p className="text-xs text-muted">
+                            Endpoint diturunkan otomatis menjadi{" "}
+                            <code className="rounded bg-card px-1.5 py-0.5 text-[0.7rem]">
+                              https://&lt;account&gt;.r2.cloudflarestorage.com
+                            </code>
+                            .
+                          </p>
+                        </div>
+                      )}
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="storage-access">Access Key / Email Klien</Label>
-                  <Input
-                    id="storage-access"
-                    value={storageSettings.accessKey || ""}
-                    onChange={(e) => setStorageSettings({ ...storageSettings, accessKey: e.target.value })}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="storage-access">
+                        {storageSettings.provider === "r2" ? "R2 Access Key ID" : "Access Key ID"}
+                      </Label>
+                      <Input
+                        id="storage-access"
+                        value={storageSettings.accessKey || ""}
+                        onChange={(e) => setStorageSettings({ ...storageSettings, accessKey: e.target.value })}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="storage-secret">Secret Key / Private Key</Label>
-                  <Input
-                    id="storage-secret"
-                    type="password"
-                    value={storageSettings.secretKey || ""}
-                    onChange={(e) => setStorageSettings({ ...storageSettings, secretKey: e.target.value })}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="storage-secret">
+                        {storageSettings.provider === "r2" ? "R2 Secret Access Key" : "Secret Access Key"}
+                      </Label>
+                      <Input
+                        id="storage-secret"
+                        type="password"
+                        value={storageSettings.secretKey || ""}
+                        onChange={(e) => setStorageSettings({ ...storageSettings, secretKey: e.target.value })}
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                {/* ── Firebase ── */}
+                {storageSettings.provider === "firebase" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="storage-firebase-bucket">Bucket Firebase Storage</Label>
+                      <Input
+                        id="storage-firebase-bucket"
+                        placeholder="nama-project.appspot.com"
+                        value={storageSettings.firebaseBucket || storageSettings.bucket || ""}
+                        onChange={(e) =>
+                          setStorageSettings({ ...storageSettings, firebaseBucket: e.target.value, bucket: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="storage-service-account">Service Account JSON</Label>
+                      <Textarea
+                        id="storage-service-account"
+                        rows={8}
+                        placeholder={'{\n  "type": "service_account",\n  "project_id": "...",\n  "client_email": "...",\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n..."\n}'}
+                        className="font-mono text-xs"
+                        value={
+                          typeof storageSettings.serviceAccount === "string"
+                            ? storageSettings.serviceAccount
+                            : serviceAccountToText(storageSettings.serviceAccount)
+                        }
+                        onChange={(e) =>
+                          setStorageSettings({ ...storageSettings, serviceAccount: e.target.value })
+                        }
+                      />
+                      <p className="text-xs text-muted">
+                        Unduh service account dari Firebase Console → Project Settings → Service
+                        Accounts, lalu tempel seluruh isi file JSON di sini.
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+
+                {/* ── Google Drive ── */}
+                {storageSettings.provider === "gdrive" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="storage-drive-folder">ID Folder Google Drive (opsional)</Label>
+                      <Input
+                        id="storage-drive-folder"
+                        placeholder="Folder tujuan upload"
+                        value={storageSettings.driveFolderId || ""}
+                        onChange={(e) =>
+                          setStorageSettings({ ...storageSettings, driveFolderId: e.target.value })
+                        }
+                      />
+                      <p className="text-xs text-muted">
+                        Kosongkan untuk menyimpan di root Drive. Ambil ID folder dari URL:{" "}
+                        <code className="rounded bg-card px-1.5 py-0.5 text-[0.7rem]">
+                          drive.google.com/drive/folders/&lt;ID&gt;
+                        </code>
+                        .
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="storage-service-account">Service Account JSON</Label>
+                      <Textarea
+                        id="storage-service-account"
+                        rows={8}
+                        placeholder={'{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n..."\n}'}
+                        className="font-mono text-xs"
+                        value={
+                          typeof storageSettings.serviceAccount === "string"
+                            ? storageSettings.serviceAccount
+                            : serviceAccountToText(storageSettings.serviceAccount)
+                        }
+                        onChange={(e) =>
+                          setStorageSettings({ ...storageSettings, serviceAccount: e.target.value })
+                        }
+                      />
+                      <p className="text-xs text-muted">
+                        Bagikan folder tersebut ke email service account agar Drive mengizinkan
+                        upload.
+                      </p>
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
 

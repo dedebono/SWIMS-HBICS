@@ -29,6 +29,15 @@ const envSchema = z.object({
   S3_BUCKET: z.string().default('swims-media'),
   S3_REGION: z.string().default('us-east-1'),
 
+  // WAHA (WhatsApp HTTP API) — server-side fallbacks. The per-tenant values
+  // saved in Pengaturan Sistem win over these; these only apply when a tenant
+  // never filled the form in.
+  // NOTE: these were read by notifications.service.ts before they existed in the
+  // schema, so TypeScript flagged the access and the runtime value was always
+  // `undefined` — WAHA silently fell back to a hardcoded URL and a blank key.
+  WAHA_URL: z.string().optional(),
+  WAHA_API_KEY: z.string().optional(),
+
   // App
   PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

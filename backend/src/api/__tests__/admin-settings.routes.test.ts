@@ -95,21 +95,24 @@ describe('Admin Settings Routes', () => {
       const token = generateTestToken('tenant-123', 'user-123', 'IT_ADMIN');
 
       const currentSettings = {
-        ai: { aiEnabled: false, aiApiUrl: 'http://old-url' },
+        // Field names must match what ai-insights.service reads: enabled /
+        // apiUrl / apiKey. The old `aiEnabled` / `aiApiUrl` / `aiApiKey` keys were
+        // stripped by the schema, which is why AI could never be enabled.
+        ai: { enabled: false, apiUrl: 'http://old-url' },
         storage: { storageProvider: 's3' }
       };
 
       const updates = {
         ai: {
-          aiEnabled: true,
-          aiApiUrl: 'http://localhost:11434/api/generate',
-          aiApiKey: 'new-key'
+          enabled: true,
+          apiUrl: 'http://localhost:11434/api/generate',
+          apiKey: 'new-key'
         }
       };
 
       const expectedSettings = {
         ...currentSettings,
-        ai: { aiEnabled: true, aiApiUrl: 'http://localhost:11434/api/generate', aiApiKey: 'new-key' }
+        ai: { enabled: true, apiUrl: 'http://localhost:11434/api/generate', apiKey: 'new-key' }
       };
 
       mockClient.query.mockImplementation((queryStr: string, values: any) => {
@@ -215,7 +218,7 @@ describe('Admin Settings Routes', () => {
     });
   });
 
-  // The route validates `{ ai: { aiApiUrl, aiApiKey } }` (not a flat body) and
+  // The route validates `{ ai: { apiUrl, apiKey } }` (not a flat body) and
   // pings `${baseUrl}/v1/models` first via `fetchWithTimeout` — the previous
   // version of these tests sent a flat body and asserted on the raw URL, so
   // they failed zod validation and never reached the fetch at all.
@@ -234,8 +237,8 @@ describe('Admin Settings Routes', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           ai: {
-            aiApiUrl: 'http://localhost:11434',
-            aiApiKey: 'test-key'
+            apiUrl: 'http://localhost:11434',
+            apiKey: 'test-key'
           }
         });
 
@@ -265,8 +268,8 @@ describe('Admin Settings Routes', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           ai: {
-            aiApiUrl: 'http://localhost:11434',
-            aiApiKey: 'wrong-key'
+            apiUrl: 'http://localhost:11434',
+            apiKey: 'wrong-key'
           }
         });
 
@@ -281,7 +284,7 @@ describe('Admin Settings Routes', () => {
       const res = await request(app)
         .post('/api/admin/ai/check-connection')
         .set('Authorization', `Bearer ${token}`)
-        .send({ aiApiUrl: 'http://localhost:11434', aiApiKey: 'test-key' });
+        .send({ apiUrl: 'http://localhost:11434', apiKey: 'test-key' });
 
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(global.fetch).not.toHaveBeenCalled();
@@ -295,7 +298,7 @@ describe('Admin Settings Routes', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({
           aiApiUrl: 'http://localhost:11434/api/generate',
-          aiApiKey: 'test-key'
+          apiKey: 'test-key'
         });
 
       expect(res.status).toBe(403);

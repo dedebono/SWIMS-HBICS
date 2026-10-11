@@ -1,5 +1,13 @@
-import { getClientWithTenant } from '../db/pool.js';
+import { getEmailSettings } from './tenant-settings.service.js';
 
+/**
+ * Back-compat wrapper: the SMTP settings live in `tenants.settings` and are
+ * read through the shared `getEmailSettings` reader. This function used to run
+ * its own `SELECT settings FROM tenants` and return `null` whenever the section
+ * was missing — which was always, because the PATCH schema had no `email`
+ * key and Zod silently stripped it. The admin filled in SMTP, got a green
+ * toast, and the mailer kept using whatever env fallback it had.
+ */
 export async function getTenantEmailSettings(tenantId: string): Promise<{
   host: string;
   port: number;
@@ -7,20 +15,5 @@ export async function getTenantEmailSettings(tenantId: string): Promise<{
   username?: string;
   password?: string;
 } | null> {
-  const client = await getClientWithTenant(tenantId);
-  try {
-    const { rows } = await client.query('SELECT settings FROM tenants WHERE tenant_id = $1', [tenantId]);
-    const settings = rows[0]?.settings || {};
-    const email = settings?.email as Record<string, unknown> | undefined;
-    if (!email?.host || !email?.port) return null;
-    return {
-      host: String(email.host),
-      port: Number(email.port),
-      secure: Boolean(email.secure),
-      username: email.username ? String(email.username) : undefined,
-      password: email.password ? String(email.password) : undefined,
-    };
-  } finally {
-    client.release();
-  }
+  return getEmailSettings(tenantId);
 }

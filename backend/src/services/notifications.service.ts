@@ -1,5 +1,5 @@
 import { auditLog } from '../utils/audit-log.js';
-import { env } from '../config/env.js';
+import { getWahaSettings } from './tenant-settings.service.js';
 
 export interface PushNotificationPayload {
   title: string;
@@ -9,14 +9,18 @@ export interface PushNotificationPayload {
 
 /**
  * Sends a WhatsApp message via WAHA (WhatsApp HTTP API).
- * In test/development, this is a no-op stub that can be mocked.
+ *
+ * URL / session / API key come from the tenant's saved Pengaturan Sistem
+ * (falling back to env, then to the old hardcoded default). This used to read
+ * `env.WAHA_URL` and hardcode `session: 'default'`, so everything an IT admin
+ * typed into the WhatsApp panel was ignored — the settings were never even
+ * stored, and even once stored nothing read them.
  */
 export async function sendWhatsAppMessage(
   tenantId: string,
   payload: { chatId: string; text: string },
 ): Promise<{ success: boolean; messageId?: string }> {
-  const wahaUrl = env.WAHA_URL ?? 'http://100.127.221.23:3002';
-  const wahaApiKey = env.WAHA_API_KEY ?? '';
+  const { url: wahaUrl, session, apiKey: wahaApiKey } = await getWahaSettings(tenantId);
 
   try {
     const res = await fetch(`${wahaUrl}/api/sendText`, {
@@ -26,7 +30,7 @@ export async function sendWhatsAppMessage(
         'x-api-key': wahaApiKey,
       },
       body: JSON.stringify({
-        session: 'default',
+        session,
         chatId: payload.chatId,
         text: payload.text,
       }),

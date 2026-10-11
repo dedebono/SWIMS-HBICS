@@ -38,7 +38,7 @@ export async function updateQuestion(tenantId: string, questionId: string, data:
 }): Promise<QuisionerQuestionRow | null> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
-  let idx = 2;
+  let idx = 1;
 
   if (data.question_text !== undefined) { setClauses.push(`question_text = $${idx++}`); values.push(data.question_text); }
   if (data.question_type !== undefined) { setClauses.push(`question_type = $${idx++}`); values.push(data.question_type); }
@@ -92,7 +92,7 @@ export async function updateAnswer(tenantId: string, answerId: string, data: {
 }): Promise<QuisionerAnswerRow | null> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
-  let idx = 2;
+  let idx = 1;
 
   if (data.answer_text !== undefined) { setClauses.push(`answer_text = $${idx++}`); values.push(data.answer_text); }
   if (data.score !== undefined) { setClauses.push(`score = $${idx++}`); values.push(data.score); }

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import {
   AlertTriangle,
   CalendarClock,
@@ -72,6 +73,8 @@ interface StudentSearchResult {
   full_name: string;
   display_id?: string;
   metadata: any;
+  /** Signed 128px WebP from the API; null/omitted renders initials. */
+  thumb_url?: string | null;
 }
 
 /** A "Kelompok" from the Discipline Handbook, joined with its classification. */
@@ -135,11 +138,11 @@ const CLASSIFICATION_ITEMS = {
 /** Structured template mirroring the on-screen guide, so the placeholder shows
  *  reporters exactly which five parts a complete report contains. */
 const DESCRIPTION_PLACEHOLDER = [
-  'Kegiatan saat insiden terjadi: sedang_memajada basket di lapangan.',
+  'Kegiatan saat insiden terjadi: Sedang bermain basket di lapangan atau melakukan praktik di laboratorium kimia.',
   'Siapa yang terlibat: Andi (Kelas 8A) dan Budi (Kelas 8B).',
-  'Bagaimana kejadiannya: Andi jatuh saat mencoba menangkap bola lalu Regarding lantai.',
-  'Kapan terjadi: Jam olahraga / 8 Oktober 2026, 10.15 WITA.',
-  'Siapa yang promissory: Pak Hendra (Guru Olahraga) dan siswa Kelas 8A.',
+  'Bagaimana kejadiannya: Jelaskan kronologi kejadian secara netral berdasarkan fakta. Contoh: Andi terjatuh saat mencoba menangkap bola, kemudian terbentur lantai.',
+  'Kapan terjadi: Saat jam pelajaran olahraga, pada 8 Oktober 2026 pukul 10.15 WITA.',
+  'Siapa yang menyaksikan: Pak Hendra (Guru Olahraga) dan siswa Kelas 8A.',
 ].join('\n');
 
 export default function NewIncidentPage() {
@@ -151,6 +154,8 @@ export default function NewIncidentPage() {
   const [searchResults, setSearchResults] = useState<StudentSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [studentCases, setStudentCases] = useState<any[]>([]);
+  /** Signed thumbnail of the picked student — shown in the step-2 summary. */
+  const [selectedThumb, setSelectedThumb] = useState<string | null>(null);
   const [groupOptions, setGroupOptions] = useState<HandbookGroup[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -335,6 +340,7 @@ export default function NewIncidentPage() {
       const student = studentRes.data;
       updateField('student_id', student.student_id);
       updateField('student_name', student.full_name || student.display_id || student.student_id);
+      setSelectedThumb(student.thumb_url ?? null);
       setStep('details');
 
       // 2. Fetch existing cases for this student
@@ -645,23 +651,30 @@ export default function NewIncidentPage() {
                               <button
                                 type="button"
                                 key={student.student_id}
-                                className="flex w-full flex-col rounded-lg p-2.5 text-left transition-colors hover:bg-primary-softer"
+                                className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-primary-softer"
                                 onClick={() => handleStudentSelect(student.student_id)}
                               >
-                                <div className="flex w-full items-start justify-between gap-2">
-                                  <span className="truncate text-sm font-medium text-heading">
+                                <UserAvatar
+                                  name={student.full_name}
+                                  src={student.thumb_url}
+                                  accountId={student.student_id}
+                                  size="md"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium text-heading">
                                     {student.full_name}
                                   </span>
-                                  {student.display_id && (
-                                    <Badge variant="outline" className="font-mono">
-                                      ID: {student.display_id}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <span className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-                                  UUID: {student.student_id.slice(0, 8)}...
-                                  {student.metadata?.email && ` • ${student.metadata.email}`}
+                                  {student.metadata?.class ? (
+                                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                      Kelas {student.metadata.class}
+                                    </span>
+                                  ) : null}
                                 </span>
+                                {student.display_id && (
+                                  <Badge variant="outline" className="shrink-0 font-mono">
+                                    ID: {student.display_id}
+                                  </Badge>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -706,9 +719,12 @@ export default function NewIncidentPage() {
             <Card>
               <CardContent className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <IconBox tone="blue">
-                    <UserRound />
-                  </IconBox>
+                  <UserAvatar
+                    name={formData.student_name}
+                    src={selectedThumb}
+                    accountId={formData.student_id || null}
+                    size="lg"
+                  />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-heading">
                       {formData.student_name || 'Siswa belum dipilih'}
@@ -950,24 +966,24 @@ export default function NewIncidentPage() {
                         <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground">
                           <li>
                             <span className="font-semibold text-secondary-text">Kegiatan saat insiden terjadi:</span>{' '}
-                            sedang_memajada basket di lapangan / praktik di laboratorium kimia.
+                            Sedang bermain basket di lapangan atau melakukan praktik di laboratorium kimia.
                           </li>
                           <li>
-                            <span className="font-semibold text-secondary-text">Siapa yang terlibat:</span> Andi
-                            (Kelas 8A) dan Budi (Kelas 8B).
+                            <span className="font-semibold text-secondary-text">Siapa yang terlibat:</span>{' '}
+                            Andi (Kelas 8A) dan Budi (Kelas 8B).
                           </li>
                           <li>
                             <span className="font-semibold text-secondary-text">Bagaimana kejadiannya:</span>{' '}
-                                        Jelaskan kronologi secara netral berdasarkan fakta. Contoh: Andi jatuh saat
-                            mencoba menangkap bola lalu Regarding lantai.
+                            Jelaskan kronologi kejadian secara netral berdasarkan fakta. Contoh: Andi terjatuh saat
+                            mencoba menangkap bola, kemudian terbentur lantai.
                           </li>
                           <li>
-                            <span className="font-semibold text-secondary-text">Kapan terjadi:</span> Jam olahraga /
-                            8 Oktober 2026, 10.15 WITA.
+                            <span className="font-semibold text-secondary-text">Kapan terjadi:</span>{' '}
+                            Saat jam pelajaran olahraga, pada 8 Oktober 2026 pukul 10.15 WITA.
                           </li>
                           <li>
-                            <span className="font-semibold text-secondary-text">Siapa yang promissory:</span> Pak
-                            Hendra (Guru Olahraga) dan siswa Kelas 8A.
+                            <span className="font-semibold text-secondary-text">Siapa yang menyaksikan:</span>{' '}
+                            Pak Hendra (Guru Olahraga) dan siswa Kelas 8A.
                           </li>
                         </ul>
                       </div>
