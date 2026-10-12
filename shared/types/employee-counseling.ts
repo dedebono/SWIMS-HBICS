@@ -213,7 +213,11 @@ export const EmployeeCounselingSubmissionSchema = z.object({
 
 export const CreateSessionNoteSchema = z.object({
   submission_id: z.string().uuid(),
-  session_number: z.number().int().min(1),
+  // NOT client-supplied. createSession() derives the next number server-side
+  // via COUNT(*)+1 per submission, so requiring it here made every "Simpan sesi"
+  // POST fail 422 with "session_number: Required". Accepted only as an optional
+  // passthrough and ignored by the service.
+  session_number: z.number().int().min(1).optional(),
   session_date: z.string().optional(),
   session_time: z.string().optional(),
   method: z.enum(['tatap_muka', 'online']).optional(),

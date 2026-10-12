@@ -12,6 +12,7 @@ import {
   CalendarPlus,
   CheckCircle2,
   ClipboardCheck,
+  Eye,
   FileText,
   Hourglass,
   Info,
@@ -40,15 +41,26 @@ import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { SessionNoteDialog, type EditableSession } from './session-note-dialog';
 
 interface SessionNote {
   session_id: string;
   session_number: number;
   session_date: string | null;
+  session_time?: string | null;
   method: string | null;
   section_2_presenting_concern: string | null;
-  section_8_risk: { level: string; safety_action: string } | null;
-  section_9_followup: { status: string; target_sesi_berikutnya: string } | null;
+  section_3_key_points?: string[] | null;
+  section_4_observation?: string | null;
+  section_5_intervention?: { type?: string; note?: string } | null;
+  section_6_employee_insight?: string | null;
+  section_7_action_plan?: string[] | null;
+  section_8_risk: { level: string; safety_action: string; concern_description?: string } | null;
+  section_9_followup: {
+    status: string;
+    target_sesi_berikutnya: string;
+    tanggal_follow_up?: string | null;
+  } | null;
   created_at: string;
 }
 
@@ -196,6 +208,20 @@ export default function EmployeeCounselingDetailPage() {
   const [sessions, setSessions] = useState<SessionNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
+  // Session note modal: `sessionDialogOpen` gates visibility, `viewedSession`
+  // is non-null when reopening an existing note from the Catatan Sesi table.
+  const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [viewedSession, setViewedSession] = useState<EditableSession | null>(null);
+
+  const openNewSession = () => {
+    setViewedSession(null);
+    setSessionDialogOpen(true);
+  };
+
+  const openSession = (s: SessionNote) => {
+    setViewedSession(s);
+    setSessionDialogOpen(true);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -632,13 +658,7 @@ export default function EmployeeCounselingDetailPage() {
               </CardDescription>
             </div>
             {submission.submission_status !== 'closed' && (
-              <Button
-                size="sm"
-                className="gap-1.5"
-                render={
-                  <Link href={`/dashboard/counselor/employee-counseling/${id}/session/new`} />
-                }
-              >
+              <Button size="sm" className="gap-1.5" onClick={openNewSession}>
                 <CalendarPlus className="size-3.5" />
                 Sesi Baru
               </Button>
@@ -653,11 +673,7 @@ export default function EmployeeCounselingDetailPage() {
               description="Tambahkan sesi pertama untuk mulai mencatat pokok persoalan, observasi, dan tindak lanjut konseling."
               action={
                 submission.submission_status !== 'closed' ? (
-                  <Button
-                    size="sm"
-                    className="gap-1.5"
-                    render={<Link href={`/dashboard/counselor/employee-counseling/${id}/session/new`} />}
-                  >
+                  <Button size="sm" className="gap-1.5" onClick={openNewSession}>
                     <CalendarPlus className="size-3.5" />
                     Catat Sesi Baru
                   </Button>
@@ -674,11 +690,25 @@ export default function EmployeeCounselingDetailPage() {
                   <TableHeaderCell scope="col">Pokok Permasalahan</TableHeaderCell>
                   <TableHeaderCell scope="col">Risiko</TableHeaderCell>
                   <TableHeaderCell scope="col">Tindak Lanjut</TableHeaderCell>
+                  <TableHeaderCell scope="col" className="text-right">Aksi</TableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {sessions.map((s) => (
-                  <TableRow key={s.session_id}>
+                  <TableRow
+                    key={s.session_id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Buka detail Sesi ${s.session_number}`}
+                    className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                    onClick={() => openSession(s)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openSession(s);
+                      }
+                    }}
+                  >
                     <TableCell>
                       <span className="text-sm font-semibold text-heading">Sesi {s.session_number}</span>
                       <p className="text-xs text-muted-foreground">
@@ -732,6 +762,20 @@ export default function EmployeeCounselingDetailPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e) => {
+                          // Stop propagation so the row-level handler doesn't double-fire.
+                          e.stopPropagation();
+                          openSession(s);
+                        }}
+                        aria-label={`Buka detail Sesi ${s.session_number}`}
+                      >
+                        <Eye className="size-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -744,6 +788,16 @@ export default function EmployeeCounselingDetailPage() {
           </p>
         </CardFooter>
       </Card>
+
+      {/* Sesi Baru / reopened session note — modal, no page navigation */}
+      <SessionNoteDialog
+        open={sessionDialogOpen}
+        onOpenChange={setSessionDialogOpen}
+        submissionId={id}
+        employeeName={submission.employee_name}
+        session={viewedSession}
+        onSaved={load}
+      />
     </div>
   );
 }
