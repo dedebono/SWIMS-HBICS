@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -329,6 +329,13 @@ export default function QuisionerAdminPage() {
   };
 
   const listName = (id: string | null) => lists.find((l) => l.question_list_id === id)?.name ?? 'Belum ada daftar';
+  // Base UI menampilkan NILAI mentah pada <Select.Value> bila prop `items` tidak
+  // diisi — akibatnya UUID mentah tampil di dalam trigger. Peta ini yang
+  // membuat trigger menampilkan NAMA daftar yang sudah disetting.
+  const listItems = useMemo<Record<string, string>>(
+    () => Object.fromEntries(lists.map((l) => [l.question_list_id, l.name])),
+    [lists],
+  );
   const countByList = questions.reduce<Record<string, number>>((acc, q) => {
     if (q.question_list_id) acc[q.question_list_id] = (acc[q.question_list_id] ?? 0) + 1;
     return acc;
@@ -673,6 +680,7 @@ export default function QuisionerAdminPage() {
                   onValueChange={(v) =>
                     setForm({ ...form, question_type: (v ?? 'multiple_choice') as Question['question_type'] })
                   }
+                  items={QUESTION_TYPE_LABEL}
                 >
                   <SelectTrigger id="question-type" className="w-full">
                     <SelectValue />
@@ -717,6 +725,7 @@ export default function QuisionerAdminPage() {
                 <Select
                   value={form.question_list_id}
                   onValueChange={(v) => setForm({ ...form, question_list_id: v ?? '' })}
+                  items={listItems}
                 >
                   <SelectTrigger id="qlist" className="w-full sm:w-64">
                     <SelectValue placeholder="Pilih daftar" />
@@ -826,6 +835,7 @@ export default function QuisionerAdminPage() {
                     <Select
                       value={q.question_list_id ?? ''}
                       onValueChange={(v) => handleReassignQuestion(q.question_id, v ?? '')}
+                      items={listItems}
                     >
                       <SelectTrigger id={`move-${q.question_id}`} className="w-full sm:w-64">
                         <SelectValue placeholder="Pilih daftar" />

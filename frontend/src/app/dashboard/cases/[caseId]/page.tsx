@@ -510,7 +510,7 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="risk-override">Klasifikasi Baru</Label>
-                      <Select value={riskOverride} onValueChange={(v) => setRiskOverride(v ?? '')}>
+                      <Select value={riskOverride} onValueChange={(v) => setRiskOverride(v ?? '')} items={RISK_LABEL}>
                         <SelectTrigger id="risk-override">
                           <SelectValue placeholder="Pilih klasifikasi" />
                         </SelectTrigger>

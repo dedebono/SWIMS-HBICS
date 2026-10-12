@@ -349,7 +349,11 @@ export default function CasesPage() {
               aria-label="Cari kasus"
             />
           </div>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? 'all')}>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v ?? 'all')}
+            items={{ all: 'Semua Status', ...STATUS_LABEL }}
+          >
             <SelectTrigger className="w-44" aria-label="Saring status">
               <SelectValue placeholder="Semua status" />
             </SelectTrigger>
@@ -360,7 +364,11 @@ export default function CasesPage() {
               <SelectItem value="CLOSED">Ditutup</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={riskFilter} onValueChange={(v) => setRiskFilter(v ?? 'all')}>
+          <Select
+            value={riskFilter}
+            onValueChange={(v) => setRiskFilter(v ?? 'all')}
+            items={{ all: 'Semua Klasifikasi', ...RISK_LABEL }}
+          >
             <SelectTrigger className="w-44" aria-label="Saring klasifikasi risiko">
               <SelectValue placeholder="Semua risiko" />
             </SelectTrigger>
