@@ -1168,7 +1168,7 @@ function FormBehavior({ data, categories, groups, levels, onSubmit }: { data?: a
               aria-pressed={f.level_ids.includes(l.id)}
               className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                 f.level_ids.includes(l.id)
-                  ? "border-primary bg-primary text-primary-foreground"
+                  ? "border-primary-strong bg-primary-strong text-primary-foreground"
                   : "border-border bg-muted text-secondary-text hover:bg-accent"
               }`}>
               {l.code}

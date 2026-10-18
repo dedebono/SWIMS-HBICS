@@ -243,7 +243,7 @@ function ButtonLike({
       className={cn(
         "inline-flex h-9 items-center gap-2 rounded-[10px] px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         variant === "default"
-          ? "bg-primary text-primary-foreground hover:bg-primary/90"
+          ? "bg-primary-strong text-primary-foreground hover:bg-primary-strong-hover"
           : "border border-border bg-card text-danger hover:bg-danger-soft",
       )}
     >

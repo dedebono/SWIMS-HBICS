@@ -20,6 +20,9 @@
   --color-primary: #1e88f5;
   --color-primary-foreground: #ffffff;
   --color-primary-hover: #1876d6;
+  /* AA-compliant fill for text-bearing surfaces (buttons) — white = 5.03:1 */
+  --color-primary-strong: #1570c7;
+  --color-primary-strong-hover: #0f6ad1;
   --color-primary-soft: #e8f2fe;
   --color-primary-softer: #f2f8ff;
 
@@ -31,7 +34,7 @@
   --color-secondary: #eef3fb;
   --color-secondary-foreground: #24408c;
   --color-muted: #f4f7fc;
-  --color-muted-foreground: #6b7ba3;
+  --color-muted-foreground: #5b6b8c;
   --color-accent: #eef4fd;
   --color-accent-foreground: #1a2559;
 

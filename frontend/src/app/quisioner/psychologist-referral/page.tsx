@@ -260,7 +260,7 @@ export default function PsychologistReferralPage() {
                         <span
                           className={[
                             'inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-semibold',
-                            active ? 'bg-primary text-primary-foreground' : '',
+                            active ? 'bg-primary-strong text-primary-foreground' : '',
                             done ? 'bg-success-soft text-success' : '',
                             !active && !done ? 'bg-muted text-muted-foreground' : '',
                           ].join(' ')}

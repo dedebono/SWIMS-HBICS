@@ -308,7 +308,7 @@ export function Sidebar({ currentPath, userRole, onNavigate }: SidebarProps) {
                   className={cn(
                     'group flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-[0.8125rem] font-medium transition-colors',
                     isActive
-                      ? 'bg-primary text-primary-foreground shadow-button'
+                      ? 'bg-primary-strong text-primary-foreground shadow-button'
                       : 'text-secondary-text hover:bg-accent hover:text-heading'
                   )}
                 >

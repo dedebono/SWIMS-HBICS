@@ -55,10 +55,11 @@ sudah diatur oleh `app/dashboard/layout.tsx`.
 bg-background     → canvas #F4F7FC
 bg-card           → putih
 text-heading      → navy #0F1B4C (judul)
-text-muted-foreground → abu kebiruan (teks sekunder)
+text-muted-foreground → abu kebiruan #5B6B8C (teks sekunder, AA 4.5:1)
 text-secondary-text   → abu kebiruan lebih gelap (isi paragraf)
 border-border     → #E6EAF2
-bg-primary        → biru #1E88F5
+bg-primary        → biru #1E88F5 (link, aksen, fokus)
+bg-primary-strong → biru #1570C7 (ISI tombol primer — teks putih AA 5.03:1)
 text-primary      → biru
 bg-primary-softer → biru sangat muda (hover row)
 bg-primary-soft   → biru muda
