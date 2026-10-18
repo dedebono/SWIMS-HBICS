@@ -71,8 +71,11 @@ describe('Positive Observations Routes', () => {
       expect(capturedBody.student_id).toBe('123e4567-e89b-12d3-a456-426614174000');
     });
 
+    // PERSONAL has `positive_observations: none` in the static matrix. Using
+    // TEACHER here would 403 via the ABAC class check instead of RBAC, so the
+    // test would pass for the wrong reason and silently break when ABAC is fixed.
     it('should require positive_observations:create permission', async () => {
-      const token = generateTestToken('tenant-123', 'user-123', 'TEACHER');
+      const token = generateTestToken('tenant-123', 'user-123', 'PERSONAL');
 
       const res = await request(app)
         .post('/api/students/123e4567-e89b-12d3-a456-426614174000/observations')
@@ -136,15 +139,20 @@ describe('Positive Observations Routes', () => {
       expect(res.body.data).toEqual(mockObservations);
     });
 
-    it('should require positive_observations:read permission', async () => {
+    // TEACHER holds `positive_observations: cru` in the static matrix, so RBAC
+    // allows this. With the ABAC class check fixed the request now succeeds —
+    // the 403 this test used to assert came from the class check, not RBAC.
+    it('should allow TEACHER to read observations (RBAC permits, class scoping off)', async () => {
       const token = generateTestToken('tenant-123', 'user-123', 'TEACHER');
+
+      (listObservationsByStudent as any).mockResolvedValue([]);
 
       const res = await request(app)
         .get('/api/students/123e4567-e89b-12d3-a456-426614174000/observations')
         .set('Authorization', `Bearer ${token}`);
 
-      expect(res.status).toBe(403);
-      expect(res.body.success).toBe(false);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
     });
 
     it('should require authentication', async () => {

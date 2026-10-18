@@ -5,6 +5,7 @@ import { sendWhatsAppMessage } from './notifications.service.js';
 
 export async function listAppointments(tenantId: string, filters?: {
   created_for?: string;
+  student_id?: string;
   counselor_id?: string;
   psychologist_id?: string;
   status?: string;
@@ -18,6 +19,9 @@ export async function listAppointments(tenantId: string, filters?: {
   let p = 2;
 
   if (filters?.created_for) { sql += ` AND a.created_for = $${p++}`; params.push(filters.created_for); }
+  // Student appointments track the student in `student_id`; `created_for` holds
+  // the booking staff member, so callers filtering by student must use this.
+  if (filters?.student_id) { sql += ` AND a.student_id = $${p++}`; params.push(filters.student_id); }
   if (filters?.counselor_id) { sql += ` AND a.counselor_id = $${p++}`; params.push(filters.counselor_id); }
   if (filters?.psychologist_id) { sql += ` AND a.psychologist_id = $${p++}`; params.push(filters.psychologist_id); }
   if (filters?.status) { sql += ` AND a.status = $${p++}`; params.push(filters.status); }

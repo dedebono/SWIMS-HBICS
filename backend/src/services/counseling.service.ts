@@ -2,6 +2,41 @@ import { queryWithTenant } from '../db/pool.js';
 import type { AppointmentRow, QuisionerAnswerRow } from '@swims/shared';
 import { auditLog } from '../utils/audit-log.js';
 
+/**
+ * Resolve the parent contact for a student, for the WAHA referral notification.
+ *
+ * The `students` table has NO `parent_phone`/`parent_name` columns — those only
+ * exist on `parent_referral_tokens`. Selecting them here raised
+ * "column s.parent_phone does not exist", which the surrounding try/catch
+ * swallowed, so the parent was never notified even though the UI reported
+ * success. `phone_number` is the parent/guardian contact the Admin UI collects.
+ */
+async function getParentContact(tenantId: string, studentId: string): Promise<{
+  studentName: string;
+  parentPhone: string | null;
+  tenantSlug: string;
+} | null> {
+  const { rows } = await queryWithTenant<{
+    student_name: string;
+    parent_phone: string | null;
+    tenant_slug: string;
+  }>(
+    tenantId,
+    `SELECT s.full_name AS student_name, s.phone_number AS parent_phone, t.slug AS tenant_slug
+     FROM students s
+     JOIN tenants t ON t.tenant_id = s.tenant_id
+     WHERE s.student_id = $1`,
+    [studentId],
+  );
+  return rows[0]
+    ? {
+        studentName: rows[0].student_name,
+        parentPhone: rows[0].parent_phone,
+        tenantSlug: rows[0].tenant_slug,
+      }
+    : null;
+}
+
 export async function submitCounselingQuisioner(
   tenantId: string,
   data: {
@@ -37,7 +72,8 @@ export async function submitCounselingQuisioner(
       [
         tenantId,
         data.submitted_by,
-        data.student_id,
+        // created_for FKs to users(user_id); the student belongs in student_id
+        data.submitted_by,
         data.student_id,
         'Menunggu psikolog mengisi ketersediaan jadwal.',
         { case_id: data.caseId, recommendation, total },
@@ -47,40 +83,30 @@ export async function submitCounselingQuisioner(
 
     // If professional recommendation: create referral token + send WAHA notification
     if (appointmentId) {
-      // Get student + parent info + tenant slug
-      const { rows: studentRows } = await queryWithTenant<any>(
-        tenantId,
-        `SELECT s.full_name as student_name, s.parent_phone, s.parent_name, t.slug as tenant_slug
-         FROM students s
-         JOIN tenants t ON t.tenant_id = s.tenant_id
-         WHERE s.student_id = $1`,
-        [data.student_id],
-      );
-      const student = studentRows[0];
-      if (student?.parent_phone) {
-        try {
+      try {
+        const parent = await getParentContact(tenantId, data.student_id);
+        if (parent?.parentPhone) {
           const { createReferralToken, sendReferralNotification } = await import('./psychologist-referral.service.js');
           const baseUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
           const { token } = await createReferralToken(tenantId, {
             appointmentId,
             studentId: data.student_id,
-            parentPhone: student.parent_phone,
-            parentName: student.parent_name ?? undefined,
+            parentPhone: parent.parentPhone,
             caseId: data.caseId,
-            studentName: student.student_name,
+            studentName: parent.studentName,
           });
-          const referralLink = `${baseUrl}/quisioner/psychologist-referral?t=${student.tenant_slug}&token=${token}`;
+          const referralLink = `${baseUrl}/quisioner/psychologist-referral?t=${parent.tenantSlug}&token=${token}`;
           await sendReferralNotification(
             tenantId,
-            student.parent_phone,
-            student.parent_name ?? 'Bapak/Ibu',
-            student.student_name,
+            parent.parentPhone,
+            'Bapak/Ibu',
+            parent.studentName,
             referralLink,
           );
-        } catch (err) {
-          console.error('[counseling] Failed to send referral notification:', err);
-          // Non-fatal: don't fail the quisioner submission
         }
+      } catch (err) {
+        console.error('[counseling] Failed to send referral notification:', err);
+        // Non-fatal: don't fail the quisioner submission
       }
     }
   } else {
@@ -92,7 +118,8 @@ export async function submitCounselingQuisioner(
       [
         tenantId,
         data.submitted_by,
-        data.student_id,
+        // created_for FKs to users(user_id); the student belongs in student_id
+        data.submitted_by,
         data.student_id,
         data.submitted_by,
         'Internal counseling direction.',
@@ -185,7 +212,8 @@ export async function submitCaseCounseling(
       [
         tenantId,
         data.submitted_by,
-        data.student_id,
+        // created_for FKs to users(user_id); the student belongs in student_id
+        data.submitted_by,
         data.student_id,
         'Menunggu psikolog mengisi ketersediaan jadwal.',
         JSON.stringify({ case_id: data.caseId, recommendation, total }),
@@ -194,16 +222,8 @@ export async function submitCaseCounseling(
 
     // Send WAHA notification to parent
     try {
-      const { rows: studentRows } = await queryWithTenant<any>(
-        tenantId,
-        `SELECT s.full_name as student_name, s.parent_phone, s.parent_name, t.slug as tenant_slug
-         FROM students s
-         JOIN tenants t ON t.tenant_id = s.tenant_id
-         WHERE s.student_id = $1`,
-        [data.student_id],
-      );
-      const student = studentRows[0];
-      if (student?.parent_phone) {
+      const parent = await getParentContact(tenantId, data.student_id);
+      if (parent?.parentPhone) {
         const { createReferralToken, sendReferralNotification } = await import('./psychologist-referral.service.js');
         const baseUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
         const { rows: apptRows } = await queryWithTenant<any>(
@@ -217,17 +237,16 @@ export async function submitCaseCounseling(
           const { token } = await createReferralToken(tenantId, {
             appointmentId: apptRows[0].appointment_id,
             studentId: data.student_id,
-            parentPhone: student.parent_phone,
-            parentName: student.parent_name ?? undefined,
+            parentPhone: parent.parentPhone,
             caseId: data.caseId,
-            studentName: student.student_name,
+            studentName: parent.studentName,
           });
-          const referralLink = `${baseUrl}/quisioner/psychologist-referral?t=${student.tenant_slug}&token=${token}`;
+          const referralLink = `${baseUrl}/quisioner/psychologist-referral?t=${parent.tenantSlug}&token=${token}`;
           await sendReferralNotification(
             tenantId,
-            student.parent_phone,
-            student.parent_name ?? 'Bapak/Ibu',
-            student.student_name,
+            parent.parentPhone,
+            'Bapak/Ibu',
+            parent.studentName,
             referralLink,
           );
         }
@@ -243,7 +262,8 @@ export async function submitCaseCounseling(
       [
         tenantId,
         data.submitted_by,
-        data.student_id,
+        // created_for FKs to users(user_id); the student belongs in student_id
+        data.submitted_by,
         data.student_id,
         data.submitted_by,
         'Internal counseling direction.',

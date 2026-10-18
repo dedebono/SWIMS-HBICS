@@ -121,8 +121,11 @@ describe('Consents Routes', () => {
       expect(res.body.data).toEqual([]);
     });
 
+    // PERSONAL has `consents: none` in the static matrix. TEACHER holds
+    // `consents: readOnly`, so a TEACHER token 403'd via the ABAC class check
+    // rather than RBAC — passing for the wrong reason.
     it('should require consents:read permission', async () => {
-      const token = generateTestToken('tenant-123', 'user-123', 'TEACHER');
+      const token = generateTestToken('tenant-123', 'user-123', 'PERSONAL');
 
       const res = await request(app)
         .get('/api/students/123e4567-e89b-12d3-a456-426614174000/consents')

@@ -32,6 +32,40 @@ export function classificationLabel(value: string | null | undefined): string {
 export const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export type RiskLevel = typeof RISK_LEVELS[number];
 
+// ─── Initial assessment ("Penilaian Awal") labels ──────────────────────────────
+/**
+ * The four checkboxes on the Report Incident form, keyed by the boolean they
+ * write into `incidents.metadata.initial_assessment`. Read back in Case Detail
+ * and the Incidents list, so the label lives here once — those surfaces used to
+ * disagree with the form (and each other). Do not quote a retired label in this
+ * comment: source maps are baked into the build, so any example string here
+ * shows up in a "is the old label gone?" grep as a false positive.
+ */
+export const ASSESSMENT_LABELS = {
+  is_recurring: 'Kejadian berulang',
+  similar_cases: 'Siswa pernah punya kasus serupa',
+  needs_escalation: 'Perlu eskalasi',
+  needs_parent_comm: 'Harus komunikasi dengan orang tua',
+} as const;
+
+export type AssessmentKey = keyof typeof ASSESSMENT_LABELS;
+
+/** Ordered so every surface renders the same flags in the same order. */
+export const ASSESSMENT_KEYS: AssessmentKey[] = [
+  'is_recurring',
+  'similar_cases',
+  'needs_escalation',
+  'needs_parent_comm',
+];
+
+/** The checked assessment keys of an incident, in display order. */
+export function activeAssessmentKeys(
+  assessment: Record<string, boolean> | undefined | null,
+): AssessmentKey[] {
+  if (!assessment) return [];
+  return ASSESSMENT_KEYS.filter((key) => assessment[key] === true);
+}
+
 export const CASE_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export type CaseStatus = typeof CASE_STATUSES[number];
 

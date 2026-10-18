@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
+import { ASSESSMENT_LABELS, activeAssessmentKeys } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -376,9 +377,9 @@ export default function IncidentsPage() {
                   .filter(([, v]) => v === true)
                   .map(([k]) => k.toUpperCase());
                 const assessment = inc.metadata?.initial_assessment ?? {};
-                const flags: string[] = [];
-                if (assessment.needs_escalation) flags.push('Perlu eskalasi');
-                if (assessment.needs_parent_comm) flags.push('Perlu komunikasi orang tua');
+                const flags: string[] = activeAssessmentKeys(assessment).map(
+                  (key) => ASSESSMENT_LABELS[key],
+                );
 
                 const involvedTeacher =
                   inc.metadata?.manual_involved_teacher ?? inc.involved_teacher_name ?? inc.involved_teacher;

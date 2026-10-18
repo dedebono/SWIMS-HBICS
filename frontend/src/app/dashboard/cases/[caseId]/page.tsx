@@ -4,6 +4,7 @@ import { useEffect, useState, use, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
+import { ASSESSMENT_LABELS, activeAssessmentKeys } from '@/lib/constants';
 import { ErrorBoundary } from '@/components/layout/error-boundary';
 import { PageHeader, EmptyState } from '@/components/ui/page-header';
 import { StatCard } from '@/components/ui/stat-card';
@@ -804,10 +805,9 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                 .filter(([, v]) => v === true)
                 .map(([k]) => k.toUpperCase());
               const activeAssessment: string[] = [];
-              if (assessment.is_recurring) activeAssessment.push('Berulang');
-              if (assessment.similar_cases) activeAssessment.push('Kasus serupa');
-              if (assessment.needs_escalation) activeAssessment.push('Perlu eskalasi');
-              if (assessment.needs_parent_comm) activeAssessment.push('Perlu komunikasi orang tua');
+              for (const key of activeAssessmentKeys(assessment)) {
+                activeAssessment.push(ASSESSMENT_LABELS[key]);
+              }
 
               return (
                 <Card key={inc.incident_id}>

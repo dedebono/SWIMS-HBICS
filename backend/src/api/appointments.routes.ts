@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as appointmentService from '../services/appointments.service.js';
+import { notifyProfessional } from '../services/notifications.service.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 
 const router = Router();
@@ -33,6 +34,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const items = await appointmentService.listAppointments(req.tenantId, {
       created_for: req.query.created_for as string | undefined,
+      student_id: req.query.student_id as string | undefined,
       counselor_id: req.query.counselor_id as string | undefined,
       psychologist_id: req.query.psychologist_id as string | undefined,
       status: req.query.status as string | undefined,
@@ -80,6 +82,15 @@ router.patch(
       [req.params.appointmentId, new_slot_id, req.tenantId],
     );
 
+    // "Jadwal update" — kabari profesional pemilik jadwal. Never throws.
+    if (appointment.counselor_id) {
+      await notifyProfessional(req.tenantId, appointment.counselor_id, {
+        type: 'SCHEDULE_UPDATE',
+        title: 'Jadwal diubah',
+        body: `Janji temu dipindahkan ke ${new Date(newSlot.slot_start).toLocaleString('id-ID')}.`,
+      });
+    }
+
     sendSuccess(res, { appointment_id: req.params.appointmentId, new_slot_id, new_scheduled_at: newSlot.slot_start });
   }),
 );
@@ -102,6 +113,14 @@ router.post(
       ...req.body,
       created_by: req.userId,
     });
+    // "Permintaan janji temu baru" untuk profesional yang dituju. Never throws.
+    if (item?.counselor_id) {
+      await notifyProfessional(req.tenantId, item.counselor_id, {
+        type: 'APPOINTMENT_REQUEST',
+        title: 'Permintaan janji temu baru',
+        body: 'Ada permintaan janji temu baru menunggu konfirmasi.',
+      });
+    }
     sendCreated(res, item);
   }),
 );
@@ -115,6 +134,12 @@ router.post(
     const result = await appointmentService.createPersonalAppointment(req.tenantId, {
       ...body,
       actor_id: req.userId!,
+    });
+    // "Permintaan janji temu baru" untuk konselor yang ter-match. Never throws.
+    await notifyProfessional(req.tenantId, result.matched_counselor_id, {
+      type: 'APPOINTMENT_REQUEST',
+      title: 'Permintaan janji temu baru',
+      body: 'Ada permintaan janji temu personal baru menunggu konfirmasi.',
     });
     sendCreated(res, result);
   }),
@@ -138,6 +163,14 @@ router.post(
     const { scheduled_at } = req.body as { scheduled_at: string };
     const item = await appointmentService.confirmAppointment(req.tenantId, req.params.appointmentId, scheduled_at, req.userId);
     if (!item) return res.status(404).json({ message: 'Not found' });
+    // "Jadwal update" — konfirmasi jadwal untuk profesional. Never throws.
+    if (item.counselor_id) {
+      await notifyProfessional(req.tenantId, item.counselor_id, {
+        type: 'SCHEDULE_UPDATE',
+        title: 'Jadwal dikonfirmasi',
+        body: `Janji temu dikonfirmasi pada ${new Date(scheduled_at).toLocaleString('id-ID')}.`,
+      });
+    }
     sendSuccess(res, item);
   }),
 );

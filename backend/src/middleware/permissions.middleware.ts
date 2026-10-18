@@ -100,9 +100,17 @@ async function enforceAbac(
       // Exception: incident/case creation for any student (incident reporting)
       const studentId = extractStudentId(req);
       if (studentId && resource !== 'students' && !((resource === 'incidents' || resource === 'cases') && _action === 'create')) {
-        const allowed = await isStudentInTeacherClass(tenantId, userId, studentId);
-        if (!allowed) {
-          throw new ForbiddenError('You can only access records for students in your assigned class');
+        // Class scoping only applies to tenants that actually configured it.
+        // A tenant with zero teacher_class_assignments has no class mapping to
+        // enforce, so isStudentInTeacherClass() returns false for EVERY student
+        // and 403s every teacher on every student-scoped route. Degrade to
+        // tenant-wide teacher access there instead of locking the school out.
+        const classScopingEnabled = await isClassScopingConfigured(tenantId);
+        if (classScopingEnabled) {
+          const allowed = await isStudentInTeacherClass(tenantId, userId, studentId);
+          if (!allowed) {
+            throw new ForbiddenError('You can only access records for students in your assigned class');
+          }
         }
       }
       break;
@@ -155,6 +163,27 @@ function extractStudentId(req: Request): string | undefined {
     (req.body as Record<string, unknown> | undefined)?.['student_id'] as string | undefined ??
     (req.query['student_id'] as string | undefined)
   );
+}
+
+/**
+ * Does this tenant configure teacher→class scoping at all?
+ *
+ * Tenants that never populated `teacher_class_assignments` have no class map to
+ * enforce; enforcing the join there denies every teacher every student. Returns
+ * true (fail closed) only when at least one assignment exists for the tenant.
+ */
+async function isClassScopingConfigured(tenantId: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
+    const { rows } = await client.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM teacher_class_assignments WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    return Number(rows[0]?.count ?? 0) > 0;
+  } finally {
+    client.release();
+  }
 }
 
 /**

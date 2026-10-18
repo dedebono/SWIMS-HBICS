@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
+import { ASSESSMENT_LABELS } from '@/lib/constants';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1060,10 +1061,10 @@ export default function NewIncidentPage() {
                   </CardHeader>
                   <CardContent className="space-y-2.5">
                     {[
-                      { key: 'assess_recurring', label: 'Apakah kejadian ini berulang?' },
-                      { key: 'assess_similar', label: 'Apakah siswa pernah punya kasus serupa?' },
-                      { key: 'assess_escalation', label: 'Apakah perlu eskalasi?' },
-                      { key: 'assess_parent_comm', label: 'Apakah perlu komunikasi kepada orang tua?' },
+                      { key: 'assess_recurring', label: ASSESSMENT_LABELS.is_recurring },
+                      { key: 'assess_similar', label: ASSESSMENT_LABELS.similar_cases },
+                      { key: 'assess_escalation', label: ASSESSMENT_LABELS.needs_escalation },
+                      { key: 'assess_parent_comm', label: ASSESSMENT_LABELS.needs_parent_comm },
                     ].map((item) => (
                       <label
                         key={item.key}
