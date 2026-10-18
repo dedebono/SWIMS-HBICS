@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowRight, Building2, CheckCircle2, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertCircle, Building2, CheckCircle2, Lock, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -247,14 +246,6 @@ export default function LoginPage() {
               </Button>
             </form>
           </Card>
-
-          <p className="text-center text-sm text-muted-foreground">
-            Belum punya akun sekolah?{' '}
-            <Link href="/register" className="font-semibold text-primary hover:underline">
-              Daftar_INSTansi
-              <ArrowRight className="ml-1 inline size-3.5" aria-hidden="true" />
-            </Link>
-          </p>
 
           <p className="text-center text-xs text-muted-foreground">
             Dengan masuk, Anda menyetujui pengelolaan data sesuai UU PDP No. 27 Tahun 2022.
