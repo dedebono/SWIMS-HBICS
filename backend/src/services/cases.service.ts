@@ -1,6 +1,7 @@
 import { getClientWithTenant, queryWithTenant } from '../db/pool.js';
 import { auditLog } from '../utils/audit-log.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { notifyCaseTeachers, notifyRoles, TEACHER_ROLES } from './notifications.service.js';
 import type { CaseRow, RiskLevel } from '@swims/shared';
 import type { Request } from 'express';
 
@@ -87,6 +88,23 @@ export async function createCase(
       tenantId,
       actorId: createdBy,
     });
+
+    // Notifikasi "kasus baru" untuk para guru (spec notifikasi). Never throws.
+    try {
+      const { rows: stu } = await queryWithTenant<{ full_name: string }>(
+        tenantId,
+        `SELECT full_name FROM students WHERE student_id = $1 AND tenant_id = $2`,
+        [input.student_id, tenantId],
+      );
+      await notifyRoles(tenantId, TEACHER_ROLES, {
+        type: 'CASE_NEW',
+        title: 'Kasus baru',
+        body: `Kasus ${created.case_type} untuk ${stu[0]?.full_name ?? 'seorang siswa'} telah dibuat.`,
+        link: `/dashboard/cases/${created.case_id}`,
+      }, { excludeUserId: createdBy });
+    } catch (notifyErr) {
+      console.error('[notify:CASE_NEW] failed (non-fatal):', notifyErr);
+    }
 
     return created;
   } catch (err) {
@@ -243,6 +261,23 @@ export async function updateCase(
     tenantId,
     actorId,
   });
+
+  // "Perkembangan kasus" — kabari guru-guru yang terhubung ke kasus. Never throws.
+  try {
+    const changed: string[] = [];
+    if (input.status !== undefined) changed.push(`status: ${input.status}`);
+    if (input.risk_level !== undefined) changed.push(`risiko: ${input.risk_level}`);
+    if (input.assigned_counselor !== undefined) changed.push('konselor ditugaskan');
+    if (input.summary !== undefined) changed.push('ringkasan diperbarui');
+    await notifyCaseTeachers(tenantId, caseId, {
+      type: 'CASE_PROGRESS',
+      title: 'Perkembangan kasus',
+      body: changed.length > 0 ? `Kasus diperbarui — ${changed.join(', ')}.` : 'Kasus diperbarui.',
+      link: `/dashboard/cases/${caseId}`,
+    }, { excludeUserId: actorId });
+  } catch (notifyErr) {
+    console.error('[notify:CASE_PROGRESS] failed (non-fatal):', notifyErr);
+  }
 
   return updated;
 }

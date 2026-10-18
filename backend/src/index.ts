@@ -38,6 +38,7 @@ import guidebookRoutes from './api/guidebook.routes.js';
 import quisionerRoutes from './api/quisioner.routes.js';
 import referralssRoutes from './api/referrals.routes.js';
 import psychologistsRoutes from './api/admin/psychologists.routes.js';
+import notificationsRoutes from './api/notifications.routes.js';
 const app = express();
 
 // ─── Global Middleware ───────────────────────────────────────────────────────
@@ -95,6 +96,7 @@ app.use('/api', employeeCounselingRoutes);
 app.use('/api/guidebook', guidebookRoutes);
 app.use('/api/quisioner', quisionerRoutes);
 app.use('/api/referrals', referralssRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Protected Root-Level Routers
 app.use('/api', incidentsRoutes);

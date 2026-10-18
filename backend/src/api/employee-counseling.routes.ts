@@ -5,6 +5,7 @@ import { setTenantContext, setTenantFromSlug } from '../middleware/tenant.middle
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import { sendSuccess, sendCreated, sendPaginated } from '../utils/response.js';
 import * as ecService from '../services/employee-counseling.service.js';
+import { notifyRoles, ADMIN_ROLES } from '../services/notifications.service.js';
 import {
   EmployeeCounselingSubmissionSchema,
   CreateSessionNoteSchema,
@@ -49,6 +50,23 @@ router.post('/employee-counseling/submit', setTenantFromSlug, asyncHandler(async
   // submittedBy = userId from auth header if present, otherwise null (anonymous)
   const submittedBy = (req as any).userId ?? null;
   const submission = await ecService.submitIntake(tenantId, parsed.data, submittedBy);
+
+  // Notifikasi "konseling karyawan baru" (spec notifikasi): admin mendapat info
+  // pengajuan, konselor mendapat permintaan konseling. Never throws.
+  const who = submission?.employee_name ?? 'Seorang karyawan';
+  await notifyRoles(tenantId, ADMIN_ROLES, {
+    type: 'COUNSELING_REQUEST',
+    title: 'Konseling karyawan baru',
+    body: `${who} mengisi permintaan konseling.`,
+    link: '/dashboard/admin/employee-counseling',
+  });
+  await notifyRoles(tenantId, ['COUNSELOR'], {
+    type: 'COUNSELING_REQUEST',
+    title: 'Permintaan konseling karyawan',
+    body: `${who} mengisi permintaan konseling.`,
+    link: '/dashboard/counselor/employee-counseling',
+  });
+
   sendCreated(res, submission);
 }));
 

@@ -2,7 +2,7 @@ import { queryWithTenant } from '../db/pool.js';
 import { hashNationalId } from '../utils/encryption.js';
 import { createAppointment, confirmAppointment, updateAvailabilitySlot } from './appointments.service.js';
 import { buildAvatarUrl } from './avatar.service.js';
-import { sendNotificationToUser } from './notifications.service.js';
+import { createNotification, notifyRoles, ADMIN_ROLES } from './notifications.service.js';
 
 export async function verifyNik(tenantId: string, nik: string): Promise<{ valid: boolean; staff_name?: string; gender?: string }> {
   if (!nik || !nik.trim()) return { valid: false };
@@ -174,16 +174,21 @@ export async function bookStaffCounseling(
     appointment_id: appointment.appointment_id,
   });
 
-  // Notify the counselor (in-app; best-effort, never throws).
+  // Notifikasi in-app (spec notifikasi): profesional mendapat "jadwal baru",
+  // admin mendapat "konseling karyawan baru". Best-effort, never throws.
   try {
-    const { rows: cn } = await queryWithTenant<{ full_name: string }>(
-      tenantId,
-      `SELECT full_name FROM users WHERE tenant_id = $1 AND user_id = $2`,
-      [tenantId, slot.professional_id],
-    );
-    await sendNotificationToUser(tenantId, slot.professional_id, {
-      title: 'Janji Temu Konseling Baru',
-      body: `Halo ${cn[0]?.full_name ?? 'Konselor'}, ${staffUser.full_name} telah membooking janji temu konseling pada ${new Date(slot.slot_start).toLocaleString('id-ID')}.`,
+    await createNotification(tenantId, {
+      user_id: slot.professional_id,
+      type: 'SCHEDULE_NEW',
+      title: 'Jadwal konseling baru',
+      body: `${staffUser.full_name} membooking jadwal ${new Date(slot.slot_start).toLocaleString('id-ID')}.`,
+    });
+    // link diisi notifyProfessional sesuai dashboard role penerima.
+    await notifyRoles(tenantId, ADMIN_ROLES, {
+      type: 'COUNSELING_REQUEST',
+      title: 'Konseling karyawan baru',
+      body: `${staffUser.full_name} membooking konseling pada ${new Date(slot.slot_start).toLocaleString('id-ID')}.`,
+      link: '/dashboard/admin/employee-counseling',
     });
   } catch {
     /* non-fatal */

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/errors.js';
 import { sendError } from '../utils/response.js';
 import { ZodError } from 'zod';
+import { notifySystemError } from '../services/notifications.service.js';
 
 /**
  * Centralized error handler for Express.
@@ -47,6 +48,18 @@ export function errorHandler(
 
   // Unexpected errors
   console.error('[UNHANDLED_ERROR]', err);
+
+  // "Error baru" untuk admin (spec notifikasi) — fire-and-forget, di-throttle
+  // di service supaya bug yang sama tidak membanjiri inbox. Tenant hanya ada
+  // setelah middleware tenant jalan; tanpa tenant tidak ada inbox tujuan.
+  const errTenantId = (_req as Request & { tenantId?: string }).tenantId;
+  if (errTenantId) {
+    void notifySystemError(errTenantId, {
+      message: err.message,
+      path: _req.originalUrl,
+    });
+  }
+
   sendError(
     res,
     process.env['NODE_ENV'] === 'production'

@@ -14,8 +14,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, Menu, Search, Bell, ChevronDown } from 'lucide-react';
+import { LogOut, Menu, Search, ChevronDown } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { NotificationsBell } from '@/components/layout/notifications-bell';
 
 interface TopbarProps {
   user: {
@@ -169,18 +170,8 @@ export function Topbar({ user, onMenuClick }: TopbarProps) {
           {language === 'en' ? 'ID' : 'EN'}
         </Button>
 
-        {/* Notifications */}
-        <button
-          type="button"
-          className="relative flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-border bg-card text-secondary-text transition-colors hover:bg-accent hover:text-heading"
-          aria-label="Notifikasi"
-        >
-          <Bell className="size-[1.125rem]" />
-          <span
-            className="absolute right-2 top-2 size-1.5 rounded-full bg-danger ring-2 ring-card"
-            aria-hidden="true"
-          />
-        </button>
+        {/* Notifications — bel asli: badge unread, klik item navigasi, tutup/hapus */}
+        <NotificationsBell />
 
         {/* Profile menu */}
         <DropdownMenu>

@@ -1,6 +1,7 @@
 import { getClientWithTenant, queryWithTenant } from '../db/pool.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { auditLog } from '../utils/audit-log.js';
+import { notifyUsers } from './notifications.service.js';
 import type { Request } from 'express';
 
 export interface ShareCaseInput {
@@ -105,6 +106,14 @@ export async function shareCase(
         tenantId,
         actorId,
       });
+
+      // "Kasus dibagikan" — kabari setiap penerima share. Never throws.
+      await notifyUsers(tenantId, results.map(r => r.shared_with), {
+        type: 'CASE_SHARED',
+        title: 'Kasus dibagikan kepada Anda',
+        body: `Anda kini dapat ${permission === 'EDIT' ? 'mengedit' : 'melihat'} kasus yang dibagikan.`,
+        link: `/dashboard/cases/${caseId}`,
+      }, { excludeUserId: actorId });
     }
 
     if (skipped.length > 0 && results.length === 0) {

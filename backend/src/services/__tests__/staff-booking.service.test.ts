@@ -11,7 +11,13 @@ vi.mock('../../services/appointments.service.js', () => ({
   confirmAppointment: vi.fn(),
   updateAvailabilitySlot: vi.fn(),
 }));
-vi.mock('../../services/notifications.service.js', () => ({ sendNotificationToUser: vi.fn() }));
+vi.mock('../../services/notifications.service.js', () => ({
+  createNotification: vi.fn().mockResolvedValue(null),
+  notifyRoles: vi.fn().mockResolvedValue(undefined),
+  notifyProfessional: vi.fn().mockResolvedValue(undefined),
+  ADMIN_ROLES: ['IT_ADMIN'],
+  sendNotificationToUser: vi.fn(),
+}));
 
 const TENANT = 'tenant-123';
 const C1 = '11111111-1111-4111-8111-111111111111';

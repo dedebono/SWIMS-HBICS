@@ -3,7 +3,7 @@ import { auditLog } from '../utils/audit-log.js';
 import { ValidationError, ConflictError, NotFoundError } from '../utils/errors.js';
 import { hashNationalId } from '../utils/encryption.js';
 import { createAppointment, confirmAppointment, updateAvailabilitySlot } from './appointments.service.js';
-import { sendNotificationToUser } from './notifications.service.js';
+import { createNotification, notifyRoles, ADMIN_ROLES } from './notifications.service.js';
 import { detectHighPriority } from './employee-counseling.service.js';
 import type { CreateSubmissionInput } from '@swims/shared';
 
@@ -258,11 +258,24 @@ export async function submitCombinedIntake(
     const counselorName = cn[0]?.full_name ?? 'Konselor';
     const when = new Date(slot.slot_start).toLocaleString('id-ID');
     try {
-      await sendNotificationToUser(tenantId, slot.professional_id, {
-        title: isHighPriority ? 'Pengajuan Konseling Mendesak' : 'Pengajuan Konseling Baru',
+      // In-app notifikasi (spec notifikasi): konselor penerima booking
+      // mendapat "permintaan konseling", admin mendapat "konseling karyawan
+      // baru". Best-effort — booking itu sendiri sudah sukses.
+      await createNotification(tenantId, {
+        user_id: slot.professional_id,
+        type: 'COUNSELING_REQUEST',
+        title: isHighPriority ? 'Pengajuan konseling mendesak' : 'Permintaan konseling karyawan',
         body: isHighPriority
           ? `${staff.full_name} mengisi pengajuan dengan tanda PRIORITAS TINGGI. Jadwal: ${when}.`
-          : `${staff.full_name} telah mengisi pengajuan dan membooking jadwal ${when}.`,
+          : `${staff.full_name} mengisi pengajuan dan membooking jadwal ${when}.`,
+      });
+      await notifyRoles(tenantId, ADMIN_ROLES, {
+        type: 'COUNSELING_REQUEST',
+        title: 'Konseling karyawan baru',
+        body: isHighPriority
+          ? `${staff.full_name} — PRIORITAS TINGGI. Jadwal: ${when}.`
+          : `${staff.full_name} mengisi pengajuan konseling. Jadwal: ${when}.`,
+        link: '/dashboard/admin/employee-counseling',
       });
     } catch {
       /* non-fatal — the booking itself succeeded */

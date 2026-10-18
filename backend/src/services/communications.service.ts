@@ -1,5 +1,6 @@
 import { queryWithTenant } from '../db/pool.js';
 import { auditLog } from '../utils/audit-log.js';
+import { notifyCaseWatchers } from './notifications.service.js';
 import type { CaseCommunicationRow } from '@swims/shared';
 import type { Request } from 'express';
 
@@ -46,6 +47,15 @@ export async function createCommunication(
     tenantId,
     actorId,
   });
+
+  // "Chat baru / update chat" — fan-out ke semua yang mengikuti kasus
+  // (pembuat kasus + semua user yang di-share). Never throws.
+  await notifyCaseWatchers(tenantId, caseId, {
+    type: 'CHAT_NEW',
+    title: 'Pesan baru pada kasus',
+    body: `${input.contact_name}: ${input.message.slice(0, 100)}`,
+    link: `/dashboard/cases/${caseId}`,
+  }, { excludeUserId: actorId });
 
   return created;
 }

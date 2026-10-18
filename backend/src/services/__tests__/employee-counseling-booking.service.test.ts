@@ -112,7 +112,8 @@ describe('employee-counseling-booking.service', () => {
       scheduled_at: SLOT_START,
     } as any);
     vi.spyOn(appointments, 'updateAvailabilitySlot').mockResolvedValue({} as any);
-    vi.spyOn(notifications, 'sendNotificationToUser').mockResolvedValue(undefined as any);
+    vi.spyOn(notifications, 'createNotification').mockResolvedValue(null as any);
+    vi.spyOn(notifications, 'notifyRoles').mockResolvedValue(undefined);
     vi.spyOn(console, 'error').mockImplementation(() => {});
     mockDb();
   });
@@ -190,10 +191,13 @@ describe('employee-counseling-booking.service', () => {
 
     it('notifies the counselor', async () => {
       await service.submitCombinedIntake(TENANT, INPUT);
-      expect(notifications.sendNotificationToUser).toHaveBeenCalledWith(
+      expect(notifications.createNotification).toHaveBeenCalledWith(
         TENANT,
-        COUNSELOR_ID,
-        expect.objectContaining({ title: expect.stringContaining('Pengajuan') }),
+        expect.objectContaining({
+          user_id: COUNSELOR_ID,
+          type: 'COUNSELING_REQUEST',
+          title: expect.stringContaining('konseling'),
+        }),
       );
     });
 
@@ -229,8 +233,9 @@ describe('employee-counseling-booking.service', () => {
         ...INPUT,
         answers: { ...ANSWERS, q9_bantuan_segera: 'ya' },
       });
-      expect(notifications.sendNotificationToUser).toHaveBeenCalledWith(
-        TENANT, COUNSELOR_ID, expect.objectContaining({ title: 'Pengajuan Konseling Mendesak' }),
+      expect(notifications.createNotification).toHaveBeenCalledWith(
+        TENANT,
+        expect.objectContaining({ user_id: COUNSELOR_ID, title: 'Pengajuan konseling mendesak' }),
       );
     });
 
@@ -330,7 +335,7 @@ describe('employee-counseling-booking.service', () => {
     });
 
     it('does not fail the whole request when the counselor notification fails', async () => {
-      vi.spyOn(notifications, 'sendNotificationToUser').mockRejectedValue(new Error('redis down'));
+      vi.spyOn(notifications, 'createNotification').mockRejectedValue(new Error('redis down'));
       await expect(service.submitCombinedIntake(TENANT, INPUT)).resolves.toMatchObject({ submission_id: 'sub-1' });
     });
   });
