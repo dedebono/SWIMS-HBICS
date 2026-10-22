@@ -114,7 +114,7 @@ describe('submitCaseCounseling — appointment insert + parent notification', ()
     expect(studentQuery).toContain('s.phone_number');
   });
 
-  it('sends the WAHA parent notification on the professional branch', async () => {
+  it('sends the WhatsApp parent notification on the professional branch', async () => {
     await submitCaseCounseling(TENANT, {
       caseId: CASE_ID,
       answers: answers(9),
@@ -167,7 +167,7 @@ describe('submitCaseCounseling — appointment insert + parent notification', ()
   });
 
   it('still persists the submission when the notification fails (non-fatal)', async () => {
-    referral.sendReferralNotification.mockRejectedValueOnce(new Error('WAHA down'));
+    referral.sendReferralNotification.mockRejectedValueOnce(new Error('WhatsApp gateway down'));
 
     await expect(
       submitCaseCounseling(TENANT, {

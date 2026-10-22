@@ -6,8 +6,10 @@ vi.mock('../../db/pool.js', () => ({
 
 vi.mock('../../config/env.js', () => ({
   env: {
-    WAHA_URL: 'http://env-waha:3000',
-    WAHA_API_KEY: 'env-waha-key',
+    GOWA_ENABLED: true,
+    GOWA_API_URL: 'http://env-gowa:3000',
+    GOWA_BASIC_AUTH: 'env-gowa-user:env-gowa-pass',
+    GOWA_DEVICE_ID: '',
     S3_BUCKET: 'env-bucket',
     S3_REGION: 'env-region',
     S3_ACCESS_KEY: 'env-ak',
@@ -19,7 +21,7 @@ vi.mock('../../config/env.js', () => ({
 import { getClientWithTenant } from '../../db/pool.js';
 import {
   getTenantSettings,
-  getWahaSettings,
+  getGowaSettings,
   getStorageSettings,
   getEmailSettings,
   getAiSettings,
@@ -120,23 +122,31 @@ describe('cache', () => {
   });
 });
 
-// ── getWahaSettings ──────────────────────────────────────────────────────────
+// ── getGowaSettings ──────────────────────────────────────────────────────────
 
-describe('getWahaSettings', () => {
+describe('getGowaSettings', () => {
   it('reads from DB settings when available', async () => {
-    mockDbSettings({ waha: { url: 'http://db-waha:3002', session: 'sess', apiKey: 'db-key' } });
-    const w = await getWahaSettings(TENANT);
-    expect(w.url).toBe('http://db-waha:3002');
-    expect(w.session).toBe('sess');
-    expect(w.apiKey).toBe('db-key');
+    mockDbSettings({
+      gowa: { enabled: true, url: 'http://db-gowa:3000', basicAuth: 'db-user:db-pass' },
+    });
+    const g = await getGowaSettings(TENANT);
+    expect(g.enabled).toBe(true);
+    expect(g.url).toBe('http://db-gowa:3000');
+    expect(g.basicAuth).toBe('db-user:db-pass');
   });
 
   it('falls back to env when DB settings are empty', async () => {
     mockDbSettings({});
-    const w = await getWahaSettings(TENANT);
-    expect(w.url).toBe('http://env-waha:3000');
-    expect(w.apiKey).toBe('env-waha-key');
-    expect(w.session).toBe('default');
+    const g = await getGowaSettings(TENANT);
+    expect(g.url).toBe('http://env-gowa:3000');
+    expect(g.basicAuth).toBe('env-gowa-user:env-gowa-pass');
+    expect(g.enabled).toBe(true);
+  });
+
+  it('honours an explicit disabled flag from the DB', async () => {
+    mockDbSettings({ gowa: { enabled: false } });
+    const g = await getGowaSettings(TENANT);
+    expect(g.enabled).toBe(false);
   });
 });
 

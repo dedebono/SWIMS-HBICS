@@ -51,12 +51,16 @@ describe('PATCH /api/admin/settings — every category must persist', () => {
   const patch = (body: unknown) =>
     request(app).patch('/api/admin/settings').set('Authorization', `Bearer ${TOKEN}`).send(body as object);
 
-  it('persists the waha category (was stripped entirely)', async () => {
-    const res = await patch({ waha: { url: 'http://waha.test:3002', session: 'default', apiKey: 'K' } });
+  it('persists the gowa category (was stripped entirely)', async () => {
+    const res = await patch({
+      gowa: { enabled: true, url: 'http://gowa.test:3000', basicAuth: 'u:p' },
+    });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.waha).toEqual({ url: 'http://waha.test:3002', session: 'default', apiKey: 'K' });
-    expect(stored().waha.apiKey).toBe('K');
+    expect(res.body.data.gowa).toEqual({
+      enabled: true, url: 'http://gowa.test:3000', basicAuth: 'u:p',
+    });
+    expect(stored().gowa.basicAuth).toBe('u:p');
   });
 
   it('persists the email category (was stripped entirely)', async () => {
@@ -121,33 +125,35 @@ describe('PATCH /api/admin/settings — every category must persist', () => {
   });
 
   it('merges into an existing category instead of replacing it', async () => {
-    stored = mockSettingsClient({ waha: { url: 'http://old:3002', apiKey: 'OLD-KEY' } }).getStored;
+    stored = mockSettingsClient({ gowa: { url: 'http://old:3000', basicAuth: 'old:pw' } }).getStored;
 
-    const res = await patch({ waha: { session: 'session-2' } });
+    const res = await patch({ gowa: { deviceId: 'device-2' } });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.waha).toEqual({ url: 'http://old:3002', apiKey: 'OLD-KEY', session: 'session-2' });
+    expect(res.body.data.gowa).toEqual({
+      url: 'http://old:3000', basicAuth: 'old:pw', deviceId: 'device-2',
+    });
   });
 
   it('leaves other categories untouched when only one is saved', async () => {
     stored = mockSettingsClient({ email: { host: 'smtp.keep', port: 465 } }).getStored;
 
-    const res = await patch({ waha: { url: 'http://w:3002' } });
+    const res = await patch({ gowa: { url: 'http://g:3000' } });
 
     expect(res.status).toBe(200);
     expect(res.body.data.email).toEqual({ host: 'smtp.keep', port: 465 });
-    expect(res.body.data.waha.url).toBe('http://w:3002');
+    expect(res.body.data.gowa.url).toBe('http://g:3000');
   });
 
   it('does not erase a stored secret when the form sends an empty value', async () => {
     // undefined fields are filtered out; an explicit empty string is a real
     // instruction to clear, so it must be honoured rather than merged away.
-    stored = mockSettingsClient({ waha: { url: 'http://keep:3002', apiKey: 'KEEP' } }).getStored;
+    stored = mockSettingsClient({ gowa: { url: 'http://keep:3000', basicAuth: 'KEEP' } }).getStored;
 
-    const res = await patch({ waha: { apiKey: undefined } });
+    const res = await patch({ gowa: { basicAuth: undefined } });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.waha.apiKey).toBe('KEEP');
+    expect(res.body.data.gowa.basicAuth).toBe('KEEP');
   });
 
   it('rejects an unknown category instead of reporting a silent success', async () => {
@@ -178,7 +184,7 @@ describe('PATCH /api/admin/settings — every category must persist', () => {
       'invalidateTenantSettings',
     );
 
-    await patch({ waha: { url: 'http://cache.test:3002' } });
+    await patch({ gowa: { url: 'http://cache.test:3000' } });
 
     expect(spy).toHaveBeenCalledWith(TENANT);
   });

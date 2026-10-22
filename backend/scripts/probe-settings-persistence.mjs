@@ -76,13 +76,14 @@ let s = (await read()).storage;
 report('storageProvider round-trips', s?.storageProvider === 'local', JSON.stringify(s?.storageProvider));
 report('storage detail keys round-trip', s?.firebaseApiKey === 'PROBE-FIREBASE-KEY', JSON.stringify(s?.firebaseApiKey ?? null));
 
-// ── 2. waha ──────────────────────────────────────────────────────────────────
-console.log('\n2. waha settings');
-const p = await api('/api/admin/settings', { method: 'PATCH', body: { waha: { url: 'http://probe-waha.local:3002', session: 'default', apiKey: 'PROBE-WAHA-KEY' } } });
+// ── 2. gowa ──────────────────────────────────────────────────────────────────
+console.log('\n2. gowa settings');
+const p = await api('/api/admin/settings', { method: 'PATCH', body: { gowa: { enabled: true, url: 'http://probe-gowa.local:3000', basicAuth: 'probe-user:PROBE-GOWA-PASS' } } });
 report('PATCH returns 200', p.status === 200, String(p.status));
-s = (await read()).waha;
-report('waha.url persisted', s?.url === 'http://probe-waha.local:3002', JSON.stringify(s ?? null));
-report('waha.apiKey persisted', s?.apiKey === 'PROBE-WAHA-KEY', JSON.stringify(s?.apiKey ?? null));
+s = (await read()).gowa;
+report('gowa.url persisted', s?.url === 'http://probe-gowa.local:3000', JSON.stringify(s ?? null));
+report('gowa.basicAuth persisted', s?.basicAuth === 'probe-user:PROBE-GOWA-PASS', JSON.stringify(s?.basicAuth ?? null));
+report('gowa.enabled persisted', s?.enabled === true, JSON.stringify(s?.enabled ?? null));
 
 // ── 3. email / SMTP ──────────────────────────────────────────────────────────
 console.log('\n3. email (SMTP) settings');

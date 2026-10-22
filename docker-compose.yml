@@ -93,6 +93,13 @@ services:
       - S3_SECRET_KEY=swims_minio_password
       - S3_BUCKET=swims-media
       - S3_REGION=us-east-1
+      # GOWA (WhatsApp HTTP API) — replaced WAHA.
+      # Values come from the repo-root .env via compose variable substitution,
+      # so the Basic-Auth secret never has to be committed here.
+      - GOWA_ENABLED=${GOWA_ENABLED:-true}
+      - GOWA_API_URL=${GOWA_API_URL:-http://100.84.186.55:3000}
+      - GOWA_BASIC_AUTH=${GOWA_BASIC_AUTH:-}
+      - GOWA_DEVICE_ID=${GOWA_DEVICE_ID:-}
     depends_on:
       - pgbouncer
       - redis

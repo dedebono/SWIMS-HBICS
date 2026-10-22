@@ -1,0 +1,6 @@
+# Conventions
+- Backend pattern: `src/api/<domain>.routes.ts` (Express router) + `src/services/<domain>.service.ts` (business logic + SQL via pg pool). Routes stay thin; logic in services. Zod for input validation. JWT auth middleware; per-role permissions are dynamic (managed via User Management) — check permission tables, don't assume hardcoded roles.
+- DB: raw SQL through `src/db/pool.ts`; migrations in `src/db/migrations/` (ts runner). Never guess column names — check migrations; e.g. incidents uses `reported_by`.
+- Shared types/schemas in `shared/` (import as @swims/shared) — keep API contracts there, not duplicated.
+- Frontend: App Router route groups, components in `src/components/`, server state via axios calls, client state zustand. UI: shadcn/@base-ui + Tailwind v4; follow `frontend/DESIGN_SYSTEM.md` (user values polished UI, WCAG-AA tokens like `primary-strong`).
+- Next.js 16 breaking changes: read bundled docs in `frontend/node_modules/next/dist/docs/` before using framework APIs.

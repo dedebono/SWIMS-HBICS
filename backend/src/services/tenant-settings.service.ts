@@ -4,8 +4,8 @@ import { getClientWithTenant } from '../db/pool.js';
  * Single reader for `tenants.settings`.
  *
  * The settings form writes here, and the services that actually USE the config
- * (WAHA, email, storage, AI) read it here. Before this existed, the form saved
- * values that nothing ever looked at — WAHA and S3 were read straight from
+ * (GOWA, email, storage, AI) read it here. Before this existed, the form saved
+ * values that nothing ever looked at — WhatsApp and S3 were read straight from
  * `env`, so an IT admin could fill the whole page in and change nothing.
  *
  * Every getter falls back to the matching `env.*` value so a tenant that never
@@ -61,10 +61,15 @@ export interface StorageSettings {
   gdriveSharedDriveId?: string;
 }
 
-export interface WahaSettings {
+export interface GowaSettings {
+  /** Master switch — when false, no WhatsApp message is sent at all. */
+  enabled?: boolean;
+  /** Base URL of the GOWA server, e.g. http://100.84.186.55:3000 */
   url?: string;
-  session?: string;
-  apiKey?: string;
+  /** HTTP Basic credentials as `user:password` (GOWA's APP_BASIC_AUTH). */
+  basicAuth?: string;
+  /** Optional device id for GOWA multi-device servers (X-Device-Id header). */
+  deviceId?: string;
 }
 
 export interface EmailSettings {
@@ -79,7 +84,7 @@ export interface EmailSettings {
 export interface TenantSettings {
   ai?: AiSettings;
   storage?: StorageSettings;
-  waha?: WahaSettings;
+  gowa?: GowaSettings;
   email?: EmailSettings;
   [key: string]: unknown;
 }
@@ -122,16 +127,28 @@ export async function getTenantSettings(tenantId: string): Promise<TenantSetting
   }
 }
 
-// ── WAHA ─────────────────────────────────────────────────────────────────────
+// ── GOWA ─────────────────────────────────────────────────────────────────────
 
-export async function getWahaSettings(tenantId: string): Promise<Required<WahaSettings>> {
+/**
+ * Resolve the tenant's GOWA (WhatsApp HTTP API) settings.
+ *
+ * Replaces the WAHA reader. Per-tenant values saved in Pengaturan Sistem win
+ * over env; env wins over the GOWA server default, so a deployment that never
+ * opened the settings form still works.
+ *
+ * The stored `waha` block is deliberately NOT read: it held a WAHA URL, a
+ * session name and an API key, none of which mean anything to GOWA. A tenant
+ * that had filled in the old WAHA panel simply falls back to env here.
+ */
+export async function getGowaSettings(tenantId: string): Promise<Required<GowaSettings>> {
   const settings = await getTenantSettings(tenantId);
-  const waha = settings.waha ?? {};
+  const gowa = settings.gowa ?? {};
   const { env } = await import('../config/env.js');
   return {
-    url: waha.url || env.WAHA_URL || 'http://100.127.221.23:3002',
-    session: waha.session || 'default',
-    apiKey: waha.apiKey || env.WAHA_API_KEY || '',
+    enabled: gowa.enabled ?? env.GOWA_ENABLED ?? true,
+    url: gowa.url || env.GOWA_API_URL || 'http://100.84.186.55:3000',
+    basicAuth: gowa.basicAuth || env.GOWA_BASIC_AUTH || '',
+    deviceId: gowa.deviceId || env.GOWA_DEVICE_ID || '',
   };
 }
 

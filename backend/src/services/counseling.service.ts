@@ -1,9 +1,10 @@
 import { queryWithTenant } from '../db/pool.js';
 import type { AppointmentRow, QuisionerAnswerRow } from '@swims/shared';
 import { auditLog } from '../utils/audit-log.js';
+import { ValidationError } from '../utils/errors.js';
 
 /**
- * Resolve the parent contact for a student, for the WAHA referral notification.
+ * Resolve the parent contact for a student, for the WhatsApp referral notification.
  *
  * The `students` table has NO `parent_phone`/`parent_name` columns — those only
  * exist on `parent_referral_tokens`. Selecting them here raised
@@ -81,7 +82,7 @@ export async function submitCounselingQuisioner(
     );
     appointmentId = rows[0]?.appointment_id ?? null;
 
-    // If professional recommendation: create referral token + send WAHA notification
+    // If professional recommendation: create referral token + send WhatsApp notification
     if (appointmentId) {
       try {
         const parent = await getParentContact(tenantId, data.student_id);
@@ -172,6 +173,96 @@ export async function getCaseCounseling(
   return rows[0] ?? null;
 }
 
+/**
+ * Reject a counseling submission whose required questions are blank.
+ *
+ * The client used to send one answer entry per question with `answer_text: ''`
+ * and `score: 0` for every untouched checkbox, and the API accepted it — writing
+ * a fake score-0 record into `counseling_submissions` and (on the 'professional'
+ * branch) notifying the parent about a result nobody actually answered. Trusting
+ * the client's `score` is the other half of that bug: nothing verified the score
+ * against the option's real value in `quisioner_answers`.
+ *
+ * The DB is the source of truth for which questions are required, so a crafted
+ * payload cannot skip the check.
+ */
+async function validateCounselingAnswers(
+  tenantId: string,
+  answers: Array<{ question_id: string; answer_text: string; score: number }>,
+): Promise<Array<{ question_id: string; answer_text: string; score: number }>> {
+  const { rows: questions } = await queryWithTenant<{
+    question_id: string;
+    question_text: string;
+    question_type: string;
+    is_required: boolean;
+  }>(
+    tenantId,
+    `SELECT question_id, question_text, question_type, is_required
+     FROM quisioner_questions
+     WHERE tenant_id = $1 AND deleted_at IS NULL
+     ORDER BY order_index ASC, created_at ASC`,
+    [tenantId],
+  );
+
+  // No question set configured → nothing can be answered, so nothing valid to submit.
+  if (questions.length === 0) {
+    throw new ValidationError('Belum ada pertanyaan kuesioner yang tersedia.');
+  }
+
+  const submitted = new Map<string, string>();
+  for (const a of answers) {
+    const text = a.answer_text?.trim() ?? '';
+    if (text !== '') submitted.set(a.question_id, text);
+  }
+
+  const missing: string[] = [];
+  for (const [index, q] of questions.entries()) {
+    if (!q.is_required) continue;
+    if (!submitted.get(q.question_id)) {
+      missing.push(`${index + 1}. ${q.question_text}`);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new ValidationError(
+      `Lengkapi ${missing.length} pertanyaan wajib sebelum mengirim kuesioner.`,
+      { missing_questions: missing },
+    );
+  }
+
+  // Recompute the score server-side from the option the teacher actually picked,
+  // so a hand-crafted payload cannot inflate the total into the 'professional'
+  // branch and trigger a parent notification.
+  const { rows: options } = await queryWithTenant<{
+    question_id: string;
+    answer_text: string;
+    score: number;
+  }>(
+    tenantId,
+    `SELECT question_id, answer_text, score
+     FROM quisioner_answers
+     WHERE tenant_id = $1 AND deleted_at IS NULL`,
+    [tenantId],
+  );
+
+  const scoreByOption = new Map<string, number>();
+  for (const o of options) {
+    scoreByOption.set(`${o.question_id}::${o.answer_text}`, Number(o.score));
+  }
+
+  return answers
+    .filter(a => (a.answer_text?.trim() ?? '') !== '')
+    .map(a => {
+      const answerText = (a.answer_text ?? '').trim();
+      return {
+        question_id: a.question_id,
+        answer_text: answerText,
+        // Free-text answers have no option row, so they score 0 by definition.
+        score: scoreByOption.get(`${a.question_id}::${answerText}`) ?? 0,
+      };
+    });
+}
+
 export async function submitCaseCounseling(
   tenantId: string,
   data: {
@@ -181,7 +272,8 @@ export async function submitCaseCounseling(
     student_id: string;
   },
 ): Promise<CounselingSubmissionRow> {
-  const total = data.answers.reduce((sum, a) => sum + a.score, 0);
+  const validated = await validateCounselingAnswers(tenantId, data.answers);
+  const total = validated.reduce((sum, a) => sum + a.score, 0);
   const recommendation: 'professional' | 'internal' = total >= 7 ? 'professional' : 'internal';
 
   // Check if submission already exists
@@ -198,7 +290,7 @@ export async function submitCaseCounseling(
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING submission_id, tenant_id, case_id, submitted_by, student_id,
                recommendation, score, answers, submitted_at`,
-    [tenantId, data.caseId, data.submitted_by, data.student_id, recommendation, total, JSON.stringify(data.answers)],
+    [tenantId, data.caseId, data.submitted_by, data.student_id, recommendation, total, JSON.stringify(validated)],
   );
 
   const submission = submissionRows[0];
@@ -220,7 +312,7 @@ export async function submitCaseCounseling(
       ],
     );
 
-    // Send WAHA notification to parent
+    // Send WhatsApp notification to parent
     try {
       const parent = await getParentContact(tenantId, data.student_id);
       if (parent?.parentPhone) {
@@ -276,7 +368,7 @@ export async function submitCaseCounseling(
     action: 'COUNSELING_QUISIONER_SUBMITTED',
     entityType: 'counseling_submissions',
     entityId: submission.submission_id,
-    after: { recommendation, total, answer_count: data.answers.length },
+    after: { recommendation, total, answer_count: validated.length },
     tenantId,
     actorId: data.submitted_by,
   });

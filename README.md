@@ -15,7 +15,7 @@ Built with modern web technologies, SWIMS features a robust Role-Based Access Co
 - **Secure Media Assets**: Multi-provider storage (**local / S3 / R2 / Firebase / Google Drive**) with redaction support and presigned uploads. Each asset records its own `storage_backend`, so switching providers never orphans existing files.
 - **Right to Be Forgotten (RTBF)**: Compliance with data privacy regulations (GDPR/FERPA) allowing IT Admins to securely scrub PII.
 - **Comprehensive Audit Logging**: Immutable audit trails for all sensitive data access and system modifications.
-- **WAHA WhatsApp Integration**: Appointment notifications sent automatically via WAHA HTTP API to student/guardian phone numbers. Phone numbers managed by IT Admin.
+- **GOWA WhatsApp Integration**: Appointment notifications sent automatically via GOWA HTTP API to student/guardian phone numbers. Phone numbers managed by IT Admin.
 - **Employee Counseling**: Confidential booking and session module for staff, with separate access logging.
 - **Psychologist Referral**: Counselor → School Head approval → internal school psychologist or external Puspaga.
 - **Quisioner Module**: Configurable question lists managed by IT Admin; staff, student, employee-counseling, and referral forms.
@@ -40,7 +40,7 @@ Built with modern web technologies, SWIMS features a robust Role-Based Access Co
 - **Validation**: Zod
 - **Auth**: JWT (`jsonwebtoken`) + `bcryptjs`
 - **Mail / PDF**: nodemailer, pdfkit
-- **WhatsApp**: WAHA HTTP API (`axios`)
+- **WhatsApp**: GOWA HTTP API (`fetch`, HTTP Basic auth)
 - **Social Media**: Repliz API (`axios`)
 - **Testing**: Vitest + Supertest
 - **AI**: OpenAI-compatible `/chat/completions` — endpoint, key, and model configured per-tenant via IT Admin settings
@@ -193,7 +193,7 @@ flowchart LR
   UC9["Tangani insiden medis"]
   UC10["Kelola user / role / permission"]
   UC11["RTBF scrub PII"]
-  UC12["Kirim notifikasi WAHA"]
+  UC12["Kirim notifikasi WhatsApp (GOWA)"]
   UC13["Generate Ringkasan Otomatis + saran guru"]
   UC14["Audit log"]
   UC15["Kelola quisioner (admin)"]
@@ -375,7 +375,7 @@ flowchart TB
   end
   subgraph EX["External"]
     AI["LLM /chat/completions"]
-    WA["WAHA WhatsApp"]
+    WA["GOWA WhatsApp"]
   end
 
   PL --> AL

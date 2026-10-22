@@ -1,6 +1,6 @@
 import { pool, queryWithTenant } from '../db/pool.js';
 import { auditLog } from '../utils/audit-log.js';
-import { getWahaSettings } from './tenant-settings.service.js';
+import { getGowaSettings } from './tenant-settings.service.js';
 
 export interface PushNotificationPayload {
   title: string;
@@ -9,43 +9,130 @@ export interface PushNotificationPayload {
 }
 
 /**
- * Sends a WhatsApp message via WAHA (WhatsApp HTTP API).
+ * Normalise a stored phone number into the international form GOWA accepts.
  *
- * URL / session / API key come from the tenant's saved Pengaturan Sistem
- * (falling back to env, then to the old hardcoded default). This used to read
- * `env.WAHA_URL` and hardcode `session: 'default'`, so everything an IT admin
- * typed into the WhatsApp panel was ignored — the settings were never even
- * stored, and even once stored nothing read them.
+ * GOWA rejects anything starting with `0` (Indonesian local format like
+ * `0812…`) with "phone number must be in international format", and it only
+ * tolerates a leading `+`. SWIMS stores whatever an IT admin typed into the
+ * student/parent phone field, so the value reaching this function can be
+ * `0812…`, `+62812…`, `62812…`, or a JID like `62812…@s.whatsapp.net`.
+ *
+ * Returns `null` when the input cannot be turned into a usable number, so the
+ * caller can fail loudly instead of silently sending to a malformed recipient.
+ */
+export function normalizeGowaPhone(raw: string): string | null {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return null;
+
+  // Already a full JID (…@s.whatsapp.net, …@g.us, …@lid): GOWA handles those
+  // as-is, so leave them untouched.
+  if (trimmed.includes('@')) return trimmed;
+
+  // Strip formatting characters, then the optional leading '+'.
+  let digits = trimmed.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+')) digits = digits.slice(1);
+  if (!digits) return null;
+
+  // Local Indonesian format → international. GOWA explicitly rejects a leading 0.
+  if (digits.startsWith('0')) {
+    digits = `62${digits.slice(1)}`;
+  }
+
+  // A usable WhatsApp number is 8–15 digits (E.164 max 15).
+  if (!/^\d{8,15}$/.test(digits)) return null;
+
+  return digits;
+}
+
+/**
+ * Sends a WhatsApp message via GOWA (WhatsApp HTTP API).
+ *
+ * Transport migrated from WAHA to GOWA. The exported name and the
+ * `{ chatId, text }` payload are kept so every existing caller
+ * (appointments.service.ts, psychologist-referral.service.ts) works unchanged.
+ *
+ * Differences from the old WAHA transport:
+ *  - endpoint: `POST {base}/send/message` (was `POST {base}/api/sendText`)
+ *  - payload: `{ phone, message }`  (was `{ session, chatId, text }`)
+ *  - auth: HTTP Basic `Authorization: Basic base64(user:password)`
+ *    (was the `x-api-key` header)
+ *  - response: `{ code: 'SUCCESS', results: { message_id, status } }`
+ *    (was `{ id }`)
+ *
+ * URL / basic-auth come from the tenant's saved Pengaturan Sistem (falling back
+ * to env, then to the GOWA server default). This used to read `env.WAHA_URL`
+ * and hardcode `session: 'default'`, so everything an IT admin typed into the
+ * WhatsApp panel was ignored.
  */
 export async function sendWhatsAppMessage(
   tenantId: string,
   payload: { chatId: string; text: string },
 ): Promise<{ success: boolean; messageId?: string }> {
-  const { url: wahaUrl, session, apiKey: wahaApiKey } = await getWahaSettings(tenantId);
+  const { enabled, url: apiUrl, basicAuth, deviceId } = await getGowaSettings(tenantId);
+
+  if (!enabled) {
+    console.log('[GOWA] Disabled by configuration — message not sent.');
+    return { success: false };
+  }
+
+  const phone = normalizeGowaPhone(payload.chatId);
+  if (!phone) {
+    console.error(`[GOWA] Invalid recipient number: ${String(payload.chatId).slice(0, 6)}…`);
+    return { success: false };
+  }
+
+  const baseUrl = apiUrl.replace(/\/+$/, '');
 
   try {
-    const res = await fetch(`${wahaUrl}/api/sendText`, {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (basicAuth) {
+      headers.Authorization = `Basic ${Buffer.from(basicAuth).toString('base64')}`;
+    }
+    if (deviceId) {
+      headers['X-Device-Id'] = deviceId;
+    }
+
+    const res = await fetch(`${baseUrl}/send/message`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': wahaApiKey,
-      },
+      headers,
       body: JSON.stringify({
-        session,
-        chatId: payload.chatId,
-        text: payload.text,
+        phone,
+        message: payload.text,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
+    const raw = await res.text();
+    let data: {
+      code?: string;
+      message?: string;
+      results?: { message_id?: string; status?: string };
+    };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {};
+    }
+
     if (!res.ok) {
-      console.error(`[WAHA] Failed to send message: ${res.status} ${res.statusText}`);
+      console.error(
+        `[GOWA] Failed to send message: ${res.status} ${res.statusText} — ${data.message ?? raw.slice(0, 200)}`,
+      );
       return { success: false };
     }
 
-    const data = (await res.json()) as { id?: string };
-    return { success: true, messageId: data.id };
+    // GOWA answers 200 with code=SUCCESS on success and code=VALIDATION_ERROR
+    // (still 200) on a rejected payload, so the HTTP status alone is not enough.
+    if (data.code !== 'SUCCESS') {
+      console.error(`[GOWA] Send rejected: ${data.code ?? 'UNKNOWN'} — ${data.message ?? raw.slice(0, 200)}`);
+      return { success: false };
+    }
+
+    return { success: true, messageId: data.results?.message_id };
   } catch (err) {
-    console.error('[WAHA] Error sending WhatsApp message:', err);
+    console.error('[GOWA] Error sending WhatsApp message:', err);
     return { success: false };
   }
 }

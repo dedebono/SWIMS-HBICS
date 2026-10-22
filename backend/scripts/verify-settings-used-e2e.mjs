@@ -1,8 +1,8 @@
 /**
- * Proves the saved settings are actually USED, not just stored: point WAHA at a
+ * Proves the saved settings are actually USED, not just stored: point GOWA at a
  * local listener, save that URL through the real settings API, then trigger a
  * WhatsApp send and assert the request arrived at the saved host with the saved
- * session and API key.
+ * Basic-Auth credentials and the GOWA payload shape.
  *
  * Also asserts email/AI settings are visible to their readers.
  *
@@ -22,7 +22,7 @@ function assert(cond, msg) {
   if (cond) ok += 1;
 }
 
-// ── a listener that records whatever WAHA sends it ────────────────────────────
+// ── a listener that records whatever GOWA sends it ────────────────────────────
 const received = [];
 const server = http.createServer((req, res) => {
   let body = '';
@@ -30,7 +30,7 @@ const server = http.createServer((req, res) => {
   req.on('end', () => {
     received.push({ url: req.url, headers: req.headers, body });
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ id: 'probe-msg-1' }));
+    res.end(JSON.stringify({ code: 'SUCCESS', message: 'probe', results: { message_id: 'probe-msg-1', status: 'sent' } }));
   });
 });
 await new Promise((r) => server.listen(PROBE_PORT, '127.0.0.1', r));
@@ -58,35 +58,42 @@ const api = async (path, { method = 'GET', body } = {}) => {
   return { status: r.status, json: await r.json().catch(() => null) };
 };
 
-// ── 1. save WAHA pointing at the probe ──────────────────────────────────────
-console.log('1. save waha settings pointing at the probe listener');
+// ── 1. save GOWA pointing at the probe ──────────────────────────────────────
+console.log('1. save gowa settings pointing at the probe listener');
 const before = await api('/admin/settings');
-const prior = before.json?.data?.waha ?? {};
+const prior = before.json?.data?.gowa ?? {};
 
 const save = await api('/admin/settings', {
   method: 'PATCH',
-  body: { waha: { url: `http://127.0.0.1:${PROBE_PORT}`, session: 'probe-session', apiKey: 'PROBE-WAHA-KEY' } },
+  body: { gowa: { enabled: true, url: `http://127.0.0.1:${PROBE_PORT}`, basicAuth: 'probe-user:PROBE-GOWA-PASS' } },
 });
 assert(save.status === 200, `PATCH 200 (got ${save.status})`);
 
 const after = await api('/admin/settings');
-assert(after.json?.data?.waha?.session === 'probe-session', 'session read back from the API');
-assert(after.json?.data?.waha?.apiKey === 'PROBE-WAHA-KEY', 'api key read back from the API');
+assert(after.json?.data?.gowa?.url === `http://127.0.0.1:${PROBE_PORT}`, 'url read back from the API');
+assert(after.json?.data?.gowa?.basicAuth === 'probe-user:PROBE-GOWA-PASS', 'basic auth read back from the API');
 
 // ── 2. trigger a send and see where it actually goes ────────────────────────
 console.log('\n2. send a WhatsApp message and inspect the destination');
 // The container runs the backend from TypeScript via tsx (no dist/ is built),
 // so import the services through tsx's loader rather than /app/dist/*.js.
 const { sendWhatsAppMessage } = await import('../src/services/notifications.service.js');
-const res = await sendWhatsAppMessage(tenant, { chatId: '628123@c.us', text: 'probe' });
+const res = await sendWhatsAppMessage(tenant, { chatId: '628123456789', text: 'probe' });
 
 assert(res.success === true, 'sendWhatsAppMessage reported success');
 assert(received.length === 1, `probe listener received exactly 1 request (got ${received.length})`);
 const req = received[0];
 assert(Boolean(req), 'a request reached the saved host');
-assert(req?.url === '/api/sendText', `hit /api/sendText (got ${req?.url})`);
-assert(req?.headers['x-api-key'] === 'PROBE-WAHA-KEY', 'sent the saved API key');
-assert(JSON.parse(req?.body || '{}').session === 'probe-session', 'sent the saved session, not a hardcoded "default"');
+assert(req?.url === '/send/message', `hit /send/message (got ${req?.url})`);
+const sentAuth = req?.headers?.authorization ?? '';
+assert(
+  sentAuth === `Basic ${Buffer.from('probe-user:PROBE-GOWA-PASS').toString('base64')}`,
+  'sent the saved Basic-Auth credentials',
+);
+const sentBody = JSON.parse(req?.body || '{}');
+assert(sentBody.phone === '628123456789', `sent the recipient as "phone" (got ${sentBody.phone})`);
+assert(sentBody.message === 'probe', 'sent the text as "message"');
+assert(!('chatId' in sentBody) && !('session' in sentBody), 'no leftover WAHA fields in the payload');
 
 // ── 3. email + AI are readable by their services ───────────────────────────
 console.log('\n3. email and AI settings are visible to their readers');
@@ -115,10 +122,10 @@ assert('enabled' in ai, `AI settings use the field the service reads ("enabled")
 // ── restore ─────────────────────────────────────────────────────────────────
 await api('/admin/settings', {
   method: 'PATCH',
-  body: { waha: Object.fromEntries(Object.entries(prior).filter(([, v]) => v !== undefined && v !== null)) },
+  body: { gowa: Object.fromEntries(Object.entries(prior).filter(([, v]) => v !== undefined && v !== null)) },
 });
 await api('/admin/settings', { method: 'PATCH', body: { email: { host: '', port: 0, secure: false, username: '', password: '' } } });
 server.close();
 
-console.log(`\n${ok === 10 ? '✅ settings are stored AND used' : `⚠️  ${ok}/10 assertions passed`}`);
-process.exit(ok === 10 ? 0 : 1);
+console.log(`\n${ok === 15 ? '✅ settings are stored AND used' : `⚠️  ${ok}/15 assertions passed`}`);
+process.exit(ok === 15 ? 0 : 1);

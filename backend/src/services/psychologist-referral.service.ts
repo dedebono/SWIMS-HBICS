@@ -170,7 +170,7 @@ export async function confirmSchedule(
   return rows[0];
 }
 
-// ── WAHA Notification ───────────────────────────────────────────────────────
+// ── WhatsApp Notification ──────────────────────────────────────────────────
 
 export async function sendReferralNotification(
   tenantId: string,

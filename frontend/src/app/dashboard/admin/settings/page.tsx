@@ -138,10 +138,11 @@ export default function AdminSettingsPage() {
     driveFolderId: "",
   });
 
-  const [wahaSettings, setWahaSettings] = useState({
-    url: "http://100.127.221.23:3002",
-    session: "default",
-    apiKey: "",
+  const [gowaSettings, setGowaSettings] = useState({
+    enabled: true,
+    url: "http://100.84.186.55:3000",
+    basicAuth: "",
+    deviceId: "",
   });
 
   const [emailSettings, setEmailSettings] = useState({
@@ -164,7 +165,7 @@ export default function AdminSettingsPage() {
       if (res.success && res.data) {
         if (res.data.ai) setAiSettings(prev => ({ ...prev, ...res.data.ai }));
         if (res.data.storage) setStorageSettings(prev => ({ ...prev, ...res.data.storage }));
-        if (res.data.waha) setWahaSettings(prev => ({ ...prev, ...res.data.waha }));
+        if (res.data.gowa) setGowaSettings(prev => ({ ...prev, ...res.data.gowa }));
         if (res.data.email) setEmailSettings(prev => ({ ...prev, ...res.data.email }));
       }
     } catch (error) {
@@ -174,7 +175,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleSaveSettings = async (category: "ai" | "storage" | "waha" | "email") => {
+  const handleSaveSettings = async (category: "ai" | "storage" | "gowa" | "email") => {
     try {
       setSaving(true);
       const payload: any = {};
@@ -183,7 +184,7 @@ export default function AdminSettingsPage() {
       // `storageProvider`), so the stored object carried a stale duplicate that
       // the backend reads instead of the field the form actually edits.
       else if (category === "storage") payload.storage = storageSettings;
-      else if (category === "waha") payload.waha = wahaSettings;
+      else if (category === "gowa") payload.gowa = gowaSettings;
       else if (category === "email") payload.email = emailSettings;
 
       const res = await apiClient<any>("/admin/settings", {
@@ -255,7 +256,7 @@ export default function AdminSettingsPage() {
             <Cloud />
             Penyimpanan
           </TabsTrigger>
-          <TabsTrigger value="waha">
+          <TabsTrigger value="gowa">
             <MessageSquare />
             WhatsApp
           </TabsTrigger>
@@ -589,47 +590,59 @@ export default function AdminSettingsPage() {
           </SettingsSection>
         </TabsContent>
 
-        {/* ── WAHA ── */}
-        <TabsContent value="waha">
+        {/* ── GOWA ── */}
+        <TabsContent value="gowa">
           <SettingsSection
             icon={<MessageSquare />}
-            title="Konfigurasi WhatsApp (WAHA)"
-            description="Hubungkan layanan WhatsApp Business untuk notifikasi dan pesan otomatis."
+            title="Konfigurasi WhatsApp (GOWA)"
+            description="Hubungkan server GOWA untuk notifikasi dan pesan otomatis WhatsApp."
           >
+            <ToggleRow
+              title="Aktifkan Notifikasi WhatsApp"
+              description="Jika dimatikan, tidak ada pesan WhatsApp yang dikirim dari sistem."
+              checked={!!gowaSettings.enabled}
+              onCheckedChange={(v) => setGowaSettings({ ...gowaSettings, enabled: v })}
+              tone="blue"
+            />
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="waha-url">Alamat WAHA</Label>
+                <Label htmlFor="gowa-url">Alamat GOWA</Label>
                 <Input
-                  id="waha-url"
-                  placeholder="http://100.127.221.23:3002"
-                  value={wahaSettings.url || ""}
-                  onChange={(e) => setWahaSettings({ ...wahaSettings, url: e.target.value })}
+                  id="gowa-url"
+                  placeholder="http://100.84.186.55:3000"
+                  value={gowaSettings.url || ""}
+                  onChange={(e) => setGowaSettings({ ...gowaSettings, url: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="waha-session">Sesi</Label>
+                <Label htmlFor="gowa-device">ID Perangkat (opsional)</Label>
                 <Input
-                  id="waha-session"
-                  placeholder="default"
-                  value={wahaSettings.session || ""}
-                  onChange={(e) => setWahaSettings({ ...wahaSettings, session: e.target.value })}
+                  id="gowa-device"
+                  placeholder="Kosongkan jika hanya ada satu perangkat"
+                  value={gowaSettings.deviceId || ""}
+                  onChange={(e) => setGowaSettings({ ...gowaSettings, deviceId: e.target.value })}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="waha-key">Kunci API</Label>
+              <Label htmlFor="gowa-auth">Kredensial Basic Auth</Label>
               <Input
-                id="waha-key"
+                id="gowa-auth"
                 type="password"
-                placeholder="Masukkan kunci API WAHA"
-                value={wahaSettings.apiKey || ""}
-                onChange={(e) => setWahaSettings({ ...wahaSettings, apiKey: e.target.value })}
+                placeholder="Format user:password"
+                value={gowaSettings.basicAuth || ""}
+                onChange={(e) => setGowaSettings({ ...gowaSettings, basicAuth: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                Dipakai sebagai header Authorization Basic. Kosongkan untuk memakai kredensial dari
+                environment server (GOWA_BASIC_AUTH).
+              </p>
             </div>
 
             <div className="flex justify-end">
-              <Button onClick={() => handleSaveSettings("waha")} disabled={saving}>
+              <Button onClick={() => handleSaveSettings("gowa")} disabled={saving}>
                 <Save className="size-4" />
                 Simpan Pengaturan WhatsApp
               </Button>

@@ -298,7 +298,7 @@ export default function AdminUsersPage() {
         body.is_active = editForm.is_active;
         body.gender = editForm.gender || null;
       } else {
-        // Students: allow phone number to be set/updated here (used for WAHA notifications)
+        // Students: allow phone number to be set/updated here (used for WhatsApp notifications)
         body.phone_number = editForm.phone_number || null;
       }
       // NIK — sent for all user types (required for staff booking)

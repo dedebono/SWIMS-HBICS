@@ -19,10 +19,10 @@ router.use(authenticate, setTenantContext);
 /**
  * Settings contract — every category the UI can save must exist here.
  *
- * Zod strips unknown keys by default, which is how `waha` and `email` silently
- * vanished: the frontend sent them, the schema never declared them, the PATCH
- * still returned 200 with the values missing, and the UI reported success.
- * A regression test asserts each category round-trips (see
+ * Zod strips unknown keys by default, which is how the WhatsApp (`gowa`) and
+ * `email` categories silently vanished: the frontend sent them, the schema never
+ * declared them, the PATCH still returned 200 with the values missing, and the UI
+ * reported success. A regression test asserts each category round-trips (see
  * `__tests__/admin-settings.routes.test.ts`).
  *
  * Field names are the ones the READERS use, not the ones the form happens to
@@ -89,10 +89,13 @@ const settingsSchema = z.object({
     gdriveSharedDriveId: z.string().optional(),
   }).optional(),
 
-  waha: z.object({
+  // GOWA (WhatsApp HTTP API) — replaced the WAHA category. `url` is the GOWA
+  // base URL, `basicAuth` holds `user:password` for HTTP Basic auth.
+  gowa: z.object({
+    enabled: z.boolean().optional(),
     url: z.string().optional(),
-    session: z.string().optional(),
-    apiKey: z.string().optional(),
+    basicAuth: z.string().optional(),
+    deviceId: z.string().optional(),
   }).optional(),
 
   email: z.object({
@@ -106,7 +109,7 @@ const settingsSchema = z.object({
 });
 
 /** Every category the UI has a "Simpan" button for. */
-const SETTING_CATEGORIES = ['ai', 'storage', 'waha', 'email'] as const;
+const SETTING_CATEGORIES = ['ai', 'storage', 'gowa', 'email'] as const;
 
 const checkAiSchema = z.object({
   ai: z.object({

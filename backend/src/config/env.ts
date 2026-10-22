@@ -5,6 +5,17 @@ import { z } from 'zod';
 // Load .env from monorepo root (one level up from backend package root)
 config({ path: path.resolve(process.cwd(), '..', '.env') });
 
+/**
+ * Env flags arrive as strings ("false", "0"), and `z.coerce.boolean()` maps every
+ * non-empty string — including "false" — to `true`. Parse them explicitly so
+ * `GOWA_ENABLED=false` in .env actually disables the transport.
+ */
+const booleanish = z
+  .union([z.boolean(), z.enum(['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])])
+  .transform((v) =>
+    typeof v === 'boolean' ? v : ['true', '1', 'yes', 'on'].includes(v.toLowerCase()),
+  );
+
 const envSchema = z.object({
   // Database
   DATABASE_URL: z.string().url(),
@@ -29,14 +40,20 @@ const envSchema = z.object({
   S3_BUCKET: z.string().default('swims-media'),
   S3_REGION: z.string().default('us-east-1'),
 
-  // WAHA (WhatsApp HTTP API) — server-side fallbacks. The per-tenant values
-  // saved in Pengaturan Sistem win over these; these only apply when a tenant
-  // never filled the form in.
-  // NOTE: these were read by notifications.service.ts before they existed in the
-  // schema, so TypeScript flagged the access and the runtime value was always
-  // `undefined` — WAHA silently fell back to a hardcoded URL and a blank key.
-  WAHA_URL: z.string().optional(),
-  WAHA_API_KEY: z.string().optional(),
+  // GOWA (WhatsApp HTTP API, aldinokemal/go-whatsapp-web-multidevice) — server-side
+  // fallbacks. The per-tenant values saved in Pengaturan Sistem win over these;
+  // these only apply when a tenant never filled the form in.
+  //
+  // Replaced WAHA_URL / WAHA_API_KEY. GOWA authenticates with HTTP Basic
+  // (`GOWA_BASIC_AUTH` holds the literal `user:password` pair from the GOWA
+  // server's APP_BASIC_AUTH) and needs no session/api-key pair.
+  GOWA_ENABLED: booleanish.default(true),
+  GOWA_API_URL: z.string().optional(),
+  GOWA_BASIC_AUTH: z.string().optional(),
+  // Multi-device: GOWA only needs this when more than one device is paired to
+  // the server; with a single device it is used as the default. Pinning it keeps
+  // sends on the same WhatsApp account if a second device is ever added.
+  GOWA_DEVICE_ID: z.string().optional(),
 
   // App
   PORT: z.coerce.number().default(4000),
@@ -66,6 +83,10 @@ function loadEnv(): Env {
         S3_SECRET_KEY: 'swims_minio_password',
         S3_BUCKET: 'swims-media',
         S3_REGION: 'us-east-1',
+        GOWA_ENABLED: false,
+        GOWA_API_URL: undefined,
+        GOWA_BASIC_AUTH: undefined,
+        GOWA_DEVICE_ID: undefined,
         PORT: 4000,
         NODE_ENV: 'test',
         FRONTEND_URL: 'http://localhost:3000',
