@@ -205,6 +205,21 @@ export default function StudentTimelinePage({
   const [toDate, setToDate] = useState('');
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [cases, setCases] = useState<StudentCase[]>([]);
+  const [studentName, setStudentName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStudent = async () => {
+      try {
+        const res = await apiClient<{ student_id: string; full_name: string }>(
+          `/students/${resolvedParams.studentId}`,
+        );
+        if (res.success && res.data) setStudentName(res.data.full_name);
+      } catch {
+        /* non-fatal: title falls back to generic */
+      }
+    };
+    fetchStudent();
+  }, [resolvedParams.studentId]);
 
   useEffect(() => {
     const fetchProgress = async () => {
@@ -274,7 +289,7 @@ export default function StudentTimelinePage({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Linimasa Siswa"
+        title={studentName ? `Linimasa Siswa, ${studentName}` : 'Linimasa Siswa'}
         description="Riwayat kronologis kasus, prestasi, insiden, dan intervensi siswa dalam satu alur."
         actions={
           <div className="flex items-center gap-2 rounded-[10px] border border-border bg-card px-3 py-2">

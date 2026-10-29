@@ -65,6 +65,25 @@ const TARGET_OPTIONS: { value: ListTarget; label: string }[] = [
   { value: 'staff', label: 'Karyawan (Employee Counseling)' },
 ];
 
+/**
+ * Student counseling and personal/staff counseling are two separate products
+ * with their own questionnaires. Grouping the targets in the Admin UI states
+ * that explicitly — a flat checkbox row is what let the "Staff" list get
+ * tagged `appointment_case` and leak into the teacher's form.
+ */
+const COUNSELING_DOMAINS: { value: 'student' | 'staff'; label: string; targets: typeof TARGET_OPTIONS }[] = [
+  {
+    value: 'student',
+    label: 'Konseling Siswa — kuesioner untuk Guru di tab Janji Temu',
+    targets: TARGET_OPTIONS.filter((t) => t.value !== 'staff'),
+  },
+  {
+    value: 'staff',
+    label: 'Konseling Staf/Karyawan — alur PERSONAL & QR /book/staff',
+    targets: TARGET_OPTIONS.filter((t) => t.value === 'staff'),
+  },
+];
+
 const TARGET_LABEL: Record<string, string> = {
   appointment_student: 'Janji Temu · Siswa',
   appointment_case: 'Janji Temu · Kasus',
@@ -517,26 +536,38 @@ export default function QuisionerAdminPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="list-target">Tetapkan ke:</Label>
-                <div className="flex flex-wrap gap-4">
-                  {TARGET_OPTIONS.map((t) => (
-                    <label
-                      key={t.value}
-                      htmlFor={`target-${t.value}`}
-                      className="flex cursor-pointer items-center gap-2 text-sm text-secondary-text"
-                    >
-                      <input
-                        id={`target-${t.value}`}
-                        type="checkbox"
-                        className="size-4 accent-[var(--color-primary)]"
-                        checked={listForm.targets[t.value]}
-                        onChange={() => toggleTarget(t.value)}
-                      />
-                      {t.label}
-                    </label>
-                  ))}
-                </div>
+              <div className="space-y-3">
+                <Label htmlFor="list-target">Tetapkan ke domain konseling:</Label>
+                {/* Two SEPARATE counseling products. Splitting them here is the
+                    policy: a staff questionnaire tagged as a student target used
+                    to be served to teachers, whose form then demanded an answer
+                    to a question they could not see. */}
+                {COUNSELING_DOMAINS.map((d) => (
+                  <div
+                    key={d.value}
+                    className="space-y-2 rounded-xl border border-border bg-muted/30 p-3.5"
+                  >
+                    <p className="card-label">{d.label}</p>
+                    <div className="flex flex-wrap gap-4">
+                      {d.targets.map((t) => (
+                        <label
+                          key={t.value}
+                          htmlFor={`target-${t.value}`}
+                          className="flex cursor-pointer items-center gap-2 text-sm text-secondary-text"
+                        >
+                          <input
+                            id={`target-${t.value}`}
+                            type="checkbox"
+                            className="size-4 accent-[var(--color-primary)]"
+                            checked={listForm.targets[t.value]}
+                            onChange={() => toggleTarget(t.value)}
+                          />
+                          {t.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-3">

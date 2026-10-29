@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as casesService from '../services/cases.service.js';
+import { assertCaseVisible, type CaseViewer } from '../services/case-visibility.service.js';
 import * as caseSharesService from '../services/case-shares.service.js';
 import { getCaseCounseling, submitCaseCounseling } from '../services/counseling.service.js';
 import { listAssetsForCase } from '../services/media.service.js';
@@ -14,6 +15,18 @@ const router = Router();
 
 // Apply auth + tenant middleware to all routes
 router.use(authenticate, setTenantContext);
+
+/**
+ * ABAC guard: a teacher-scoped viewer may only touch a case they created,
+ * reported an incident on, or that was shared with them. Other roles pass
+ * through. Returns 404 (existence is not disclosed).
+ */
+function guardCaseAccess(req: { tenantId?: string; userId?: string; userRole?: string }, caseId: string) {
+  return assertCaseVisible(req.tenantId!, caseId, {
+    userId: req.userId!,
+    role: req.userRole!,
+  } satisfies CaseViewer);
+}
 
 // ─── Validation Schemas ──────────────────────────────────────────────────────
 
@@ -79,6 +92,7 @@ router.get(
     const { cases, total } = await casesService.listCases(req.tenantId, {
       ...query,
       medicalOnly,
+      viewer: { userId: req.userId!, role: req.userRole! },
     });
 
     sendPaginated(res, cases, total, query.page, query.limit);
@@ -92,6 +106,7 @@ router.post(
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
     const body = shareCaseSchema.parse(req.body);
+    await guardCaseAccess(req, String(req.params['caseId']));
     const result = await caseSharesService.shareCase(
       req.tenantId,
       String(req.params['caseId']),
@@ -109,6 +124,7 @@ router.get(
   '/:caseId/shares',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     const result = await caseSharesService.listCaseShares(
       req.tenantId,
       String(req.params['caseId']),
@@ -123,6 +139,7 @@ router.delete(
   '/:caseId/share/:userId',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     await caseSharesService.removeShare(
       req.tenantId,
       String(req.params['caseId']),
@@ -152,6 +169,7 @@ router.get(
   '/:caseId/counseling',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     const submission = await getCaseCounseling(req.tenantId, String(req.params['caseId']));
     if (!submission) {
       sendSuccess(res, null);
@@ -167,6 +185,7 @@ router.post(
   '/:caseId/counseling',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     const body = counselingSubmitSchema.parse(req.body);
     const submission = await submitCaseCounseling(req.tenantId, {
       caseId: String(req.params['caseId']),
@@ -184,6 +203,7 @@ router.get(
   '/:caseId/media',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     const assets = await listAssetsForCase(
       req.tenantId,
       String(req.params['caseId']),
@@ -199,7 +219,10 @@ router.get(
   '/:caseId',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
-    const caseRow = await casesService.getCaseById(req.tenantId, String(req.params['caseId']));
+    const caseRow = await casesService.getCaseById(req.tenantId, String(req.params['caseId']), {
+      userId: req.userId!,
+      role: req.userRole!,
+    });
 
     // IT_ADMIN data minimization: redact descriptions
     if ((req as unknown as Record<string, unknown>)['abacRedactNarratives']) {
@@ -216,6 +239,7 @@ router.patch(
   '/:caseId',
   checkPermission('cases', 'update'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     const body = updateCaseSchema.parse(req.body);
     const updated = await casesService.updateCase(
       req.tenantId,
@@ -234,6 +258,7 @@ router.delete(
   '/:caseId',
   checkPermission('cases', 'delete'),
   asyncHandler(async (req, res) => {
+    await guardCaseAccess(req, String(req.params['caseId']));
     await casesService.softDeleteCase(
       req.tenantId,
       String(req.params['caseId']),

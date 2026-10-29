@@ -145,6 +145,32 @@ export async function createRecurringSlots(
   return slots;
 }
 
+// ─── Claim appointments waiting for a psychologist's availability ───────────
+// A professional-path appointment is born `awaiting_psychologist_availability`
+// with no psychologist_id, so it shows in NO ONE's dashboard. When any active
+// professional publishes slots, claim those appointments: assign the slot
+// owner as psychologist, replace the stale "Menunggu psikolog…" note, and let
+// the route notify the teacher who submitted the questionnaire.
+export async function claimAwaitingAppointments(
+  tenantId: string,
+  professionalId: string,
+): Promise<Array<{ appointment_id: string; created_by: string | null }>> {
+  const { rows } = await queryWithTenant<{ appointment_id: string; created_by: string | null }>(
+    tenantId,
+    `UPDATE appointments
+       SET psychologist_id = $2,
+           notes = 'Psikolog sudah mengisi ketersediaan jadwal — menunggu pemilihan slot & konfirmasi.',
+           updated_at = now()
+     WHERE tenant_id = $1 AND type = 'student'
+       AND status = 'awaiting_psychologist_availability'
+       AND deleted_at IS NULL
+       AND (psychologist_id IS NULL OR psychologist_id = $2)
+     RETURNING appointment_id, created_by`,
+    [tenantId, professionalId],
+  );
+  return rows;
+}
+
 // ─── Update ──────────────────────────────────────────────────────────────────
 
 export async function updateAvailabilitySlot(

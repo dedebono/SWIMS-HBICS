@@ -88,7 +88,11 @@ export const PERMISSIONS: PermissionMatrix = {
     students: readOnly,
     admin: none,
     quisioner: cr,
-    appointments: none,
+    // Read-only: the teacher form lists the student's appointments ("Janji Temu
+    // Terkait" in counseling-tab.tsx) after submitting the questionnaire. The
+    // appointment row itself is created server-side by submitCaseCounseling, so
+    // the teacher never needs create/update/delete here.
+    appointments: readOnly,
     availability: none,
     staff_quisioner: none,
     employee_counseling: cr,

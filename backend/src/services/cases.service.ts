@@ -2,6 +2,7 @@ import { getClientWithTenant, queryWithTenant } from '../db/pool.js';
 import { auditLog } from '../utils/audit-log.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { notifyCaseTeachers, notifyRoles, TEACHER_ROLES } from './notifications.service.js';
+import { caseVisibilityPredicate, isTeacherScoped, type CaseViewer } from './case-visibility.service.js';
 import type { CaseRow, RiskLevel } from '@swims/shared';
 import type { Request } from 'express';
 
@@ -34,6 +35,9 @@ export interface ListCasesParams {
   page: number;
   limit: number;
   medicalOnly?: boolean;
+  /** ABAC scope: when set and the role is teacher-scoped, only cases the
+   *  viewer created/reported/was shared with are returned. */
+  viewer?: CaseViewer;
 }
 
 // ─── Create Case ─────────────────────────────────────────────────────────────
@@ -144,6 +148,10 @@ export async function listCases(
   if (params.medicalOnly) {
     conditions.push(`c.case_type = 'MEDICAL'`);
   }
+  if (params.viewer && isTeacherScoped(params.viewer)) {
+    conditions.push(caseVisibilityPredicate('c', `$${paramIdx++}`));
+    values.push(params.viewer.userId);
+  }
 
   const whereClause = conditions.join(' AND ');
   const offset = (params.page - 1) * params.limit;
@@ -177,14 +185,26 @@ export async function listCases(
 
 // ─── Get Case by ID ─────────────────────────────────────────────────────────
 
-export async function getCaseById(tenantId: string, caseId: string): Promise<CaseRow> {
-  const { rows } = await queryWithTenant<CaseRow>(
+export async function getCaseById(
+  tenantId: string,
+  caseId: string,
+  viewer?: CaseViewer,
+): Promise<CaseRow & { created_by_name: string | null; created_by_email: string | null }> {
+  const visibilityClause =
+    viewer && isTeacherScoped(viewer)
+      ? ` AND ${caseVisibilityPredicate('c', '$3')}`
+      : '';
+  const { rows } = await queryWithTenant<
+    CaseRow & { created_by_name: string | null; created_by_email: string | null }
+  >(
     tenantId,
-    `SELECT c.*, s.full_name AS student_name
+    `SELECT c.*, s.full_name AS student_name,
+            ru.full_name AS created_by_name, ru.email AS created_by_email
      FROM cases c
      LEFT JOIN students s ON c.student_id = s.student_id
-     WHERE c.case_id = $1 AND c.tenant_id = $2 AND c.deleted_at IS NULL`,
-    [caseId, tenantId],
+     LEFT JOIN users ru ON ru.user_id = c.created_by
+     WHERE c.case_id = $1 AND c.tenant_id = $2 AND c.deleted_at IS NULL${visibilityClause}`,
+    viewer && isTeacherScoped(viewer) ? [caseId, tenantId, viewer.userId] : [caseId, tenantId],
   );
 
   if (rows.length === 0) {

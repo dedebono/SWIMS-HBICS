@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { queryWithTenant } from '../../db/pool.js';
+import { queryWithTenant, getClientWithTenant } from '../../db/pool.js';
 import { sendWhatsAppMessage } from '../notifications.service.js';
 import { auditLog } from '../../utils/audit-log.js';
 
@@ -9,6 +9,11 @@ vi.mock('../notifications.service.js');
 
 const mockQuery = vi.fn();
 vi.mocked(queryWithTenant).mockImplementation(mockQuery as any);
+const mockClient = {
+  query: vi.fn(),
+  release: vi.fn(),
+};
+vi.mocked(getClientWithTenant).mockResolvedValue(mockClient as any);
 const mockSendWA = vi.fn().mockResolvedValue({ success: true });
 vi.mocked(sendWhatsAppMessage).mockImplementation(mockSendWA);
 vi.mocked(auditLog).mockResolvedValue(undefined as any);
@@ -124,19 +129,56 @@ describe('psychologist-referral.service', () => {
   });
 
   describe('confirmSchedule', () => {
-    it('should set status to schedule_confirmed', async () => {
-      mockQuery.mockResolvedValueOnce({
-        rows: [{ token_id: 'token-123', choice_status: 'schedule_confirmed', confirmed_at: new Date().toISOString() }],
-      });
+    beforeEach(() => {
+      mockClient.query.mockReset();
+    });
 
-      const result = await svc.confirmSchedule('tenant-1', 'some-token');
+    it('should confirm schedule, book the appointment and take the slot', async () => {
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{
+            token_id: 'token-123',
+            choice_status: 'payment_confirmed',
+            appointment_id: 'appt-1',
+            selected_psychologist_id: 'sp-1',
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{ slot_id: 'slot-1', slot_start: new Date(Date.now() + 86_400_000).toISOString(), professional_id: 'user-1' }],
+        });
+      mockClient.query
+        .mockResolvedValueOnce({ rows: [] }) // BEGIN
+        .mockResolvedValueOnce({ rows: [{ token_id: 'token-123', choice_status: 'schedule_confirmed' }] })
+        .mockResolvedValueOnce({ rows: [{ appointment_id: 'appt-1' }] })
+        .mockResolvedValueOnce({ rows: [] }) // slot UPDATE
+        .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+      const result = await svc.confirmSchedule('tenant-1', 'some-token', 'slot-1');
       expect(result.choice_status).toBe('schedule_confirmed');
+      expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
+    });
+
+    it('should throw if the slot is not free', async () => {
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{
+            token_id: 'token-123',
+            choice_status: 'payment_confirmed',
+            appointment_id: 'appt-1',
+            selected_psychologist_id: 'sp-1',
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [] });
+
+      await expect(
+        svc.confirmSchedule('tenant-1', 'some-token', 'taken-slot'),
+      ).rejects.toThrow('Slot tidak tersedia atau sudah diisi');
     });
 
     it('should throw if payment not confirmed yet', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
       await expect(
-        svc.confirmSchedule('tenant-1', 'invalid-token'),
+        svc.confirmSchedule('tenant-1', 'invalid-token', 'slot-1'),
       ).rejects.toThrow('Token tidak valid atau pembayaran belum dikonfirmasi');
     });
   });

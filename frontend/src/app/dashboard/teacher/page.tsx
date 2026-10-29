@@ -302,7 +302,7 @@ export default function TeacherDashboardPage() {
             <CardHeader className="border-b">
               <CardTitle>Siswa yang Dilaporkan</CardTitle>
               <CardDescription>
-                Klik nama siswa untuk melihat kasus terkait.
+                Klik nama siswa untuk membuka Linimasa Siswa.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -317,7 +317,7 @@ export default function TeacherDashboardPage() {
                   {myStudents.map((student) => (
                     <li key={student.student_id}>
                       <Link
-                        href={`/dashboard/cases?student_id=${student.student_id}`}
+                        href={`/dashboard/students/${student.student_id}/timeline`}
                         className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 hover:bg-primary-softer"
                       >
                         <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary">

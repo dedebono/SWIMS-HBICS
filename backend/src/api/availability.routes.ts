@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as availabilityService from '../services/availability.service.js';
+import { notifyProfessional } from '../services/notifications.service.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 
 const router = Router();
@@ -55,6 +56,7 @@ router.post(
     const professionalId = req.userId!;
 
     // If recurring, generate multiple slots
+    let created: number;
     if (body.repeat_pattern) {
       const slots = await availabilityService.createRecurringSlots(req.tenantId, {
         professional_id: professionalId,
@@ -66,18 +68,38 @@ router.post(
         repeat_weeks: body.repeat_weeks,
         repeat_count: body.repeat_count,
       });
-      sendCreated(res, slots);
-      return;
+      created = slots.length;
+    } else {
+      // Single slot
+      await availabilityService.createAvailabilitySlot(req.tenantId, {
+        professional_id: professionalId,
+        slot_start: body.slot_start,
+        slot_end: body.slot_end,
+        is_available: body.is_available,
+      });
+      created = 1;
     }
 
-    // Single slot
-    const slot = await availabilityService.createAvailabilitySlot(req.tenantId, {
-      professional_id: professionalId,
-      slot_start: body.slot_start,
-      slot_end: body.slot_end,
-      is_available: body.is_available,
-    });
-    sendCreated(res, slot);
+    // New availability may unblock appointments stuck on
+    // `awaiting_psychologist_availability` — claim them (assign the slot owner
+    // as psychologist + refresh the stale note) and tell the teacher who
+    // submitted the questionnaire. Never blocks the slot creation itself.
+    try {
+      const claimed = await availabilityService.claimAwaitingAppointments(req.tenantId, professionalId);
+      for (const appt of claimed) {
+        if (appt.created_by) {
+          await notifyProfessional(req.tenantId, appt.created_by, {
+            type: 'SCHEDULE_UPDATE',
+            title: 'Ketersediaan jadwal psikolog sudah diisi',
+            body: 'Psikolog menambahkan jadwal — janji temu menunggu pemilihan slot & konfirmasi.',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[availability] Failed to claim awaiting appointments:', err);
+    }
+
+    sendCreated(res, { count: created });
   }),
 );
 

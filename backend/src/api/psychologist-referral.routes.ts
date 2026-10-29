@@ -61,12 +61,29 @@ router.post('/confirm-payment', asyncHandler(async (req, res) => {
   sendSuccess(res, record);
 }));
 
-// POST /api/public/psychologist-referral/confirm-schedule?t=<slug>
-router.post('/confirm-schedule', asyncHandler(async (req, res) => {
-  const { token } = req.body as { token: string };
+// GET /api/public/psychologist-referral/slots?t=<slug>&token=<token>
+// Free future slots of the psychologist the parent selected.
+router.get('/slots', asyncHandler(async (req, res) => {
+  const { token } = req.query as { token?: string };
   if (!token) return sendError(res, 'Token required', 400);
-  const record = await svc.confirmSchedule((req as any).tenantId, token);
-  sendSuccess(res, record);
+
+  const slots = await svc.listParentSlots((req as any).tenantId, token);
+  sendSuccess(res, slots);
+}));
+
+// POST /api/public/psychologist-referral/confirm-schedule?t=<slug>
+// Books the chosen slot: token → schedule_confirmed, appointment → confirmed
+// (scheduled_at + psychologist_id), slot marked taken — in one transaction.
+router.post('/confirm-schedule', asyncHandler(async (req, res) => {
+  const { token, slot_id } = req.body as { token: string; slot_id: string };
+  if (!token || !slot_id) return sendError(res, 'Token and slot_id required', 400);
+  try {
+    const record = await svc.confirmSchedule((req as any).tenantId, token, slot_id);
+    sendSuccess(res, record);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Gagal mengonfirmasi jadwal';
+    sendError(res, msg, /tidak tersedia|sudah diisi/.test(msg) ? 409 : 400);
+  }
 }));
 
 export default router;

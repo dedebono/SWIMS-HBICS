@@ -144,8 +144,9 @@ export async function submitCounselingAnswers(
     await client.query('BEGIN');
     for (const a of data.answers) {
       await client.query(
-        `INSERT INTO quisioner_answers (tenant_id, question_id, answer_text, score) VALUES ($1, $2, $3, $4)`,
-        [tenantId, a.question_id, a.answer_text ?? String(a.score), a.score],
+        // `quisioner_answers` has no tenant_id column — tenant comes via question_id.
+        `INSERT INTO quisioner_answers (question_id, answer_text, score) VALUES ($1, $2, $3)`,
+        [a.question_id, a.answer_text ?? String(a.score), a.score],
       );
     }
     await client.query(

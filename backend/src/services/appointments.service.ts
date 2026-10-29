@@ -90,13 +90,33 @@ export async function updateAppointmentStatus(tenantId: string, appointmentId: s
 }
 
 export async function confirmAppointment(tenantId: string, appointmentId: string, scheduled_at: string, actorId: string): Promise<AppointmentRow | null> {
+  // Confirming must also retire the stale "Menunggu psikolog mengisi
+  // ketersediaan jadwal." note — otherwise the case view keeps telling the
+  // teacher the psychologist never responded, even after a slot is booked.
   const { rows } = await queryWithTenant<AppointmentRow>(
     tenantId,
-    `UPDATE appointments SET status = 'confirmed', scheduled_at = $1, updated_at = now() WHERE tenant_id = $2 AND appointment_id = $3 AND deleted_at IS NULL RETURNING *`,
+    `UPDATE appointments SET status = 'confirmed', scheduled_at = $1,
+        notes = CASE WHEN notes LIKE 'Menunggu psikolog%'
+                     THEN 'Jadwal dikonfirmasi psikolog.' ELSE notes END,
+        updated_at = now()
+     WHERE tenant_id = $2 AND appointment_id = $3 AND deleted_at IS NULL
+     RETURNING *`,
     [scheduled_at, tenantId, appointmentId],
   );
   const updated = rows[0] ?? null;
   if (updated) {
+    // Mark the booked availability slot as taken so it can't be double-booked.
+    const ownerId = updated.psychologist_id ?? updated.counselor_id;
+    if (ownerId) {
+      await queryWithTenant(
+        tenantId,
+        `UPDATE availability_slots SET appointment_id = $1, is_available = false, updated_at = now()
+         WHERE tenant_id = $2 AND professional_id = $3 AND slot_start = $4
+           AND appointment_id IS NULL AND is_available = true AND deleted_at IS NULL`,
+        [appointmentId, tenantId, ownerId, scheduled_at],
+      );
+    }
+
     await auditLog({
       action: 'APPOINTMENT_CONFIRMED',
       entityType: 'appointments',

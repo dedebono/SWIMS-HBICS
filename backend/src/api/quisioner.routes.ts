@@ -19,17 +19,26 @@ router.get(
   '/questions',
   checkPermission('quisioner', 'read'),
   asyncHandler(async (req, res) => {
+    // `context` selects the COUNSELING DOMAIN. Student counseling and
+    // personal/staff counseling are separate products with separate question
+    // sets, so the domain must be explicit rather than inferred from the union
+    // of targets — that union is what let a staff questionnaire (the "Staff"
+    // list, tagged appointment_case) be served to teachers.
     const context = typeof req.query.context === 'string' ? req.query.context : undefined;
     const listId = typeof req.query.list_id === 'string' ? req.query.list_id : undefined;
     if (listId) {
       sendSuccess(res, await quisionerService.listQuestions(req.tenantId, listId));
       return;
     }
-    if (context === 'appointment') {
-      const list = await quisionerListsService.getActiveListForTargets(req.tenantId, [
-        'appointment_student',
-        'appointment_case',
-      ]);
+    if (context === 'appointment' || context === 'student') {
+      const list = await quisionerListsService.getActiveListForDomain(req.tenantId, 'student');
+      if (list) {
+        sendSuccess(res, await quisionerService.listQuestions(req.tenantId, list.question_list_id));
+        return;
+      }
+    }
+    if (context === 'staff') {
+      const list = await quisionerListsService.getActiveListForDomain(req.tenantId, 'staff');
       if (list) {
         sendSuccess(res, await quisionerService.listQuestions(req.tenantId, list.question_list_id));
         return;

@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { id as localeId } from 'date-fns/locale';
@@ -68,6 +70,7 @@ const APPOINTMENT_STATUS: Record<string, { tone: StatusTone; label: string }> = 
   pending: { tone: 'warning', label: 'Menunggu' },
   cancelled: { tone: 'danger', label: 'Dibatalkan' },
   completed: { tone: 'info', label: 'Selesai' },
+  awaiting_psychologist_availability: { tone: 'warning', label: 'Menunggu Jadwal' },
 };
 
 const DEFAULT_APPOINTMENT_STATUS: { tone: StatusTone; label: string } = {
@@ -90,7 +93,71 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  // ── Undangan orang tua (modal dari "Janji Temu Terkait") ──
+  const [inviteFor, setInviteFor] = useState<Appointment | null>(null);
+  const [invitePhone, setInvitePhone] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteStudentName, setInviteStudentName] = useState('');
+  const [inviteSending, setInviteSending] = useState(false);
+
+  const buildInviteTemplate = (studentName: string) =>
+    `Yth. Bapak/Ibu,\n\nBerdasarkan hasil asesmen, sekolah merekomendasikan konsultasi lanjutan dengan Psikolog untuk mendukung perkembangan dan kebutuhan Ananda ${studentName || 'siswa kami'}.\n\nBapak/Ibu dapat memilih menggunakan Psikolog Rekomendasi Sekolah atau Psikolog Pribadi melalui tautan yang terlampir di bawah pesan ini.\n\nHormat kami,\nSekolah`;
+
+  const openInvite = async (a: Appointment) => {
+    setInviteFor(a);
+    setInvitePhone('');
+    setInviteMessage('');
+    const res = await apiClient<{ student_name: string; parent_phone: string | null }>(
+      `/appointments/${a.appointment_id}/referral-context`,
+    ).catch(() => null);
+    if (res?.success && res.data) {
+      setInviteStudentName(res.data.student_name);
+      setInvitePhone(res.data.parent_phone ?? '');
+      setInviteMessage(buildInviteTemplate(res.data.student_name));
+    } else {
+      toast.error('Gagal memuat data undangan.');
+      setInviteFor(null);
+    }
+  };
+
+  const sendInvite = async () => {
+    if (!inviteFor || inviteSending) return;
+    if (!invitePhone.trim()) { toast.error('Nomor WhatsApp orang tua wajib diisi.'); return; }
+    if (!inviteMessage.trim()) { toast.error('Pesan undangan wajib diisi.'); return; }
+    setInviteSending(true);
+    try {
+      const res = await apiClient<{ referralLink: string }>(
+        `/appointments/${inviteFor.appointment_id}/referral`,
+        { method: 'POST', body: { parent_phone: invitePhone.trim(), message: inviteMessage } },
+      );
+      if (res.success) {
+        toast.success('Undangan terkirim ke WhatsApp orang tua.');
+        setInviteFor(null);
+        loadAppointments();
+      } else {
+        toast.error(res.error ?? 'Gagal mengirim undangan.');
+      }
+    } finally {
+      setInviteSending(false);
+    }
+  };
+
   const isTeacher = user?.role === 'TEACHER';
+
+  /**
+   * Load the student's appointments ("Janji Temu Terkait").
+   *
+   * Split out of the mount effect so the list refreshes right after a
+   * successful submission — the appointment row is created server-side by
+   * submitCaseCounseling, so without this the teacher submits the questionnaire
+   * and still sees an empty list until a manual page reload.
+   */
+  const loadAppointments = useCallback(async () => {
+    const res = await apiClient<Appointment[]>(
+      `/appointments?type=student&student_id=${studentId}`,
+    ).catch(() => null);
+    if (res?.success && res.data) setAppointments(res.data);
+  }, [studentId]);
 
   useEffect(() => {
     apiClient<{ target: string }>('/quisioner/settings').then(r => {
@@ -100,16 +167,22 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
   }, []);
 
   useEffect(() => {
-    if (!isTeacher) return;
     let cancelled = false;
+    // Counselors/admins don't fill the questionnaire but still need the
+    // "Janji Temu Terkait" list (to send the parent invite).
+    if (!isTeacher) {
+      setLoading(false);
+      loadAppointments();
+      return;
+    }
     setLoading(true);
     Promise.all([
       apiClient<Question[]>('/quisioner/questions?context=appointment'),
       apiClient<any>(`/cases/${caseId}/counseling`),
-      apiClient<Appointment[]>(`/appointments?type=student&student_id=${studentId}`),
+      loadAppointments(),
       apiClient<any>(`/students/${studentId}`),
       apiClient<{ threshold: number }>('/quisioner/threshold'),
-    ]).then(([qRes, counselingRes, apptRes, studentRes, threshRes]) => {
+    ]).then(([qRes, counselingRes, , studentRes, threshRes]) => {
       if (cancelled) return;
       if (qRes.success && qRes.data) {
         setQuestions(qRes.data);
@@ -126,7 +199,6 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
         });
       }
       if (counselingRes.success && counselingRes.data) setSubmission(counselingRes.data);
-      if (apptRes.success && apptRes.data) setAppointments(apptRes.data);
       if (studentRes.success && studentRes.data) setStudentData(studentRes.data);
       if (threshRes.success && threshRes.data) setThreshold(threshRes.data.threshold);
       setLoading(false);
@@ -134,7 +206,7 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
       if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [caseId, studentId, isTeacher]);
+  }, [caseId, studentId, isTeacher, loadAppointments]);
 
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
@@ -152,6 +224,22 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
   const handleSubmitCounseling = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+
+    // Catch the case the user actually hit: a required question that was never
+    // rendered (wrong question list), or a lost answer. Name it here instead of
+    // letting the POST come back as an opaque 400.
+    const unanswered = questions.filter(
+      q => q.is_required && String(answers[q.question_id] ?? '').trim() === '',
+    );
+    if (unanswered.length > 0) {
+      toast.error(
+        unanswered.length === 1
+          ? `Jawab pertanyaan wajib ini dulu: ${unanswered[0].question_text}`
+          : `Masih ada ${unanswered.length} pertanyaan wajib yang belum dijawab.`,
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payloadAnswers = questions.map(q => {
@@ -179,6 +267,7 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
         toast.success('Kuesioner dikirim. Notifikasi ke orang tua telah dikirim.');
         setSubmitted(true);
         setSubmission(res.data ?? { submitted_at: new Date().toISOString() });
+        void loadAppointments();
       } else {
         toast.error(res.error ?? 'Gagal mengirim kuesioner');
       }
@@ -189,19 +278,133 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────────────────────────
+
+  // Kartu "Janji Temu Terkait" dipakai di dua jalur render (guru & non-guru).
+  const appointmentsCard = (
+    <Card>
+      <CardHeader className="border-b">
+        <div className="flex items-start gap-3">
+          <IconBox tone="teal">
+            <CalendarClock />
+          </IconBox>
+          <div className="space-y-1">
+            <CardTitle>Janji Temu Terkait</CardTitle>
+            <CardDescription>Status janji temu konseling untuk siswa ini.</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {appointments.length === 0 ? (
+          <EmptyState
+            icon={<CalendarClock />}
+            title="Belum ada janji temu"
+            description="Tidak ada janji temu konseling yang tercatat untuk siswa ini."
+          />
+        ) : (
+          <DataTable>
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell scope="col">Jenis</TableHeaderCell>
+                <TableHeaderCell scope="col">Jadwal</TableHeaderCell>
+                <TableHeaderCell scope="col">Lokasi</TableHeaderCell>
+                <TableHeaderCell scope="col">Status</TableHeaderCell>
+                <TableHeaderCell scope="col">Catatan</TableHeaderCell>
+                <TableHeaderCell scope="col" className="text-right">Aksi</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {appointments.map(a => {
+                const status = APPOINTMENT_STATUS[a.status] ?? DEFAULT_APPOINTMENT_STATUS;
+                return (
+                  <TableRow key={a.appointment_id} interactive>
+                    <TableCell className="font-medium text-heading">
+                      {a.type === 'student' ? 'Siswa' : 'Personal'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {a.scheduled_at ? formatSchedule(a.scheduled_at) : 'Belum dijadwalkan'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{a.location || '—'}</TableCell>
+                    <TableCell>
+                      <StatusBadge tone={status.tone} label={status.label} />
+                    </TableCell>
+                    <TableCell className="max-w-[220px] text-xs text-muted-foreground">
+                      {a.notes || '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {a.status === 'awaiting_psychologist_availability' && (
+                        <Button size="sm" variant="outline" onClick={() => openInvite(a)}>
+                          <Send className="size-3.5" />
+                          Undang Orang Tua
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </DataTable>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const inviteModal = (
+    <Dialog open={!!inviteFor} onOpenChange={(o) => { if (!o) setInviteFor(null); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Undang Orang Tua</DialogTitle>
+          <DialogDescription>
+            Pesan WhatsApp dikirim via GOWA beserta tautan pemilihan psikolog & jadwal.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="invite-phone">Nomor WhatsApp Orang Tua</Label>
+            <Input
+              id="invite-phone"
+              value={invitePhone}
+              onChange={e => setInvitePhone(e.target.value)}
+              placeholder="628…"
+            />
+            {!invitePhone.trim() && (
+              <p className="text-xs text-destructive">
+                Nomor belum tersedia di data siswa — silakan isi di sini.
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="invite-msg">Template Pesan</Label>
+            <Textarea
+              id="invite-msg"
+              rows={9}
+              value={inviteMessage}
+              onChange={e => setInviteMessage(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Tautan rujukan ditambahkan otomatis di akhir pesan.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setInviteFor(null)} disabled={inviteSending}>
+            Batal
+          </Button>
+          <Button onClick={sendInvite} disabled={inviteSending}>
+            {inviteSending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            {inviteSending ? 'Mengirim…' : 'Kirim via WhatsApp'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   if (!isTeacher) {
     return (
-      <Card>
-        <CardContent>
-          <EmptyState
-            icon={<Lock />}
-            title="Hanya untuk akun Guru"
-            description="Fitur Kuesioner & Janji Temu hanya dapat diakses oleh akun dengan peran Guru."
-          />
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {appointmentsCard}
+        {inviteModal}
+      </div>
     );
   }
 
@@ -252,231 +455,8 @@ export function CounselingTab({ caseId, studentId, user }: CounselingTabProps) {
       </div>
 
       {/* ── Kuesioner ── */}
-      <Card>
-        <CardHeader className="border-b">
-          <div className="flex items-start gap-3">
-            <IconBox tone="blue">
-              <FileText />
-            </IconBox>
-            <div className="space-y-1">
-              <CardTitle>Kuesioner Bantuan Profesional</CardTitle>
-              <CardDescription>
-                Isi kuesioner ini untuk menilai apakah siswa membutuhkan bantuan profesional (psikolog).
-                Notifikasi ke orang tua dikirimkan otomatis setelah kuesioner dikirim.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex flex-col items-center gap-3 py-16">
-              <Loader2 className="size-7 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Memuat kuesioner…</p>
-            </div>
-          ) : submitted || submission ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <StatusBadge tone="success" label="Sudah dikirim" />
-                {submission?.submitted_at ? (
-                  <span className="text-xs text-muted-foreground">
-                    Dikirim pada {formatSchedule(submission.submitted_at)}
-                  </span>
-                ) : null}
-              </div>
-
-              {submission?.recommendation ? (
-                <div className="rounded-xl border border-border bg-muted/40 p-4">
-                  <p className="card-label mb-1.5">Rekomendasi sistem</p>
-                  <StatusBadge
-                    tone={submission.recommendation === 'professional' ? 'danger' : 'success'}
-                    label={
-                      submission.recommendation === 'professional'
-                        ? 'Bantuan Profesional (Psikolog)'
-                        : 'Penanganan Internal'
-                    }
-                  />
-                </div>
-              ) : null}
-
-              {submission?.score !== undefined ? (
-                <div className="rounded-xl border border-border bg-muted/40 p-4">
-                  <p className="card-label mb-1.5">Total skor</p>
-                  <p className="text-sm text-secondary-text">
-                    Skor <span className="font-semibold text-heading">{submission.score}</span> dari ambang{' '}
-                    <span className="font-semibold text-heading">{threshold}</span>.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <form onSubmit={handleSubmitCounseling} className="space-y-6">
-              {questions.length === 0 ? (
-                <EmptyState
-                  icon={<FileText />}
-                  title="Belum ada pertanyaan"
-                  description="Belum ada pertanyaan kuesioner yang tersedia. Silakan hubungi Admin IT."
-                />
-              ) : (
-                questions.map((q, idx) => {
-                  const opts = answersMap[q.question_id] ?? [];
-                  const selected = answers[q.question_id];
-                  return (
-                    <div key={q.question_id} className="space-y-2.5">
-                      <Label>
-                        {idx + 1}. {q.question_text}{' '}
-                        {q.is_required ? <span className="text-danger">*</span> : null}
-                      </Label>
-
-                      {q.question_type === 'multiple_choice' && (
-                        <div className="grid gap-2">
-                          {opts.map(o => {
-                            const checked = selected === o.answer_text;
-                            return (
-                              <label
-                                key={o.answer_id}
-                                className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors ${
-                                  checked
-                                    ? 'border-primary bg-primary-softer'
-                                    : 'border-border bg-card hover:bg-muted/50'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  className="size-4 shrink-0 accent-primary"
-                                  checked={checked}
-                                  onChange={() => handleAnswerChange(q.question_id, o.answer_text)}
-                                />
-                                <span className="flex-1 text-sm text-secondary-text">{o.answer_text}</span>
-                                <StatusBadge tone="neutral" dot={false} label={`${o.score} poin`} />
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {q.question_type === 'rating' && (
-                        <div className="flex flex-wrap gap-2">
-                          {opts.sort((a, b) => a.score - b.score).map(o => (
-                            <Button
-                              key={o.answer_id}
-                              type="button"
-                              variant={selected === o.answer_text ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAnswerChange(q.question_id, o.answer_text)}
-                            >
-                              {o.answer_text} ({o.score})
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-
-                      {q.question_type === 'text' && (
-                        <Textarea
-                          placeholder="Tulis jawaban di sini…"
-                          value={selected ?? ''}
-                          onChange={e => handleAnswerChange(q.question_id, e.target.value)}
-                          required={q.is_required}
-                        />
-                      )}
-                    </div>
-                  );
-                })
-              )}
-
-              {questions.length > 0 && (
-                <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="card-label mb-1">Total skor</p>
-                      <p className="text-sm text-secondary-text">
-                        <span className="font-semibold text-heading">{totalScore}</span> / ambang{' '}
-                        <span className="font-semibold text-heading">{threshold}</span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="card-label mb-1">Rekomendasi sementara</p>
-                      <StatusBadge
-                        tone={recommendation === 'professional' ? 'danger' : 'success'}
-                        label={
-                          recommendation === 'professional'
-                            ? 'Bantuan Profesional (Psikolog)'
-                            : 'Penanganan Internal'
-                        }
-                      />
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Send className="size-4" />
-                    )}
-                    {submitting ? 'Mengirim…' : 'Kirim Kuesioner & Notifikasi Orang Tua'}
-                  </Button>
-                </div>
-              )}
-            </form>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Janji Temu ── */}
-      <Card>
-        <CardHeader className="border-b">
-          <div className="flex items-start gap-3">
-            <IconBox tone="teal">
-              <CalendarClock />
-            </IconBox>
-            <div className="space-y-1">
-              <CardTitle>Janji Temu Terkait</CardTitle>
-              <CardDescription>Status janji temu konseling untuk siswa ini.</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {appointments.length === 0 ? (
-            <EmptyState
-              icon={<CalendarClock />}
-              title="Belum ada janji temu"
-              description="Tidak ada janji temu konseling yang tercatat untuk siswa ini."
-            />
-          ) : (
-            <DataTable>
-              <TableHead>
-                <TableRow>
-                  <TableHeaderCell scope="col">Jenis</TableHeaderCell>
-                  <TableHeaderCell scope="col">Jadwal</TableHeaderCell>
-                  <TableHeaderCell scope="col">Lokasi</TableHeaderCell>
-                  <TableHeaderCell scope="col">Status</TableHeaderCell>
-                  <TableHeaderCell scope="col">Catatan</TableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {appointments.map(a => {
-                  const status = APPOINTMENT_STATUS[a.status] ?? DEFAULT_APPOINTMENT_STATUS;
-                  return (
-                    <TableRow key={a.appointment_id} interactive>
-                      <TableCell className="font-medium text-heading">
-                        {a.type === 'student' ? 'Siswa' : 'Personal'}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {a.scheduled_at ? formatSchedule(a.scheduled_at) : 'Belum dijadwalkan'}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{a.location || '—'}</TableCell>
-                      <TableCell>
-                        <StatusBadge tone={status.tone} label={status.label} />
-                      </TableCell>
-                      <TableCell className="max-w-[220px] text-xs text-muted-foreground">
-                        {a.notes || '—'}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </DataTable>
-          )}
-        </CardContent>
-      </Card>
+      {appointmentsCard}
+      {inviteModal}
     </div>
   );
 }

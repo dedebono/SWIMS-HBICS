@@ -1,7 +1,11 @@
 import { queryWithTenant } from '../db/pool.js';
 import type { AppointmentRow, QuisionerAnswerRow } from '@swims/shared';
 import { auditLog } from '../utils/audit-log.js';
-import { ValidationError } from '../utils/errors.js';
+import { ConflictError, ValidationError } from '../utils/errors.js';
+import {
+  getActiveListForDomain,
+  type CounselingDomain,
+} from './quisioner-lists.service.js';
 
 /**
  * Resolve the parent contact for a student, for the WhatsApp referral notification.
@@ -53,9 +57,10 @@ export async function submitCounselingQuisioner(
   for (const a of data.answers) {
     await queryWithTenant(
       tenantId,
-      `INSERT INTO quisioner_answers (tenant_id, question_id, answer_text, score)
-       VALUES ($1, $2, $3, $4)`,
-      [tenantId, a.question_id, a.answer_text, a.score],
+      // `quisioner_answers` has no tenant_id column — tenant comes via question_id.
+      `INSERT INTO quisioner_answers (question_id, answer_text, score)
+       VALUES ($1, $2, $3)`,
+      [a.question_id, a.answer_text, a.score],
     );
   }
 
@@ -76,40 +81,14 @@ export async function submitCounselingQuisioner(
         // created_for FKs to users(user_id); the student belongs in student_id
         data.submitted_by,
         data.student_id,
-        'Menunggu psikolog mengisi ketersediaan jadwal.',
+        'Menunggu undangan dikirim ke orang tua.',
         { case_id: data.caseId, recommendation, total },
       ],
     );
     appointmentId = rows[0]?.appointment_id ?? null;
-
-    // If professional recommendation: create referral token + send WhatsApp notification
-    if (appointmentId) {
-      try {
-        const parent = await getParentContact(tenantId, data.student_id);
-        if (parent?.parentPhone) {
-          const { createReferralToken, sendReferralNotification } = await import('./psychologist-referral.service.js');
-          const baseUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
-          const { token } = await createReferralToken(tenantId, {
-            appointmentId,
-            studentId: data.student_id,
-            parentPhone: parent.parentPhone,
-            caseId: data.caseId,
-            studentName: parent.studentName,
-          });
-          const referralLink = `${baseUrl}/quisioner/psychologist-referral?t=${parent.tenantSlug}&token=${token}`;
-          await sendReferralNotification(
-            tenantId,
-            parent.parentPhone,
-            'Bapak/Ibu',
-            parent.studentName,
-            referralLink,
-          );
-        }
-      } catch (err) {
-        console.error('[counseling] Failed to send referral notification:', err);
-        // Non-fatal: don't fail the quisioner submission
-      }
-    }
+    // The WhatsApp invite is NOT auto-sent here — the teacher/counselor sends it
+    // from the case's "Janji Temu Terkait" table (modal: edit message template +
+    // parent phone) via POST /appointments/:id/referral.
   } else {
     const { rows } = await queryWithTenant<AppointmentRow>(
       tenantId,
@@ -174,22 +153,44 @@ export async function getCaseCounseling(
 }
 
 /**
- * Reject a counseling submission whose required questions are blank.
+ * Validate the counseling answers for one COUNSELING DOMAIN.
  *
- * The client used to send one answer entry per question with `answer_text: ''`
- * and `score: 0` for every untouched checkbox, and the API accepted it — writing
- * a fake score-0 record into `counseling_submissions` and (on the 'professional'
- * branch) notifying the parent about a result nobody actually answered. Trusting
- * the client's `score` is the other half of that bug: nothing verified the score
+ * Student counseling (`/api/cases/:caseId/counseling`, the teacher's "Janji
+ * Temu" tab) and personal/staff counseling (PERSONAL role, /book/staff QR flow)
+ * are two separate products that must never share a question set. `domain`
+ * selects which active list is authoritative.
+ *
+ * Rejects a submission whose required questions are blank. The client used to
+ * send one answer entry per question with `answer_text: ''` and `score: 0` for
+ * every untouched checkbox, and the API accepted it — writing a fake score-0
+ * record into `counseling_submissions` and (on the 'professional' branch)
+ * notifying the parent about a result nobody actually answered. Trusting the
+ * client's `score` is the other half of that bug: nothing verified the score
  * against the option's real value in `quisioner_answers`.
  *
- * The DB is the source of truth for which questions are required, so a crafted
- * payload cannot skip the check.
+ * The validation scope is a CONTRACT with the renderer: the form calls
+ * GET /quisioner/questions?context=<domain>, which resolves ONE active list via
+ * getActiveListForDomain(). Validating the tenant's whole `quisioner_questions`
+ * table instead pulled in required questions from OTHER lists — including the
+ * staff questionnaire — which the teacher never sees and can never answer, so a
+ * fully-completed form was rejected with "Lengkapi 1 pertanyaan wajib sebelum
+ * mengirim kuesioner." The DB still decides WHICH questions are required, so a
+ * crafted payload cannot skip the check.
  */
 async function validateCounselingAnswers(
   tenantId: string,
   answers: Array<{ question_id: string; answer_text: string; score: number }>,
+  domain: CounselingDomain = 'student',
 ): Promise<Array<{ question_id: string; answer_text: string; score: number }>> {
+  const activeList = await getActiveListForDomain(tenantId, domain);
+
+  const params: unknown[] = [tenantId];
+  let listFilter = '';
+  if (activeList) {
+    params.push(activeList.question_list_id);
+    listFilter = ` AND question_list_id = $${params.length}`;
+  }
+
   const { rows: questions } = await queryWithTenant<{
     question_id: string;
     question_text: string;
@@ -199,9 +200,9 @@ async function validateCounselingAnswers(
     tenantId,
     `SELECT question_id, question_text, question_type, is_required
      FROM quisioner_questions
-     WHERE tenant_id = $1 AND deleted_at IS NULL
+     WHERE tenant_id = $1 AND deleted_at IS NULL${listFilter}
      ORDER BY order_index ASC, created_at ASC`,
-    [tenantId],
+    params,
   );
 
   // No question set configured → nothing can be answered, so nothing valid to submit.
@@ -239,9 +240,14 @@ async function validateCounselingAnswers(
     score: number;
   }>(
     tenantId,
-    `SELECT question_id, answer_text, score
-     FROM quisioner_answers
-     WHERE tenant_id = $1 AND deleted_at IS NULL`,
+    // NOTE: `quisioner_answers` has NO tenant_id column (tenant is reached via
+    // question_id → quisioner_questions.tenant_id). Filtering on tenant_id here
+    // raised `column "tenant_id" does not exist`, so this step threw a 500 right
+    // after the required-questions check passed. Scope by question set instead.
+    `SELECT qa.question_id, qa.answer_text, qa.score
+     FROM quisioner_answers qa
+     JOIN quisioner_questions qq ON qq.question_id = qa.question_id
+     WHERE qq.tenant_id = $1 AND qa.deleted_at IS NULL AND qq.deleted_at IS NULL`,
     [tenantId],
   );
 
@@ -279,7 +285,14 @@ export async function submitCaseCounseling(
   // Check if submission already exists
   const existing = await getCaseCounseling(tenantId, data.caseId);
   if (existing) {
-    throw Object.assign(new Error('Submission already exists for this case'), { code: 'CONFLICT' });
+    // Throw the typed ConflictError, not a plain Error carrying a `code`
+    // property — the error handler only maps AppError subclasses to their
+    // statusCode, so a bare Error fell through to a generic 500 (and fired a
+    // spurious "Error baru" admin notification) on what is a normal
+    // double-submit.
+    throw new ConflictError(
+      'Kuesioner untuk kasus ini sudah pernah dikirim.',
+    );
   }
 
   // Insert into counseling_submissions

@@ -53,25 +53,84 @@ describe('Quisioner Lists Service', () => {
   });
 
   describe('getActiveListForTargets', () => {
-    it('fetches lists for matching targets', async () => {
-      const mockResult = {
-        rows: [{
-          question_list_id: 'list-2',
-          targets: ['staff'],
-          is_active: true,
-        }],
-      };
-      (pool.queryWithTenant as any).mockResolvedValue(mockResult);
+      it('fetches lists for matching targets', async () => {
+        const mockResult = {
+          rows: [{
+            question_list_id: 'list-2',
+            targets: ['staff'],
+            is_active: true,
+          }],
+        };
+        (pool.queryWithTenant as any).mockResolvedValue(mockResult);
 
-      const result = await quisionerListsService.getActiveListForTargets(mockTenantId, ['staff']);
-      
-      expect(pool.queryWithTenant).toHaveBeenCalledWith(
-        mockTenantId,
-        expect.stringContaining('targets ?| $2'),
-        [mockTenantId, ['staff']]
-      );
-      
-      expect(result).toEqual(mockResult.rows[0]);
+        const result = await quisionerListsService.getActiveListForTargets(mockTenantId, ['staff']);
+
+        expect(pool.queryWithTenant).toHaveBeenCalledWith(
+          mockTenantId,
+          expect.stringContaining('targets ?| $2'),
+          [mockTenantId, ['staff']]
+        );
+
+        expect(result).toEqual(mockResult.rows[0]);
+      });
     });
-  });
+
+    describe('getActiveListForDomain — student vs staff separation', () => {
+      beforeEach(() => { (pool.queryWithTenant as any).mockReset(); });
+
+      it('scopes the student domain to appointment_* targets', async () => {
+        (pool.queryWithTenant as any).mockResolvedValue({ rows: [] });
+        await quisionerListsService.getActiveListForDomain(mockTenantId, 'student');
+        expect(pool.queryWithTenant).toHaveBeenCalledWith(
+          mockTenantId,
+          expect.any(String),
+          [mockTenantId, ['appointment_student', 'appointment_case']]
+        );
+      });
+
+      it('scopes the staff domain to the staff target ONLY', async () => {
+        (pool.queryWithTenant as any).mockResolvedValue({ rows: [] });
+        await quisionerListsService.getActiveListForDomain(mockTenantId, 'staff');
+        expect(pool.queryWithTenant).toHaveBeenCalledWith(
+          mockTenantId,
+          expect.any(String),
+          [mockTenantId, ['staff']]
+        );
+      });
+
+      it('never asks for appointment_* when resolving the staff domain', async () => {
+        (pool.queryWithTenant as any).mockResolvedValue({ rows: [] });
+        await quisionerListsService.getActiveListForDomain(mockTenantId, 'staff');
+        const params = (pool.queryWithTenant as any).mock.calls[0][2] as string[][];
+        expect(params[1]).not.toContain('appointment_student');
+        expect(params[1]).not.toContain('appointment_case');
+      });
+
+      it('never asks for the staff target when resolving the student domain', async () => {
+        (pool.queryWithTenant as any).mockResolvedValue({ rows: [] });
+        await quisionerListsService.getActiveListForDomain(mockTenantId, 'student');
+        const params = (pool.queryWithTenant as any).mock.calls[0][2] as string[][];
+        expect(params[1]).not.toContain('staff');
+      });
+
+      it('ranks a domain-specific list above a catch-all list', async () => {
+        // The ORDER BY must prefer a list carrying EVERY target of the domain
+        // before falling back to updated_at — otherwise editing the catch-all
+        // "Daftar Umum" list silently swaps the questionnaire teachers see.
+        (pool.queryWithTenant as any).mockResolvedValue({ rows: [] });
+        await quisionerListsService.getActiveListForDomain(mockTenantId, 'student');
+        const sql = (pool.queryWithTenant as any).mock.calls[0][1] as string;
+        expect(sql).toContain('to_jsonb(ARRAY[t])');
+        expect(sql).toContain('updated_at DESC');
+      });
+
+      it('excludes lists that have no live questions', async () => {
+        // An empty scratch list must never resolve a domain to nothing.
+        (pool.queryWithTenant as any).mockResolvedValue({ rows: [] });
+        await quisionerListsService.getActiveListForDomain(mockTenantId, 'staff');
+        const sql = (pool.queryWithTenant as any).mock.calls[0][1] as string;
+        expect(sql).toContain('EXISTS');
+        expect(sql).toContain('q.deleted_at IS NULL');
+      });
+    });
 });

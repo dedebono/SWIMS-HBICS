@@ -48,6 +48,12 @@ interface TokenRecord {
   confirmed_at: string | null;
 }
 
+interface AvailabilitySlot {
+  slot_id: string;
+  slot_start: string;
+  slot_end: string;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Menunggu Pilihan',
   school_psychologist: 'Psikolog Sekolah',
@@ -95,6 +101,8 @@ export default function PsychologistReferralPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [acknowledgePrivate, setAcknowledgePrivate] = useState(false);
+  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   const apiBase = `/api/public/psychologist-referral`;
 
@@ -114,6 +122,20 @@ export default function PsychologistReferralPage() {
   }, [token, tenantSlug, apiBase]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Jadwal psikolog dimuat begitu pembayaran dikonfirmasi.
+  useEffect(() => {
+    if (record?.choice_status !== 'payment_confirmed' || !token) { setSlots([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/slots?t=${tenantSlug}&token=${token}`);
+        const json = await res.json();
+        if (!cancelled && json.success) setSlots(json.data ?? []);
+      } catch { if (!cancelled) setSlots([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [record?.choice_status, token, tenantSlug, apiBase]);
 
   const postChoice = async (choice: 'school_psychologist' | 'private_psychologist') => {
     setSubmitting(true);
@@ -168,13 +190,14 @@ export default function PsychologistReferralPage() {
     }
   };
 
-  const confirmSchedule = async () => {
+  const confirmSchedule = async (slotId: string | null) => {
+    if (!slotId) { toast.error('Silakan pilih jadwal terlebih dahulu.'); return; }
     setSubmitting(true);
     try {
       const res = await fetch(`${apiBase}/confirm-schedule?t=${tenantSlug}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, slot_id: slotId }),
       });
       const json = await res.json();
       if (!json.success) { toast.error(json.error); return; }
@@ -186,6 +209,15 @@ export default function PsychologistReferralPage() {
 
   const formatRupiah = (n: number) =>
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
+
+  const formatSlot = (iso: string) =>
+    new Date(iso).toLocaleString('id-ID', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta',
+    });
+
+  const formatSlotTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
 
   if (loading) {
     return (
@@ -302,7 +334,7 @@ export default function PsychologistReferralPage() {
               <CardContent className="space-y-3">
                 <p className="text-sm font-semibold text-heading">Bapak/Ibu dapat memilih:</p>
                 <Button
-                  className="h-auto w-full justify-start gap-2.5 py-4 text-left"
+                  className="h-auto w-full justify-start gap-2.5 py-4 text-left whitespace-normal"
                   variant="outline"
                   onClick={() => postChoice('school_psychologist')}
                   disabled={submitting}
@@ -311,7 +343,7 @@ export default function PsychologistReferralPage() {
                   <span className="text-sm">Ya, lihat Psikolog Rekomendasi Sekolah</span>
                 </Button>
                 <Button
-                  className="h-auto w-full justify-start gap-2.5 py-4 text-left"
+                  className="h-auto w-full justify-start gap-2.5 py-4 text-left whitespace-normal"
                   variant="outline"
                   onClick={() => postChoice('private_psychologist')}
                   disabled={submitting}
@@ -472,33 +504,70 @@ export default function PsychologistReferralPage() {
             </Card>
           )}
 
-          {/* STEP 4: Pembayaran Dikonfirmasi → Jadwal */}
+          {/* STEP 4: Pembayaran Dikonfirmasi → Pilih Jadwal Psikolog */}
           {record?.choice_status === 'payment_confirmed' && (
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <IconBox tone="green">
                     <CircleDollarSign className="size-5" />
                   </IconBox>
                   <div className="space-y-0.5">
-                    <CardTitle>Pembayaran Berhasil Dikonfirmasi</CardTitle>
+                    <CardTitle>Pilih Jadwal Konsultasi</CardTitle>
                     <CardDescription>
-                      Pembayaran konsultasi telah berhasil dikonfirmasi. Silakan memilih jadwal
-                      konsultasi yang tersedia.
+                      Pembayaran telah dikonfirmasi. Silakan pilih jadwal yang tersedia dari psikolog.
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-start gap-2.5 rounded-xl border border-border bg-success-soft p-3.5 text-sm text-secondary-text">
-                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
-                  <span>
-                    Pembayaran telah dikonfirmasi. Silakan klik di bawah untuk memilih jadwal.
-                  </span>
-                </div>
-                <Button onClick={confirmSchedule} disabled={submitting} className="w-full">
-                  <CalendarClock className="size-4" />
-                  {submitting ? 'Memproses…' : 'Lihat Jadwal Tersedia'}
+                {slots.length === 0 ? (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted p-3.5 text-sm text-secondary-text">
+                    <CalendarClock className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                    <span>
+                      Belum ada jadwal tersedia. Psikolog sedang menyiapkan jadwal — silakan cek kembali
+                      di lain waktu.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-2" role="radiogroup" aria-label="Pilih jadwal">
+                    {slots.map(s => {
+                      const active = selectedSlot === s.slot_id;
+                      return (
+                        <button
+                          key={s.slot_id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setSelectedSlot(s.slot_id)}
+                          className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                            active
+                              ? 'border-primary bg-primary/5 text-heading'
+                              : 'border-border bg-card text-secondary-text hover:bg-muted'
+                          }`}
+                        >
+                          <span
+                            className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 ${
+                              active ? 'border-primary' : 'border-muted-foreground/40'
+                            }`}
+                          >
+                            {active && <span className="size-2 rounded-full bg-primary" />}
+                          </span>
+                          <span className="font-medium">
+                            {formatSlot(s.slot_start)} — {formatSlotTime(s.slot_end)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <Button
+                  onClick={() => confirmSchedule(selectedSlot)}
+                  disabled={submitting || !selectedSlot}
+                  className="w-full"
+                >
+                  <CalendarCheck2 className="size-4" />
+                  {submitting ? 'Memproses…' : 'Konfirmasi Jadwal'}
                 </Button>
               </CardContent>
             </Card>
