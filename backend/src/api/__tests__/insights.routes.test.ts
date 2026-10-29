@@ -2,12 +2,40 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../index.js';
 import { generateTestToken } from '../../test/utils/auth-mock.js';
-import { pool, getClientWithTenant } from '../../db/pool.js';
+import { pool } from '../../db/pool.js';
 
 vi.mock('../../services/ai-insights.service.js', () => ({
-  generateCaseSummary: vi.fn(),
+  startGenerationJob: vi.fn(),
+  getGenerationJob: vi.fn(),
   saveConfirmedSummary: vi.fn(),
 }));
+
+const SAMPLE_INSIGHT = {
+  summary: '[AI-GENERATED SUMMARY]\nAPA YANG TERJADI\nSiswu ribut di kelas.',
+  sections: {
+    terjadi: 'Siswa ribut di kelas.',
+    sudah_dilakukan: '',
+    komunikasi: '',
+    posisi: '',
+    saran: '- Panggil wali kelas.\n- Catat kejadiannya.',
+  },
+  reference: {
+    category_id: 1,
+    category_name: 'Pelanggaran Ringan',
+    level_id: 3,
+    level_name: 'Sekolah Menengah Pertama-Sekolah Menengah Atas',
+    sop: [],
+    sanksi: [],
+  },
+  stats: {
+    incidents: 1,
+    interventions_done: 0,
+    interventions_total: 0,
+    communications: 0,
+    observations: 0,
+    days_open: 3,
+  },
+};
 
 describe('Insights Routes', () => {
   beforeEach(() => {
@@ -22,35 +50,13 @@ describe('Insights Routes', () => {
   });
 
   describe('POST /api/cases/:caseId/insights/generate', () => {
-    it('should allow authorized user to generate AI summary', async () => {
+    it('should start a generation job and return its status', async () => {
       const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
 
-      const { generateCaseSummary } = await import('../../services/ai-insights.service.js');
-      (generateCaseSummary as any).mockResolvedValue({
-        summary: '[AI-GENERATED SUMMARY]\nAPA YANG TERJADI\nSiswu ribut di kelas.',
-        sections: {
-          terjadi: 'Siswa ribut di kelas.',
-          sudah_dilakukan: '',
-          komunikasi: '',
-          posisi: '',
-          saran: '- Panggil wali kelas.\n- Catat kejadiannya.',
-        },
-        reference: {
-          category_id: 1,
-          category_name: 'Pelanggaran Ringan',
-          level_id: 3,
-          level_name: 'Sekolah Menengah Pertama-Sekolah Menengah Atas',
-          sop: [],
-          sanksi: [],
-        },
-        stats: {
-          incidents: 1,
-          interventions_done: 0,
-          interventions_total: 0,
-          communications: 0,
-          observations: 0,
-          days_open: 3,
-        },
+      const { startGenerationJob } = await import('../../services/ai-insights.service.js');
+      (startGenerationJob as any).mockReturnValue({
+        status: 'running',
+        started_at: Date.now(),
       });
 
       const res = await request(app)
@@ -59,14 +65,31 @@ describe('Insights Routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      // Ringkasan lengkap tetap dikembalikan agar penyimpanan ke kasus tetap jalan.
-      expect(res.body.data.summary).toContain('Siswu ribut di kelas.');
-      // Bagian per topik untuk tampilan kaya.
-      expect(res.body.data.sections.saran).toContain('Panggil wali kelas');
-      // Acuan Buku Pedoman Displin (SOP + SANKSI) ikut dikirim ke UI.
-      expect(res.body.data.reference.category_name).toBe('Pelanggaran Ringan');
-      expect(res.body.data.stats.incidents).toBe(1);
-      expect(generateCaseSummary).toHaveBeenCalledWith('tenant-123', 'case-123');
+      // The route only starts the job — no summary is awaited (CF 100s timeout).
+      expect(res.body.data.status).toBe('running');
+      expect(startGenerationJob).toHaveBeenCalledWith('tenant-123', 'case-123');
+    });
+
+    it('should return the insight immediately when the job already finished', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
+
+      const { startGenerationJob } = await import('../../services/ai-insights.service.js');
+      (startGenerationJob as any).mockReturnValue({
+        status: 'done',
+        started_at: Date.now(),
+        insight: SAMPLE_INSIGHT,
+      });
+
+      const res = await request(app)
+        .post('/api/cases/case-123/insights/generate')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('done');
+      expect(res.body.data.insight.summary).toContain('Siswu ribut di kelas.');
+      expect(res.body.data.insight.sections.saran).toContain('Panggil wali kelas');
+      expect(res.body.data.insight.reference.category_name).toBe('Pelanggaran Ringan');
+      expect(res.body.data.insight.stats.incidents).toBe(1);
     });
 
     it('should require cases:read permission', async () => {
@@ -87,19 +110,73 @@ describe('Insights Routes', () => {
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
     });
+  });
 
-    it('should handle errors during summary generation', async () => {
+  describe('GET /api/cases/:caseId/insights/generate/status', () => {
+    it('should report idle when no job exists', async () => {
       const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
 
-      const { generateCaseSummary } = await import('../../services/ai-insights.service.js');
-      (generateCaseSummary as any).mockRejectedValue(new Error('AI service unavailable'));
+      const { getGenerationJob } = await import('../../services/ai-insights.service.js');
+      (getGenerationJob as any).mockReturnValue(null);
 
       const res = await request(app)
-        .post('/api/cases/case-123/insights/generate')
+        .get('/api/cases/case-123/insights/generate/status')
         .set('Authorization', `Bearer ${token}`);
 
-      expect(res.status).toBe(500);
-      expect(res.body.success).toBe(false);
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('idle');
+    });
+
+    it('should report running', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
+
+      const { getGenerationJob } = await import('../../services/ai-insights.service.js');
+      (getGenerationJob as any).mockReturnValue({ status: 'running', started_at: Date.now() });
+
+      const res = await request(app)
+        .get('/api/cases/case-123/insights/generate/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('running');
+    });
+
+    it('should return the finished insight', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
+
+      const { getGenerationJob } = await import('../../services/ai-insights.service.js');
+      (getGenerationJob as any).mockReturnValue({
+        status: 'done',
+        started_at: Date.now(),
+        insight: SAMPLE_INSIGHT,
+      });
+
+      const res = await request(app)
+        .get('/api/cases/case-123/insights/generate/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('done');
+      expect(res.body.data.insight.summary).toContain('Siswu ribut di kelas.');
+    });
+
+    it('should surface the job error message', async () => {
+      const token = generateTestToken('tenant-123', 'user-123', 'COUNSELOR');
+
+      const { getGenerationJob } = await import('../../services/ai-insights.service.js');
+      (getGenerationJob as any).mockReturnValue({
+        status: 'error',
+        started_at: Date.now(),
+        error: 'AI Service error: 400 Bad Request — quota exceeded',
+      });
+
+      const res = await request(app)
+        .get('/api/cases/case-123/insights/generate/status')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe('error');
+      expect(res.body.data.error).toContain('quota exceeded');
     });
   });
 

@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import * as appointmentService from '../services/appointments.service.js';
+import * as referralService from '../services/psychologist-referral.service.js';
 import { notifyProfessional } from '../services/notifications.service.js';
 import { sendSuccess, sendCreated } from '../utils/response.js';
 
@@ -95,6 +96,20 @@ router.patch(
   }),
 );
 
+// Static path — MUST come BEFORE /:appointmentId, or "counselors" is matched
+// as an appointmentId and this handler is unreachable (always 404).
+router.get(
+  '/counselors',
+  checkPermission('appointments', 'read'),
+  asyncHandler(async (req, res) => {
+    const { rows } = await (require('../db/pool').queryWithTenant as any)(
+      req.tenantId,
+      `SELECT user_id, full_name, gender FROM users WHERE role = 'COUNSELOR' AND is_active = true ORDER BY full_name ASC`,
+    );
+    sendSuccess(res, rows);
+  }),
+);
+
 router.get(
   '/:appointmentId',
   checkPermission('appointments', 'read'),
@@ -142,6 +157,49 @@ router.post(
       body: 'Ada permintaan janji temu personal baru menunggu konfirmasi.',
     });
     sendCreated(res, result);
+  }),
+);
+
+// ─── Parent WA invite (sent from the case's "Janji Temu Terkait") ────────────
+
+// Modal prefill: student name + known parent phone.
+// Permission is `cases.update`, not `appointments.update` — the invite is part
+// of handling the case, and the questionnaire-filling TEACHER (read-only on
+// appointments by design) is exactly who sends it.
+router.get(
+  '/:appointmentId/referral-context',
+  checkPermission('cases', 'update'),
+  asyncHandler(async (req, res) => {
+    const ctx = await referralService.getReferralContext(req.tenantId, req.params.appointmentId);
+    if (!ctx) return res.status(404).json({ message: 'Janji temu tidak ditemukan' });
+    sendSuccess(res, ctx);
+  }),
+);
+
+// Send the invite: teacher-edited message template + parent phone (override if
+// the student has none). The referral link is appended server-side.
+router.post(
+  '/:appointmentId/referral',
+  checkPermission('cases', 'update'),
+  asyncHandler(async (req, res) => {
+    const { parent_phone, message } = req.body as { parent_phone?: string; message?: string };
+    if (!message || !message.trim()) {
+      return res.status(400).json({ message: 'Pesan undangan wajib diisi' });
+    }
+    try {
+      const result = await referralService.sendParentInvite(req.tenantId, req.params.appointmentId, req.userId!, {
+        parentPhone: parent_phone,
+        message,
+      });
+      if (!result.success) {
+        return res.status(502).json({ message: 'GOWA tidak mengirim pesan — periksa konfigurasi WhatsApp.' });
+      }
+      sendSuccess(res, result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal mengirim undangan';
+      const status = /tidak ditemukan/.test(msg) ? 404 : /belum tersedia/.test(msg) ? 400 : 500;
+      res.status(status).json({ message: msg });
+    }
   }),
 );
 
@@ -194,18 +252,6 @@ router.patch(
     const item = await appointmentService.mediateAppointment(req.tenantId, req.params.appointmentId, req.userId, body);
     if (!item) return res.status(404).json({ message: 'Not found' });
     sendSuccess(res, item);
-  }),
-);
-
-router.get(
-  '/counselors',
-  checkPermission('appointments', 'read'),
-  asyncHandler(async (req, res) => {
-    const { rows } = await (require('../db/pool').queryWithTenant as any)(
-      req.tenantId,
-      `SELECT user_id, full_name, gender FROM users WHERE role = 'COUNSELOR' AND is_active = true ORDER BY full_name ASC`,
-    );
-    sendSuccess(res, rows);
   }),
 );
 

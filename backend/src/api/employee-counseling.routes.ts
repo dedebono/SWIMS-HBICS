@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/error-handler.middleware.js';
-import { authenticate } from '../middleware/auth.middleware.js';
+import { authenticate, optionalAuth } from '../middleware/auth.middleware.js';
 import { setTenantContext, setTenantFromSlug } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
 import { sendSuccess, sendCreated, sendPaginated } from '../utils/response.js';
@@ -37,14 +37,19 @@ function sendValidationError(res: import('express').Response, err: { flatten(): 
 }
 
 // ── PUBLIC: Staff submit intake (no auth required, tenant identified by slug) ─
-router.post('/employee-counseling/submit', setTenantFromSlug, asyncHandler(async (req, res) => {
+// optionalAuth: anonymous submissions stay allowed, but a logged-in user's
+// token now actually lands in submitted_by (it was always NULL before).
+router.post('/employee-counseling/submit', optionalAuth, setTenantFromSlug, asyncHandler(async (req, res) => {
   const parsed = EmployeeCounselingSubmissionSchema.safeParse(req.body);
   if (!parsed.success) {
     // Use the standard {success,data,error} envelope (sendError) instead of a
-    // bare {message}. The frontend apiClient reads `error`, so a bare `message`
+    // bare {message}. The frontend apiClient reads `error`, so a bare {message}
     // left the user staring at a generic "Gagal mengirim pengajuan." with no
     // clue which field was wrong. `details` carries the Zod flatten() for logs.
+    // RETURN — without it the handler kept running on parsed.data === undefined
+    // and Express logged a double-send error.
     sendValidationError(res, parsed.error);
+    return;
   }
   const tenantId = (req as any).tenantId;
   // submittedBy = userId from auth header if present, otherwise null (anonymous)

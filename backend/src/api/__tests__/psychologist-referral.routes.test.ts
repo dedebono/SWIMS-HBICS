@@ -159,7 +159,7 @@ describe('POST /api/public/psychologist-referral/confirm-schedule', () => {
     } as any);
     const res = await request(app)
       .post('/api/public/psychologist-referral/confirm-schedule?t=test-slug')
-      .send({ token: 'abc' });
+      .send({ token: 'abc', slot_id: 'slot-1' });
     expect(res.status).toBe(200);
     expect(res.body.data.choice_status).toBe('schedule_confirmed');
   });

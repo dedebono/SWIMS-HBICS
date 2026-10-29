@@ -11,6 +11,7 @@ import { EmptyState, PageHeader } from '@/components/ui/page-header';
 import { ProgressPill, StatCard } from '@/components/ui/stat-card';
 import { StatusBadge, severityTone } from '@/components/ui/status-badge';
 import { AiSummaryPanel, type AiInsight } from '@/components/cases/ai-summary-panel';
+import { generateInsightAwait } from '@/lib/ai-insights';
 import { toast } from 'sonner';
 import {
   Activity,
@@ -276,20 +277,21 @@ export default function SchoolHeadDashboard() {
       );
 
       try {
-        const res = await apiClient<AiInsight>(`/cases/${c.case_id}/insights/generate`, {
-          method: 'POST',
-        });
+        // Generation runs as a backend job (80-100+s, longer than the CF proxy
+        // timeout) — start it, then poll the status endpoint until it settles.
+        const result = await generateInsightAwait<AiInsight>(c.case_id);
 
         setSummaryResults((prev) =>
           prev.map((r) =>
             r.case_id === c.case_id
-              ? {
-                  ...r,
-                  status: res.success ? 'done' : 'error',
-                  summary: res.success && res.data ? res.data.summary : null,
-                  insight: res.success && res.data ? res.data : null,
-                  error: res.success ? undefined : (res.error ?? 'Terjadi kesalahan yang tidak diketahui'),
-                }
+              ? result.ok
+                ? {
+                    ...r,
+                    status: 'done' as const,
+                    summary: result.insight.summary,
+                    insight: result.insight,
+                  }
+                : { ...r, status: 'error' as const, error: result.error }
               : r,
           ),
         );

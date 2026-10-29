@@ -241,7 +241,6 @@ export function SessionNoteDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isEdit) return; // editing goes through the read-only detail modal
     setSaving(true);
 
     const payload = {
@@ -274,11 +273,16 @@ export function SessionNoteDialog({
       },
     };
 
-    const res = await apiClient('/employee-counseling/sessions', { method: 'POST', body: payload });
+    const res = await apiClient(
+      isEdit
+        ? `/employee-counseling/sessions/${session!.session_id}`
+        : '/employee-counseling/sessions',
+      { method: isEdit ? 'PATCH' : 'POST', body: payload },
+    );
     setSaving(false);
 
     if (res.success) {
-      toast.success('Sesi berhasil disimpan');
+      toast.success(isEdit ? 'Perubahan sesi berhasil disimpan' : 'Sesi berhasil disimpan');
       await onSaved?.();
       onOpenChange(false);
     } else {
@@ -296,7 +300,7 @@ export function SessionNoteDialog({
             <IconBox tone="blue" size="sm">
               <CalendarDays />
             </IconBox>
-            {isEdit ? `Sesi ${session?.session_number} — Detail Catatan` : 'Sesi Baru — Konseling Karyawan'}
+            {isEdit ? `Sesi ${session?.session_number} — Edit Catatan` : 'Sesi Baru — Konseling Karyawan'}
           </DialogTitle>
           <DialogDescription>
             {isEdit
@@ -651,7 +655,7 @@ export function SessionNoteDialog({
           <DialogFooter className="mx-0 mb-0 rounded-b-2xl">
             <Button type="submit" disabled={saving} className="gap-1.5">
               <NotebookPen className="size-3.5" />
-              {saving ? 'Menyimpan…' : 'Simpan Sesi'}
+              {saving ? 'Menyimpan…' : isEdit ? 'Simpan Perubahan' : 'Simpan Sesi'}
             </Button>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Batal

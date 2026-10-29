@@ -4,7 +4,7 @@ import { asyncHandler } from '../middleware/error-handler.middleware.js';
 import { authenticate } from '../middleware/auth.middleware.js';
 import { setTenantContext } from '../middleware/tenant.middleware.js';
 import { checkPermission } from '../middleware/permissions.middleware.js';
-import { generateCaseSummary, saveConfirmedSummary } from '../services/ai-insights.service.js';
+import { generateCaseSummary, saveConfirmedSummary, startGenerationJob, getGenerationJob } from '../services/ai-insights.service.js';
 import { sendSuccess } from '../utils/response.js';
 
 const router = Router();
@@ -16,16 +16,40 @@ const confirmSummarySchema = z.object({
 });
 
 // ─── POST /api/cases/:caseId/insights/generate ───────────────────────────────
+// Starts the generation in the background and returns immediately. Generation
+// takes 80-100+s — longer than the 100s Cloudflare proxy timeout — so waiting
+// synchronously here made every browser request die mid-flight. The frontend
+// polls GET .../generate/status until the job reports done/error.
 
 router.post(
   '/cases/:caseId/insights/generate',
   checkPermission('cases', 'read'),
   asyncHandler(async (req, res) => {
-    // Reads the full case (incidents + intervensi + log komunikasi + observasi)
-    // plus SOP & SANKSI from the Buku Pedoman Disiplin, then returns a simple
-    // Bahasa Indonesia summary, per-section text, and advice for the teacher.
-    const insight = await generateCaseSummary(req.tenantId, req.params['caseId'] as string);
-    sendSuccess(res, insight);
+    const job = startGenerationJob(req.tenantId, req.params['caseId'] as string);
+    if (job.status === 'done' && job.insight) {
+      sendSuccess(res, { status: 'done', insight: job.insight });
+      return;
+    }
+    sendSuccess(res, { status: job.status });
+  })
+);
+
+// ─── GET /api/cases/:caseId/insights/generate/status ─────────────────────────
+
+router.get(
+  '/cases/:caseId/insights/generate/status',
+  checkPermission('cases', 'read'),
+  asyncHandler(async (req, res) => {
+    const job = getGenerationJob(req.tenantId, req.params['caseId'] as string);
+    if (!job) {
+      sendSuccess(res, { status: 'idle' });
+      return;
+    }
+    if (job.status === 'done' && job.insight) {
+      sendSuccess(res, { status: 'done', insight: job.insight });
+      return;
+    }
+    sendSuccess(res, { status: job.status, error: job.error });
   })
 );
 

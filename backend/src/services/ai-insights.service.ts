@@ -543,30 +543,46 @@ export async function generateCaseSummary(tenantId: string, caseId: string): Pro
     const reference = await loadHandbookReference(ctx, categoryId, ctx.levelId);
     const { facts, daysOpen } = buildFactSheet(ctx);
 
-    // 3. Call LLM (OpenAI-compatible)
+    // 3. Call LLM (OpenAI-compatible). Upstream (sumopod/GLM) occasionally
+    //    returns an instant 400/5xx blip that succeeds on retry, so try twice
+    //    before giving up. Auth failures (401/403) are config problems — no
+    //    point retrying those.
     const apiUrl = aiSettings.apiUrl.replace(/\/$/, '') + '/chat/completions';
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${aiSettings.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: aiSettings.model || 'default',
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Kamu adalah guru BK berpengalaman. Menulis ringkasan kasus dalam Bahasa Indonesia yang sederhana, hangat, dan tidak menghakimi. Jangan memakai kata bahasa Inggris dan jangan memakai markdown. Ikuti persis format yang diminta.',
-          },
-          { role: 'user', content: buildPrompt(facts, renderHandbook(reference)) },
-        ],
-        temperature: 0.3,
-      }),
-    });
+    const buildRequest = () =>
+      fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${aiSettings.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: aiSettings.model || 'default',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Kamu adalah guru BK berpengalaman. Menulis ringkasan kasus dalam Bahasa Indonesia yang sederhana, hangat, dan tidak menghakimi. Jangan memakai kata bahasa Inggris dan jangan memakai markdown. Ikuti persis format yang diminta.',
+            },
+            { role: 'user', content: buildPrompt(facts, renderHandbook(reference)) },
+          ],
+          temperature: 0.3,
+        }),
+      });
+
+    let response = await buildRequest();
+    if (!response.ok && response.status !== 401 && response.status !== 403) {
+      await new Promise((r) => setTimeout(r, 1500));
+      response = await buildRequest();
+    }
 
     if (!response.ok) {
-      throw new Error(`AI Service error: ${response.statusText}`);
+      // Include the upstream error body — statusText alone ("Bad Request") gave
+      // no clue whether it was an auth, model-name, or context-length problem.
+      const errBody = await response.text().catch(() => '');
+      throw new Error(
+        `AI Service error: ${response.status} ${response.statusText}` +
+        (errBody ? ` — ${errBody.slice(0, 400)}` : ''),
+      );
     }
 
     const data = (await response.json()) as any;
@@ -626,4 +642,50 @@ export async function saveConfirmedSummary(
   } finally {
     client.release();
   }
+}
+// ─── Background generation jobs ─────────────────────────────────────────────
+// Generation takes 80-100+s, longer than the 100s Cloudflare proxy timeout, so
+// the POST route only STARTS a job and the frontend polls the status endpoint.
+// Single tsx process → an in-memory map is sufficient; jobs older than the TTL
+// are pruned on read so a backend restart just means "start again".
+
+export interface GenerationJobState {
+  status: 'running' | 'done' | 'error';
+  started_at: number;
+  insight?: CaseAiInsight;
+  error?: string;
+}
+
+const JOB_TTL_MS = 10 * 60_000;
+const genJobs = new Map<string, GenerationJobState>();
+
+export function getGenerationJob(tenantId: string, caseId: string): GenerationJobState | null {
+  const key = `${tenantId}:${caseId}`;
+  const job = genJobs.get(key);
+  if (job && Date.now() - job.started_at > JOB_TTL_MS) {
+    genJobs.delete(key);
+    return null;
+  }
+  return job ?? null;
+}
+
+export function startGenerationJob(tenantId: string, caseId: string): GenerationJobState {
+  const key = `${tenantId}:${caseId}`;
+  const existing = getGenerationJob(tenantId, caseId);
+  // A job younger than 5 min that is still running is reused, never doubled.
+  if (existing?.status === 'running' && Date.now() - existing.started_at < 5 * 60_000) {
+    return existing;
+  }
+  const job: GenerationJobState = { status: 'running', started_at: Date.now() };
+  genJobs.set(key, job);
+  generateCaseSummary(tenantId, caseId)
+    .then((insight) => {
+      job.insight = insight;
+      job.status = 'done';
+    })
+    .catch((err) => {
+      job.error = err instanceof Error ? err.message : 'Unknown AI error';
+      job.status = 'error';
+    });
+  return job;
 }

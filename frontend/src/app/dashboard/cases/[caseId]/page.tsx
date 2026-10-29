@@ -3,6 +3,7 @@
 import { useEffect, useState, use, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
+import { generateInsightAwait } from '@/lib/ai-insights';
 import { useAuth } from '@/lib/auth';
 import { ASSESSMENT_LABELS, activeAssessmentKeys } from '@/lib/constants';
 import { ErrorBoundary } from '@/components/layout/error-boundary';
@@ -137,6 +138,8 @@ interface CaseDetail {
   created_at: string;
   updated_at: string;
   student_name?: string | null;
+  created_by_name?: string | null;
+  created_by_email?: string | null;
 }
 
 interface IncidentItem {
@@ -291,17 +294,17 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
   const handleGenerateSummary = async () => {
     try {
       setIsGeneratingSummary(true);
-      const res = await apiClient<AiInsight>(`/cases/${resolvedParams.caseId}/insights/generate`, {
-        method: 'POST',
-      });
+      // Backend runs the generation as a background job (it takes 80-100+s,
+      // longer than the Cloudflare proxy timeout) — start it, then poll.
+      const result = await generateInsightAwait<AiInsight>(resolvedParams.caseId);
 
-      if (res.success && res.data) {
-        const insight = res.data;
+      if (result.ok) {
+        const insight = result.insight;
         setAiInsight(insight);
         setCaseData((prev) => (prev ? { ...prev, summary: insight.summary } : null));
         toast.success('Ringkasan otomatis siap. Cek saran untuk guru di bawah.');
       } else {
-        toast.error(res.error || 'Gagal membuat ringkasan otomatis.');
+        toast.error(result.error || 'Gagal membuat ringkasan otomatis.');
       }
     } catch {
       toast.error('Terjadi kesalahan saat menghubungi layanan ringkasan otomatis.');
@@ -712,6 +715,11 @@ function CaseDetailPage({ params }: { params: Promise<{ caseId: string }> }) {
                   <InfoRow label="Kategori" value={caseCategory} />
                   <InfoRow label="Status" value={label(STATUS_LABEL, caseData.status)} />
                   <InfoRow label="Tanggal laporan" value={formatDate(caseData.opened_date)} />
+                  <InfoRow
+                    label="Pihak pelapor"
+                    value={caseData.created_by_name ?? '—'}
+                    hint={caseData.created_by_email ?? undefined}
+                  />
                   <div className="space-y-3 border-t border-border pt-3">
                     <InfoRow label="Jenis kasus" value={caseData.case_type} />
                     <InfoRow label="Tingkat sekolah" value={caseData.school_phase_ref ?? '—'} />
